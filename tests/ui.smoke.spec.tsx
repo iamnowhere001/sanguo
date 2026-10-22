@@ -117,6 +117,12 @@ describe('UI 冒烟', () => {
     expect(el.textContent).toContain('兵营');
     expect(el.textContent).toContain('地标');
     expect(el.textContent).toContain('农田');
+    expect(el.textContent).toContain('探索');
+    expect(el.textContent).toContain('人才');
+    expect(el.textContent).toContain('宝物');
+    expect(el.textContent).toContain('情报');
+    expect(el.textContent).toContain('民心');
+    expect(el.textContent).toContain('本州传闻');
   });
 
   it('经典模式隐藏营造区块', async () => {
@@ -133,6 +139,8 @@ describe('UI 冒烟', () => {
       root!.render(<CityPanel state={state} cityId="jiangxia" onDeploy={() => {}} />);
     });
     expect(el.textContent).not.toContain('营造');
+    expect(el.textContent).toContain('搜索');
+    expect(el.textContent).not.toContain('本州传闻');
   });
 
   it('武将总览按城分组列出全势力将领', async () => {

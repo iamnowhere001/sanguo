@@ -44,4 +44,25 @@ describe('月度点击统计（§5.6）', () => {
 
     gameStore.quit();
   });
+
+  it('探索派遣计入月度点击统计', () => {
+    const s = createGame({ playerFactionId: 'liubei', seed: 32, aiEnabled: false });
+    s.cities.jiangxia!.gold = 10000;
+    s.generals.guanyu!.locationId = 'jiangxia';
+    s.generals.guanyu!.stamina = 100;
+    gameStore.start(s);
+
+    expect(
+      gameStore.dispatch({
+        t: 'START_EXPLORATION',
+        cityId: 'jiangxia',
+        direction: 'talent',
+        generalId: 'guanyu',
+        months: 3,
+      }).ok,
+    ).toBe(true);
+    expect(gameStore.clickStats.byAction.START_EXPLORATION).toBe(1);
+
+    gameStore.quit();
+  });
 });

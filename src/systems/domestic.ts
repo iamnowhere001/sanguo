@@ -471,7 +471,7 @@ function resolveEntry(s: GameState, city: City, g: General, e: SearchEntry): OpR
  * 兵符按 GDD 可"在多个城池搜到"（太玄兵符：成都、绵竹），但实例唯一 →
  * 一旦获得，必须把所有城池里的同一点位一起清掉，否则会在别处再搜出一份。
  */
-function removeOnceOnly(s: GameState, city: City, e: SearchEntry): void {
+export function removeOnceOnly(s: GameState, city: City, e: SearchEntry): void {
   if (!e.onceOnly) return;
   const refId = e.refId;
   const isSingleton = refId ? s.items[refId]?.type === 'tally' : false;

@@ -1,4 +1,4 @@
-import type { BattleCommand, DomesticCmd, GameState, PolicyId, ProjectKind } from './state';
+import type { BattleCommand, DomesticCmd, ExploreDirection, GameState, PolicyId, ProjectKind } from './state';
 import { emptyMonthFacts } from './state';
 import { BALANCE } from '../data/tables/balance';
 import { POLICIES } from '../data/tables/policies';
@@ -49,10 +49,12 @@ import { applyPolicyMonthly, choosePolicy } from '../systems/policy';
 import { resolveEvent, maybeScheduleEvent } from '../systems/events';
 import { refreshChapter } from '../systems/chapter';
 import { runProjects, startProject } from '../systems/projects';
+import { runExplorations, startExploration } from '../systems/exploration';
 
 export type Action =
   | { t: 'DOMESTIC'; cityId: string; cmd: DomesticCmd; generalId: string }
   | { t: 'START_PROJECT'; cityId: string; kind: ProjectKind; generalId: string }
+  | { t: 'START_EXPLORATION'; cityId: string; direction: ExploreDirection; generalId: string; months: number }
   | { t: 'RECRUIT'; cityId: string; generalId: string; amount: number }
   | { t: 'RECRUIT_ALL'; cityId: string }
   | { t: 'TRADE'; cityId: string; buyFood: boolean; amount: number }
@@ -107,6 +109,7 @@ export function runMonthlyPipeline(s: GameState, facts = emptyMonthFacts()): str
   runTax(s, facts);
   applyPolicyMonthly(s);
   runProjects(s, facts);
+  runExplorations(s, facts);
   checkGameOver(s);
   return clampResources(s);
 }
@@ -129,6 +132,16 @@ export function reduce(
     }
     case 'START_PROJECT': {
       const r = startProject(s, action.cityId, action.kind, action.generalId);
+      return { state: r.ok ? s : state, result: r };
+    }
+    case 'START_EXPLORATION': {
+      const r = startExploration(
+        s,
+        action.cityId,
+        action.direction,
+        action.generalId,
+        action.months,
+      );
       return { state: r.ok ? s : state, result: r };
     }
     case 'RECRUIT': {

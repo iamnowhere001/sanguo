@@ -37,6 +37,7 @@ import {
 import { prisonerRecruitRate, prisonersIn } from '../systems/prisoners';
 import { gameStore } from '../store/gameStore';
 import { DiplomacyDialog } from './DiplomacyDialog';
+import { ExplorePanel } from './ExplorePanel';
 import { Bar, ClassTag, FactionTag } from './atoms';
 import {
   ConfirmDialog,
@@ -564,23 +565,29 @@ export function CityPanel({
                       </button>
                     );
                   })}
-                  <button
-                    className="cmd"
-                    disabled={Boolean(blockReason(searchCost, BALANCE.SEARCH.stamina))}
-                    onClick={() => agent && gameStore.dispatch({ t: 'SEARCH', cityId, generalId: agent.id })}
-                    title={`搜索：在野武将、道具、兵符、钱粮 · ${searchCost} 金 / ${BALANCE.SEARCH.stamina} 体力${
-                      blockReason(searchCost, BALANCE.SEARCH.stamina)
-                        ? ` · ${blockReason(searchCost, BALANCE.SEARCH.stamina)}`
-                        : ''
-                    }`}
-                  >
-                    <b>搜索</b>
-                    <span>
-                      {searchCost} 金 · 体力 {BALANCE.SEARCH.stamina}
-                    </span>
-                  </button>
+                  {state.settings.ruleset === 'classic' ? (
+                    <button
+                      className="cmd"
+                      disabled={Boolean(blockReason(searchCost, BALANCE.SEARCH.stamina))}
+                      onClick={() => agent && gameStore.dispatch({ t: 'SEARCH', cityId, generalId: agent.id })}
+                      title={`搜索：在野武将、道具、兵符、钱粮 · ${searchCost} 金 / ${BALANCE.SEARCH.stamina} 体力${
+                        blockReason(searchCost, BALANCE.SEARCH.stamina)
+                          ? ` · ${blockReason(searchCost, BALANCE.SEARCH.stamina)}`
+                          : ''
+                      }`}
+                    >
+                      <b>搜索</b>
+                      <span>
+                        {searchCost} 金 · 体力 {BALANCE.SEARCH.stamina}
+                      </span>
+                    </button>
+                  ) : null}
                 </div>
               </section>
+
+              {state.settings.ruleset !== 'classic' ? (
+                <ExplorePanel state={state} cityId={cityId} agent={agent} />
+              ) : null}
 
               {state.settings.ruleset !== 'classic' ? (
                 <section className="panel-section project-section">

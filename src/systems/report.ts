@@ -32,7 +32,7 @@ const cityName = (state: GameState, cityId: string): string =>
 const pct = (v: number): string => `${Math.round(v * 100)}%`;
 
 /** 已经在结构化行里解释过的日志，不再在“事件”里重复 */
-const SUMMARIZED_LOG = ['军粮不足', '旱灾', '水灾', '季末', '粮草超过上限', '完工'];
+const SUMMARIZED_LOG = ['军粮不足', '旱灾', '水灾', '季末', '粮草超过上限', '完工', '探索'];
 
 export function buildMonthReport(
   state: GameState,
@@ -113,6 +113,23 @@ export function buildMonthReport(
         .map((p) => `${p.cityName}「${p.projectName}」：${p.effectLabel}`)
         .join('；'),
       advice: '营造位已空出，可继续投资下一项工程。',
+    });
+  }
+
+  const explorations = facts.explorations ?? [];
+  if (explorations.length > 0) {
+    const hasGood = explorations.some((e) => e.tone === 'good');
+    const hasWarn = explorations.some((e) => e.tone === 'warn');
+    lines.push({
+      label: '探索',
+      text: `${explorations.length} 条探索进展`,
+      tone: hasGood ? 'good' : hasWarn ? 'warn' : 'info',
+      reason: explorations
+        .map((e) => `${e.cityName}「${e.directionLabel}」：${e.text}`)
+        .join('；'),
+      advice: hasWarn
+        ? '有传闻被证伪；按真线索前往对应城池继续追查。'
+        : '线索可跨月累计，第 3 步必出人才或宝物。',
     });
   }
 

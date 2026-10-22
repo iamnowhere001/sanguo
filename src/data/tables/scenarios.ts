@@ -6,6 +6,7 @@ import { CITY_TABLE } from './cities';
 import { GENERAL_TABLE } from './generals';
 import { ITEM_TABLE } from './items';
 import { applySpawnPools } from './spawn';
+import { createRumors } from '../../systems/exploration';
 
 export interface ScenarioDef {
   id: string;
@@ -592,6 +593,7 @@ export function createGame(opts: CreateGameOptions = {}): GameState {
     c.domesticUsed ??= 0;
     c.projects ??= [];
     c.landmarks ??= [];
+    c.exploreClues ??= {};
   }
 
   // 【优化】E11 稀有物与在野武将候选池：按种子重排，经典模式保持原表
@@ -690,6 +692,8 @@ export function createGame(opts: CreateGameOptions = {}): GameState {
       difficulty: opts.difficulty ?? 'normal',
     },
   };
+  state.rumors =
+    state.settings.ruleset === 'classic' ? [] : createRumors(state);
   state.chapter = createChapter(state);
   return state;
 }

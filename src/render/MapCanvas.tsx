@@ -150,6 +150,37 @@ export function MapCanvas({
     pointsRef.current = pts;
     const byId = new Map(pts.map((p) => [p.city.id, p]));
 
+    // 已证实 / 已证伪的传闻：按传闻声称的城池挂标记
+    const rumorMarks = new Map<string, 'true' | 'false'>();
+    for (const r of state.rumors ?? []) {
+      if (r.verified === undefined) continue;
+      const prev = rumorMarks.get(r.claimedCityId);
+      if (prev === 'true') continue;
+      if (r.verified === true) rumorMarks.set(r.claimedCityId, 'true');
+      else rumorMarks.set(r.claimedCityId, 'false');
+    }
+
+    const drawBadge = (
+      bx: number,
+      by: number,
+      text: string,
+      stroke: string,
+      fill: string,
+    ) => {
+      ctx.beginPath();
+      ctx.arc(bx, by, 5.2, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(20,19,15,0.95)';
+      ctx.fill();
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = fill;
+      ctx.font = '700 8px "PingFang SC", "Noto Sans SC", sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, bx, by + 0.5);
+    };
+
     // 道路
     for (const e of state.edges) {
       const a = byId.get(e.a);
@@ -293,6 +324,17 @@ export function MapCanvas({
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText('!', bx, by + 0.5);
+      }
+
+      // 探索中：左下角「探」；传闻验证结果：左上角 ✓ / ×
+      if (c.exploration) {
+        drawBadge(p.x - 9, p.y + 10, '探', '#5d9a8b', '#d7efe8');
+      }
+      const mark = rumorMarks.get(c.id);
+      if (mark === 'true') {
+        drawBadge(p.x - 9, p.y - 10, '✓', '#d8a54a', '#f0d79a');
+      } else if (mark === 'false') {
+        drawBadge(p.x - 9, p.y - 10, '×', '#c14a3a', '#e3a79c');
       }
     }
 

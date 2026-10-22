@@ -74,6 +74,50 @@ export interface SearchEntry {
   onceOnly?: boolean;
 }
 
+/** 现代模式探索派遣方向：人才 / 宝物 / 情报 / 民心 */
+export type ExploreDirection = 'talent' | 'treasure' | 'intel' | 'loyalty';
+
+/** 传闻指向的真实目标类型；gold / food 是州内的商路与粮仓 */
+export type RumorTargetKind = 'general' | 'item' | 'gold' | 'food';
+
+/** 进行中的探索派遣；每城同时最多 1 支 */
+export interface CityExploration {
+  direction: ExploreDirection;
+  /** 剩余月数：月结后 −1，归零时归来 */
+  monthsLeft: number;
+  totalMonths: number;
+  startedTurn: number;
+  /** 主持探索的武将，用于展示与叙事 */
+  generalId: string;
+  /** 本轮已积累的线索步数（1–3）；情报 / 民心方向不使用 */
+  clues: number;
+  /** 追查的传闻 id；无传闻时为 undefined，走本城通用线索 */
+  rumorId?: string;
+}
+
+/**
+ * 州传闻：每州 3 条，恰好 1 条为真。
+ * `isTrue` 只供系统与测试使用，UI 在验证前不得展示。
+ */
+export interface Rumor {
+  id: string;
+  provinceId: string;
+  direction: ExploreDirection;
+  targetKind: RumorTargetKind;
+  targetRefId?: string;
+  targetName: string;
+  /** 传闻宣称目标所在的城 */
+  claimedCityId: string;
+  /** 真实目标所在的城；证伪后作为“真线索”揭露 */
+  actualCityId: string;
+  /** 是否为真传闻 */
+  isTrue: boolean;
+  /** 已积累线索步数 0–3 */
+  clueProgress: number;
+  /** 情报验证结果：true 证实 / false 证伪；未验证为 undefined */
+  verified?: boolean;
+}
+
 /**
  * 城池专属技能：数据驱动的被动效果。
  * 所有字段都是可选倍率 / 加成，未填写的维度按中性值处理；
@@ -148,6 +192,10 @@ export interface City {
   projects?: CityProject[];
   /** 已完工地标：用于面板展示与后续地图成长表现 */
   landmarks?: ProjectKind[];
+  /** 进行中的探索派遣（现代模式，每城最多 1 支） */
+  exploration?: CityExploration;
+  /** 本城人才 / 宝物通用线索步数；无传闻时按方向累计 0–3 */
+  exploreClues?: Partial<Record<ExploreDirection, number>>;
   gold: number;
   food: number;
   population: number;
@@ -313,6 +361,13 @@ export interface MonthFacts {
   taxes: Array<{ cityId: string; gold: number }>;
   /** 本月完工的营造工程，供月报单列 */
   projects: Array<{ cityName: string; projectName: string; effectLabel: string }>;
+  /** 本月探索进展 / 归来，供月报单列 */
+  explorations: Array<{
+    cityName: string;
+    directionLabel: string;
+    text: string;
+    tone: LogKind;
+  }>;
   /** 玩家势力本月养兵耗粮 */
   upkeep: number;
   starvation: Array<{
@@ -337,6 +392,7 @@ export function emptyMonthFacts(): MonthFacts {
     outputs: [],
     taxes: [],
     projects: [],
+    explorations: [],
     upkeep: 0,
     starvation: [],
     disasters: [],
@@ -387,6 +443,8 @@ export interface GameState {
   pendingEvent?: PendingEvent;
   /** 章节目标 */
   chapter?: ChapterState;
+  /** 各州传闻：现代模式开局生成，每州 3 条且恰好 1 条为真 */
+  rumors?: Rumor[];
   settings: {
     easterEggEnabled: boolean;
     /** 现代默认规则 / 原版规则 */

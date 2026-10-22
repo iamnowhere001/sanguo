@@ -85,6 +85,28 @@ export const BALANCE = {
     pityGuarantee: 20,
   },
 
+  // ── 探索派遣 【GDD】4.5 现代重做 ─────────────────────────
+  EXPLORE: {
+    /** 每月消耗；开工时按总月数一次性扣除 */
+    goldPerMonth: 40,
+    stamina: 10,
+    edictCost: 1,
+    /** 线索链步数：人才 / 宝物累计 3 步必出目标 */
+    clueSteps: 3,
+    /** 情报派遣每月验证本州 1 条传闻，归来时另带回的情报赏金 */
+    intelGold: 120,
+    /** 民心派遣每月效果 */
+    loyaltyGain: 2,
+    foodGain: 80,
+    /** 城市没有对应稀有目标时的保底收获，略低于成本，避免无限刷钱 */
+    genericGold: [80, 140] as [number, number],
+    genericFood: [160, 260] as [number, number],
+    /** 证伪传闻的补偿 */
+    falseLeadGold: 60,
+    /** 每州传闻条数 */
+    rumorPerProvince: 3,
+  },
+
   // ── 征兵 / 交易 【GDD】4.3 / 【优化】E01 切断套利 ──────────
   RECRUIT: { goldPerTroop: 2, foodPerTroop: 1, capPerLoyalty: 6 },
   TRADE: {

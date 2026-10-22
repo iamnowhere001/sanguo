@@ -11,6 +11,7 @@ describe('旧存档迁移', () => {
   it('补齐缺失的设置、城池运行期字段，并修正空战斗阶段', () => {
     const s = createGame({ playerFactionId: 'liubei', seed: 7 });
     delete (s as unknown as { settings?: GameState['settings'] }).settings;
+    delete (s as unknown as { rumors?: unknown }).rumors;
     s.phase = 'battle';
 
     const migrated = migrateSave(s);
@@ -26,7 +27,9 @@ describe('旧存档迁移', () => {
       expect(c.training).toBe(0);
       expect(c.tradeVolume).toBe(0);
       expect(c.searchPity).toBe(0);
+      expect(c.exploreClues).toEqual({});
     }
+    expect(s.rumors).toEqual([]);
   });
 
   it('保留已有设置，只补战斗内新增字段', () => {
