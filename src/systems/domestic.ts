@@ -5,9 +5,16 @@ import { done, fail, type OpResult } from '../core/result';
 import type { City, DomesticCmd, GameState, General, SearchEntry } from '../core/state';
 import { effForce, effIntellect, neighborsOf } from '../core/state';
 import { log } from './economy';
-import { recruitCap, statGain, tradeLimit, troopCap } from './formulas';
+import { garrisonCapOf, recruitCap, statGain, tradeLimit, troopCap } from './formulas';
 
 export type { OpResult };
+
+/** 城内现有驻军总数：征兵与调将都受城池规模的驻军上限约束 */
+function cityTroopTotal(s: GameState, cityId: string): number {
+  return Object.values(s.generals)
+    .filter((g) => g.status === 'active' && g.locationId === cityId)
+    .reduce((sum, g) => sum + g.troops, 0);
+}
 
 function guard(s: GameState, cityId: string, generalId?: string): OpResult | null {
   const city = s.cities[cityId];
@@ -45,7 +52,9 @@ export function doDomestic(
   // 【优化】E10 边际递减：值越高，单次增益越低
   const cap = BALANCE.STAT_CAP[cfg.field];
   const before = city[cfg.field] ?? 0;
-  const delta = statGain(cfg.field, before);
+  // 城池专属技能：演武额外训练度（如幽州骑训 / 西凉铁骑）
+  const drillBonus = cmd === 'drill' ? (city.skill?.drillBonus ?? 0) : 0;
+  const delta = statGain(cfg.field, before) + drillBonus;
   city[cfg.field] = Math.min(cap, before + delta);
   const actual = (city[cfg.field] ?? before) - before;
 
@@ -81,20 +90,24 @@ export function doRecruit(
   const city = s.cities[cityId]!;
   const g = s.generals[generalId]!;
 
-  const capByLoyalty = recruitCap(city.loyalty);
+  const skill = city.skill;
+  const capByLoyalty = Math.floor(recruitCap(city.loyalty) * (skill?.recruitCapMult ?? 1));
   const capByGeneral = Math.max(0, troopCapOf(s, g) - g.troops);
-  const capByGold = Math.floor(city.gold / BALANCE.RECRUIT.goldPerTroop);
-  const capByFood = Math.floor(city.food / BALANCE.RECRUIT.foodPerTroop);
-  const max = Math.min(amount, capByLoyalty, capByGeneral, capByGold, capByFood);
+  const goldPerTroop = BALANCE.RECRUIT.goldPerTroop * (skill?.recruitCostMult ?? 1);
+  const foodPerTroop = BALANCE.RECRUIT.foodPerTroop * (skill?.recruitCostMult ?? 1);
+  const capByGold = Math.floor(city.gold / goldPerTroop);
+  const capByFood = Math.floor(city.food / foodPerTroop);
+  const capByGarrison = Math.max(0, garrisonCapOf(city.size) - cityTroopTotal(s, cityId));
+  const max = Math.min(amount, capByLoyalty, capByGeneral, capByGold, capByFood, capByGarrison);
 
   if (max <= 0) {
     return fail(
-      `无法征兵（民忠上限 ${capByLoyalty}／带兵余量 ${capByGeneral}／钱 ${capByGold}／粮 ${capByFood}）`,
+      `无法征兵（民忠上限 ${capByLoyalty}／带兵余量 ${capByGeneral}／驻军余量 ${capByGarrison}／钱 ${capByGold}／粮 ${capByFood}）`,
     );
   }
 
-  const goldCost = max * BALANCE.RECRUIT.goldPerTroop;
-  const foodCost = max * BALANCE.RECRUIT.foodPerTroop;
+  const goldCost = Math.round(max * goldPerTroop);
+  const foodCost = Math.round(max * foodPerTroop);
   city.gold -= goldCost;
   city.food -= foodCost;
   g.troops += max;
@@ -126,24 +139,33 @@ export function doRecruitAll(s: GameState, cityId: string): OpResult {
   let total = 0;
   let spentGold = 0;
   let spentFood = 0;
+  const skill = city.skill;
+  const capByLoyalty = Math.floor(recruitCap(city.loyalty) * (skill?.recruitCapMult ?? 1));
+  const goldPerTroop = BALANCE.RECRUIT.goldPerTroop * (skill?.recruitCostMult ?? 1);
+  const foodPerTroop = BALANCE.RECRUIT.foodPerTroop * (skill?.recruitCostMult ?? 1);
+  let garrisonRoom = Math.max(0, garrisonCapOf(city.size) - cityTroopTotal(s, cityId));
   for (const g of gens) {
     const gap = troopCapOf(s, g) - g.troops;
     const amount = Math.min(
       gap,
-      recruitCap(city.loyalty),
-      Math.floor(city.gold / BALANCE.RECRUIT.goldPerTroop),
-      city.food,
+      capByLoyalty,
+      Math.floor(city.gold / goldPerTroop),
+      Math.floor(city.food / foodPerTroop),
+      garrisonRoom,
     );
     if (amount <= 0) break;
-    city.gold -= amount * BALANCE.RECRUIT.goldPerTroop;
-    city.food -= amount * BALANCE.RECRUIT.foodPerTroop;
+    const goldCost = Math.round(amount * goldPerTroop);
+    const foodCost = Math.round(amount * foodPerTroop);
+    city.gold -= goldCost;
+    city.food -= foodCost;
     g.troops += amount;
     total += amount;
-    spentGold += amount * BALANCE.RECRUIT.goldPerTroop;
-    spentFood += amount * BALANCE.RECRUIT.foodPerTroop;
+    garrisonRoom -= amount;
+    spentGold += goldCost;
+    spentFood += foodCost;
   }
 
-  if (total <= 0) return fail('没有可分配的兵力余量，或钱粮不足');
+  if (total <= 0) return fail('没有可分配的兵力余量，或钱粮 / 驻军上限不足');
   log(
     s,
     'info',
@@ -189,7 +211,7 @@ export function doTrade(s: GameState, cityId: string, buyFood: boolean, amount: 
   const city = s.cities[cityId]!;
   if (amount <= 0) return fail('数量必须大于 0');
 
-  const limit = tradeLimit(city.commerce);
+  const limit = tradeLimit(city.commerce, city.skill?.tradeLimitMult ?? 1);
   const used = city.tradeVolume ?? 0;
   const left = Math.max(0, limit - used);
   if (left <= 0) {
@@ -277,7 +299,15 @@ export function doSearch(s: GameState, cityId: string, generalId: string): OpRes
   const pool = city.searchPool.filter(
     (e) => s.settings.easterEggEnabled || !isEasterEggEntry(s, e),
   );
-  const rare = pool.filter((e) => e.onceOnly);
+  // 【适配】已在场的武将不再占用稀有池：否则该点位只会反复"搜到粮草"。
+  // 将领表扩大、跨剧本登场变多后，这种空转会被玩家直接感知到。
+  // 旧存档里没有新武将时同样跳过，避免权重被死条目稀释。
+  const rare = pool.filter((e) => {
+    if (!e.onceOnly) return false;
+    if (e.result !== 'general' || !e.refId) return true;
+    const target = s.generals[e.refId];
+    return Boolean(target) && target!.status !== 'active';
+  });
 
   // 【优化】E11 保底：连续未出稀有，权重每次 +15%，上限 4×
   const pity = city.searchPity ?? 0;
@@ -286,9 +316,11 @@ export function doSearch(s: GameState, cityId: string, generalId: string): OpRes
     1 + BALANCE.SEARCH.pityStep * pity,
   );
   const rareWeight = rare.reduce((sum, e) => sum + e.weight, 0);
+  // 城池专属技能：稀有命中加成（如名士之乡 / 弘农杨氏）
   const rareRate = Math.min(
     BALANCE.SEARCH.rareRateCap,
-    rareWeight * BALANCE.SEARCH.rareRatePerWeight * pityMult,
+    rareWeight * BALANCE.SEARCH.rareRatePerWeight * pityMult +
+      (city.skill?.rareBonus ?? 0),
   );
 
   if (rare.length > 0 && rareRate > 0) {
@@ -466,6 +498,10 @@ export function doMoveGeneral(
   }
   if (!neighborsOf(s, from.id).includes(toCityId)) {
     return fail('只能调往相邻城池');
+  }
+  const cap = garrisonCapOf(to.size);
+  if (cityTroopTotal(s, toCityId) + g.troops > cap) {
+    return fail(`目标城池驻军将超过上限 ${cap}，请改派大城或先分兵`);
   }
 
   g.locationId = toCityId;

@@ -23,6 +23,8 @@ import {
 import { trainingMultiplier } from '../systems/formulas';
 import { gameStore, useGameStore } from '../store/gameStore';
 import { BattleCanvas, TERRAIN_FILL, TERRAIN_SWATCH, type BattleFx } from '../render/BattleCanvas';
+import { audio } from '../audio';
+import { AudioSettingsButton } from './AudioSettings';
 import { SaveDialog } from './SaveDialog';
 import { Bar, ClassTag } from './atoms';
 import { ConfirmDialog, factionName, fmt } from './common';
@@ -284,6 +286,7 @@ export function BattleScreen() {
       setSelectedId(unitId);
       setPendingTactic(null);
       setPendingCharge(false);
+      audio.play('unit.select');
     }
   };
 
@@ -332,6 +335,8 @@ export function BattleScreen() {
     setPendingCharge(false);
     setDayBrief(null);
     setEnemyTurn(true);
+    // 敌军回合的听觉帷幕先于结算响起，填补 620ms 的演出空窗
+    audio.play('combat.enemyPhase');
 
     const logStart = battle.log.length;
     const id = window.setTimeout(() => {
@@ -360,16 +365,13 @@ export function BattleScreen() {
       if (el && ['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName)) return;
 
       if (e.key === 'Escape') {
-        if (pendingTactic) {
-          setPendingTactic(null);
-          e.preventDefault();
-        } else if (pendingCharge) {
-          setPendingCharge(false);
-          e.preventDefault();
-        } else if (selectedId) {
-          setSelectedId(null);
+        if (pendingTactic || pendingCharge || selectedId) {
+          audio.play('ui.cancel');
           e.preventDefault();
         }
+        if (pendingTactic) setPendingTactic(null);
+        else if (pendingCharge) setPendingCharge(false);
+        else if (selectedId) setSelectedId(null);
         return;
       }
 
@@ -466,6 +468,7 @@ export function BattleScreen() {
         </div>
 
         <div className="tb-actions">
+          <AudioSettingsButton />
           <button className="btn sm" onClick={() => setSaveOpen(true)} disabled={enemyTurn}>
             存档
           </button>

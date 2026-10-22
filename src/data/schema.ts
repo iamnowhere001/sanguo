@@ -7,6 +7,7 @@ import type { City, Faction, General, Item, MapEdge } from '../core/state';
  * - integrity：引用必须存在、id 必须与 key 一致、边不能自环
  */
 const TERRAIN = ['plain', 'mountain', 'forest', 'water'] as const;
+const CITY_SIZE = ['capital', 'large', 'medium', 'small'] as const;
 const UNIT_CLASS = ['infantry', 'cavalry', 'archer', 'navy', 'elite', 'mystic'] as const;
 const STATUS = ['active', 'captured', 'inactive', 'wild', 'dead'] as const;
 const ITEM_TYPE = ['weapon', 'tally', 'book', 'mount'] as const;
@@ -46,6 +47,20 @@ const SearchEntrySchema = z.object({
   onceOnly: z.boolean().optional(),
 });
 
+const CitySkillSchema = z.object({
+  name: z.string().min(1),
+  description: z.string().min(1),
+  foodMult: z.number().min(0).max(3).optional(),
+  taxMult: z.number().min(0).max(3).optional(),
+  recruitCapMult: z.number().min(0).max(3).optional(),
+  recruitCostMult: z.number().min(0).max(3).optional(),
+  drillBonus: z.number().min(0).max(50).optional(),
+  fortificationBonus: z.number().min(0).max(50).optional(),
+  rareBonus: z.number().min(0).max(1).optional(),
+  tradeLimitMult: z.number().min(0).max(5).optional(),
+  persuadeBonus: z.number().min(0).max(50).optional(),
+});
+
 const CitySchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -53,6 +68,10 @@ const CitySchema = z.object({
   y: z.number(),
   terrain: z.enum(TERRAIN),
   isWaterCity: z.boolean().optional(),
+  size: z.enum(CITY_SIZE),
+  fortification: z.number().int().min(0).max(100),
+  history: z.string().min(1).optional(),
+  skill: CitySkillSchema.optional(),
   ownerId: z.string().nullable(),
   agriculture: z.number().int().min(0).max(999),
   commerce: z.number().int().min(0).max(999),

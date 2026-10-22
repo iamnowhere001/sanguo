@@ -36,6 +36,7 @@ export function computeDamage(
     defenderTerrain: battleTerrainAt(b, defender.x, defender.y),
     weather: b.weather,
     distance: distanceBetween(attacker, defender),
+    fortification: b.fortification ?? 0,
     rngMult,
   });
 }

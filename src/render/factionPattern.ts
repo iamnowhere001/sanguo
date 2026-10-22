@@ -49,11 +49,12 @@ export function drawFactionPattern(
   x: number,
   y: number,
   pattern: FactionPattern,
+  radius = 6.3,
 ): void {
   if (pattern === 'solid') return;
   ctx.save();
   ctx.beginPath();
-  ctx.arc(x, y, 6.3, 0, Math.PI * 2);
+  ctx.arc(x, y, Math.max(3, radius), 0, Math.PI * 2);
   ctx.clip();
   ctx.strokeStyle = 'rgba(239,230,210,0.62)';
   ctx.fillStyle = 'rgba(239,230,210,0.5)';
@@ -112,8 +113,6 @@ export function drawFactionPattern(
       ctx.beginPath();
       ctx.arc(x, y, 3.6, 0, Math.PI * 2);
       ctx.stroke();
-      break;
-    case 'solid':
       break;
   }
   ctx.restore();

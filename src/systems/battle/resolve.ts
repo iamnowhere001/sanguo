@@ -117,6 +117,15 @@ export function resolveBattle(
   }
 
   if (outcome === 'victory' && target) {
+    // 【适配】预备队：超出上场上限的守将没进战场，城破后随之溃散，
+    // 否则他们会以"守将"身份留在我方新占的城里。
+    for (const g of Object.values(state.generals)) {
+      if (g.status !== 'active' || g.locationId !== b.targetCityId) continue;
+      if (b.units[`defender:${g.id}`] || b.units[`attacker:${g.id}`]) continue;
+      g.status = 'inactive';
+      g.troops = 0;
+    }
+
     const oldOwner = target.ownerId;
     target.ownerId = b.attackerFactionId;
     syncFactionCities(state, oldOwner);

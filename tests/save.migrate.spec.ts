@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createGame } from '../src/data/tables/scenarios';
 import type { GameState } from '../src/core/state';
+import { emptyMonthFacts } from '../src/core/state';
 import { restoreRng, type RngState } from '../src/core/rng';
 import { createBattle } from '../src/systems/battle';
 import { migrateSave } from '../src/save/migrate';
@@ -93,7 +94,21 @@ describe('旧存档迁移', () => {
     expect(file.runSeed).toBe(14);
     expect(file.turn).toBe(s.turn);
     expect(file.presets.balance).toBe('balanced');
+    expect(file.presets.rules.classicSpawn).toBe(false);
     expect(file.state.streams.search).toBeDefined();
+  });
+
+  it('旧 pendingMonth 缺 facts 时补空事实', () => {
+    const s = createGame({ playerFactionId: 'liubei', seed: 16 });
+    s.pendingMonth = {
+      before: { gold: 0, food: 0, troops: 0, cities: 0 },
+      logStart: 0,
+      warnings: [],
+    };
+
+    migrateSave(s);
+
+    expect(s.pendingMonth.facts).toEqual(emptyMonthFacts());
   });
 
   it('更高版本存档直接拒绝，不静默读取', () => {

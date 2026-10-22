@@ -175,7 +175,8 @@ export function runDisaster(s: GameState, facts: MonthFacts): void {
 export function runOutput(s: GameState, facts: MonthFacts): void {
   for (const c of Object.values(s.cities)) {
     if (!c.ownerId) continue;
-    const gain = foodOutput(c.agriculture, c.loyalty);
+    // 城池专属技能：粮产倍率（如渤海粮仓 / 豫章仓廪）
+    const gain = Math.floor(foodOutput(c.agriculture, c.loyalty) * (c.skill?.foodMult ?? 1));
     c.food += gain;
     if (c.ownerId === s.playerFactionId) facts.outputs.push({ cityId: c.id, food: gain });
   }
@@ -187,7 +188,8 @@ export function runTax(s: GameState, facts: MonthFacts): void {
   let mine = 0;
   for (const c of Object.values(s.cities)) {
     if (!c.ownerId) continue;
-    const gain = taxIncome(c.commerce, c.loyalty);
+    // 城池专属技能：季税倍率（如齐商遗风）
+    const gain = Math.floor(taxIncome(c.commerce, c.loyalty) * (c.skill?.taxMult ?? 1));
     c.gold += gain;
     if (c.ownerId === s.playerFactionId) {
       mine += gain;

@@ -1,6 +1,8 @@
+import { useEffect } from 'react';
 import type { GameState } from '../core/state';
 import { gameStore } from '../store/gameStore';
 import { citiesOf, generalsOf } from '../core/state';
+import { audio } from '../audio';
 import { fmt } from './common';
 
 export function GameOver({ state }: { state: GameState }) {
@@ -9,6 +11,13 @@ export function GameOver({ state }: { state: GameState }) {
   const generals = generalsOf(state, state.playerFactionId).length;
   const troops = generalsOf(state, state.playerFactionId).reduce((s, g) => s + g.troops, 0);
   const win = over.result === 'victory';
+
+  // 结局乐句：与月报/战报的收束音区分开，避免同一时刻两层提示音
+  useEffect(() => {
+    audio.play(win ? 'stinger.unify' : 'stinger.defeat');
+    audio.setDuckHeld(true);
+    return () => audio.setDuckHeld(false);
+  }, [win]);
 
   return (
     <div className="modal gameover">

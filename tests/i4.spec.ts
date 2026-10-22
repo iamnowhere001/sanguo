@@ -147,7 +147,8 @@ describe('大势已定（§4.4）', () => {
   function nearVictory(): GameState {
     const s = createGame({ playerFactionId: 'liubei', seed: 666, aiEnabled: false });
     const cities = Object.values(s.cities);
-    for (const c of cities.slice(0, 25)) c.ownerId = s.playerFactionId;
+    const need = Math.ceil(cities.length * 0.7);
+    for (const c of cities.slice(0, need)) c.ownerId = s.playerFactionId;
     for (const f of Object.values(s.factions)) syncFactionCities(s, f.id);
     for (const g of Object.values(s.generals)) g.troops = 0;
     s.generals.guanyu!.troops = 10000;
@@ -186,7 +187,9 @@ describe('大势已定（§4.4）', () => {
         seed: 700 + i,
         aiEnabled: false,
       });
-      for (const c of Object.values(s.cities).slice(0, 25)) {
+      const cityList = Object.values(s.cities);
+      const need = Math.ceil(cityList.length * 0.7);
+      for (const c of cityList.slice(0, need)) {
         c.ownerId = s.playerFactionId;
       }
       for (const f of Object.values(s.factions)) syncFactionCities(s, f.id);

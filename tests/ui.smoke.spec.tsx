@@ -3,7 +3,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import App from '../src/ui/App';
+import { AudioSettingsButton } from '../src/ui/AudioSettings';
 import { CityPanel } from '../src/ui/CityPanel';
+import { RosterDialog } from '../src/ui/RosterDialog';
 import { ReportModal } from '../src/ui/ReportModal';
 import { createGame } from '../src/data/tables/scenarios';
 import { createBattle } from '../src/systems/battle';
@@ -96,6 +98,25 @@ describe('UI 冒烟', () => {
     expect(el.textContent).toContain('按上限分配');
   });
 
+  it('武将总览按城分组列出全势力将领', async () => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const state = createGame({ playerFactionId: 'liubei', aiEnabled: false });
+    el = document.createElement('div');
+    document.body.appendChild(el);
+    root = createRoot(el);
+    await act(async () => {
+      root!.render(
+        <RosterDialog state={state} onClose={() => {}} onPickCity={() => {}} />,
+      );
+    });
+    expect(el.textContent).toContain('武将总览');
+    expect(el.textContent).toContain('江夏');
+    expect(el.textContent).toContain('新野');
+    expect(el.textContent).toContain('关羽');
+    expect(el.textContent).toContain('陈到');
+    expect(el.textContent).toContain('兵');
+  });
+
   it('月报渲染结论、建议与可展开的原因/明细', async () => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     const report: Report = {
@@ -180,5 +201,60 @@ describe('UI 冒烟', () => {
     expect(el.textContent).toContain('大势已定');
     expect(el.textContent).toContain('直接统一');
     expect(el.textContent).toContain('继续征战');
+  });
+
+  it('键盘：? 打开快捷键，Esc 关闭，E 结束回合', async () => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const state = createGame({ playerFactionId: 'liubei', aiEnabled: false });
+    gameStore.start(state);
+    el = document.createElement('div');
+    document.body.appendChild(el);
+    root = createRoot(el);
+    await act(async () => {
+      root!.render(<App />);
+    });
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: '?' }));
+    });
+    expect(el.textContent).toContain('战棋 Tab');
+    expect(el.textContent).toContain('战棋 Space');
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    });
+    expect(el.textContent).not.toContain('战棋 Tab');
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'e' }));
+    });
+    expect(gameStore.state?.month).toBe(2);
+    await act(async () => {
+      gameStore.quit();
+    });
+  });
+
+  it('音量设置面板可以打开并显示三路音量', async () => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    el = document.createElement('div');
+    document.body.appendChild(el);
+    root = createRoot(el);
+    await act(async () => {
+      root!.render(<AudioSettingsButton />);
+    });
+
+    const btn = [...el.querySelectorAll('button')].find((b) =>
+      b.textContent?.includes('声音'),
+    );
+    expect(btn).toBeTruthy();
+
+    await act(async () => {
+      btn!.click();
+    });
+
+    expect(el.textContent).toContain('总音量');
+    expect(el.textContent).toContain('音乐');
+    expect(el.textContent).toContain('音效');
+    expect(el.querySelectorAll('input[type="range"]').length).toBe(3);
   });
 });

@@ -1,5 +1,5 @@
 import { createStreams } from '../../core/rng';
-import type { Difficulty, Faction, GameState, MapEdge } from '../../core/state';
+import type { City, Difficulty, Faction, GameState, General, MapEdge } from '../../core/state';
 import { validateTables } from '../schema';
 import { CITY_TABLE } from './cities';
 import { GENERAL_TABLE } from './generals';
@@ -14,7 +14,7 @@ export interface ScenarioDef {
   description: string;
   difficulty: string;
   factions: Faction[];
-  /** 若给出，覆盖城池归属（完整 35 城） */
+  /** 若给出，覆盖城池归属（完整 61 城） */
   cityOwners?: Record<string, string | null>;
   /** 势力 -> 参战武将 id 列表；未列出的非在野武将本剧本不登场 */
   rosters?: Record<string, string[]>;
@@ -27,7 +27,7 @@ function mk(id: string, name: string, rulerId: string, color: string): Faction {
   return { id, name, rulerId, color, isPlayer: false, cityIds: [] };
 }
 
-/** 四剧本共用一张 35 城节点图 */
+/** 四剧本共用一张 61 城节点图 */
 const MAP_EDGES: MapEdge[] = [
   // 凉州 / 关中
   { a: 'tianshui', b: 'wuwei', cost: 3 },
@@ -38,6 +38,14 @@ const MAP_EDGES: MapEdge[] = [
   { a: 'changan', b: 'luoyang', cost: 3 },
   { a: 'changan', b: 'hanzhong', cost: 4 },
   { a: 'changan', b: 'wan', cost: 4 },
+  { a: 'jincheng', b: 'wuwei', cost: 2 },
+  { a: 'jincheng', b: 'anding', cost: 2 },
+  { a: 'jincheng', b: 'tianshui', cost: 2 },
+  { a: 'wudu', b: 'tianshui', cost: 2 },
+  { a: 'wudu', b: 'hanzhong', cost: 2 },
+  { a: 'hongnong', b: 'changan', cost: 2 },
+  { a: 'hongnong', b: 'luoyang', cost: 2 },
+  { a: 'hongnong', b: 'wan', cost: 3 },
 
   // 并州 / 河北 / 幽州
   { a: 'jinyang', b: 'luoyang', cost: 3 },
@@ -47,6 +55,33 @@ const MAP_EDGES: MapEdge[] = [
   { a: 'ye', b: 'chenliu', cost: 3 },
   { a: 'ye', b: 'xiangping', cost: 5 },
   { a: 'xiangping', b: 'beihai', cost: 5 },
+  { a: 'xiangping', b: 'ji', cost: 4 },
+  { a: 'xiangping', b: 'beiping', cost: 3 },
+  { a: 'ji', b: 'beiping', cost: 2 },
+  { a: 'ji', b: 'zhuo', cost: 2 },
+  { a: 'zhuo', b: 'nanpi', cost: 2 },
+  { a: 'zhuo', b: 'jinyang', cost: 3 },
+  { a: 'nanpi', b: 'ye', cost: 2 },
+  { a: 'nanpi', b: 'pingyuan', cost: 2 },
+  { a: 'pingyuan', b: 'puyang', cost: 3 },
+  { a: 'pingyuan', b: 'beihai', cost: 2 },
+  { a: 'shangdang', b: 'jinyang', cost: 2 },
+  { a: 'shangdang', b: 'ye', cost: 2 },
+  { a: 'shangdang', b: 'luoyang', cost: 3 },
+
+  // 青州 / 徐州 / 淮南
+  { a: 'linzi', b: 'beihai', cost: 2 },
+  { a: 'linzi', b: 'pingyuan', cost: 2 },
+  { a: 'linzi', b: 'langya', cost: 2 },
+  { a: 'langya', b: 'xiapi', cost: 3 },
+  { a: 'langya', b: 'guangling', cost: 3 },
+  { a: 'guangling', b: 'xiapi', cost: 2 },
+  { a: 'guangling', b: 'jianye', cost: 2 },
+  { a: 'guangling', b: 'danyang', cost: 2 },
+  { a: 'shouchun', b: 'pengcheng', cost: 3 },
+  { a: 'shouchun', b: 'hefei', cost: 1 },
+  { a: 'hefei', b: 'lujiang', cost: 2 },
+  { a: 'hefei', b: 'ruxukou', cost: 1 },
 
   // 中原
   { a: 'luoyang', b: 'chenliu', cost: 2 },
@@ -82,6 +117,15 @@ const MAP_EDGES: MapEdge[] = [
   { a: 'changsha', b: 'lingling', cost: 2 },
   { a: 'guiyang', b: 'lingling', cost: 2 },
   { a: 'guiyang', b: 'chaisang', cost: 4 },
+  { a: 'wuling', b: 'changsha', cost: 2 },
+  { a: 'wuling', b: 'lingling', cost: 2 },
+  { a: 'wuling', b: 'guiyang', cost: 3 },
+  { a: 'yiling', b: 'jiangling', cost: 1 },
+  { a: 'yiling', b: 'jiangxia', cost: 2 },
+  { a: 'yiling', b: 'gongan', cost: 2 },
+  { a: 'yiling', b: 'badong', cost: 3 },
+  { a: 'gongan', b: 'jiangling', cost: 2 },
+  { a: 'gongan', b: 'jiangxia', cost: 2 },
 
   // 扬州
   { a: 'jiangxia', b: 'chaisang', cost: 3 },
@@ -93,6 +137,14 @@ const MAP_EDGES: MapEdge[] = [
   { a: 'jianye', b: 'wu', cost: 2 },
   { a: 'wu', b: 'kuaiji', cost: 2 },
   { a: 'kuaiji', b: 'lujiang', cost: 3 },
+  { a: 'ruxukou', b: 'jianye', cost: 2 },
+  { a: 'ruxukou', b: 'lujiang', cost: 2 },
+  { a: 'danyang', b: 'jianye', cost: 2 },
+  { a: 'danyang', b: 'wu', cost: 2 },
+  { a: 'yuzhang', b: 'chaisang', cost: 2 },
+  { a: 'yuzhang', b: 'poyang', cost: 1 },
+  { a: 'poyang', b: 'chaisang', cost: 2 },
+  { a: 'poyang', b: 'kuaiji', cost: 3 },
 
   // 益州
   { a: 'hanzhong', b: 'yangping', cost: 1 },
@@ -101,7 +153,99 @@ const MAP_EDGES: MapEdge[] = [
   { a: 'mianzhu', b: 'chengdu', cost: 1 },
   { a: 'chengdu', b: 'jiangzhou', cost: 2 },
   { a: 'jiangzhou', b: 'changsha', cost: 5 },
+  { a: 'shangyong', b: 'yangping', cost: 2 },
+  { a: 'shangyong', b: 'hanzhong', cost: 3 },
+  { a: 'shangyong', b: 'jiangzhou', cost: 4 },
+  { a: 'shangyong', b: 'badong', cost: 3 },
+  { a: 'langzhong', b: 'zhangtong', cost: 2 },
+  { a: 'langzhong', b: 'mianzhu', cost: 2 },
+  { a: 'langzhong', b: 'jiangzhou', cost: 3 },
+  { a: 'badong', b: 'jiangzhou', cost: 2 },
+  { a: 'jianning', b: 'yunnan', cost: 2 },
+  { a: 'jianning', b: 'jiangzhou', cost: 4 },
+  { a: 'jianning', b: 'lingling', cost: 5 },
+  { a: 'yunnan', b: 'chengdu', cost: 5 },
 ];
+
+// ── 名册与自动布防 ────────────────────────────────────────
+/**
+ * 名册布防：君主优先落在势力首城（`cityOwners` 的书写顺序即首都优先），其余将领
+ * 轮流填到人数最少的城。城池数 ≤ 名册人数时，每城至少一名守将。
+ *
+ * 手写点位在武将规模上了百人后会迅速失真（漏城、越界、势力错配），因此只保留
+ * 剧情锚点（吕布在长安、张郃在北海、赵云在新野、黄忠入蜀、马超守汉中），其余自动摊平。
+ * 名册与城池归属不一致时，`validateTables` 会在启动时报错。
+ */
+function placeRoster(
+  rosters: Record<string, string[]>,
+  owners: Record<string, string | null>,
+  factions: Faction[],
+  explicit: Record<string, string> = {},
+): Record<string, string> {
+  const out: Record<string, string> = { ...explicit };
+
+  for (const [fid, roster] of Object.entries(rosters)) {
+    const cities = Object.entries(owners)
+      .filter(([, owner]) => owner === fid)
+      .map(([id]) => id);
+    if (cities.length === 0) continue;
+
+    const load = new Map(cities.map((id) => [id, 0]));
+    for (const cid of Object.values(out)) {
+      if (load.has(cid)) load.set(cid, load.get(cid)! + 1);
+    }
+
+    const rulerId = factions.find((f) => f.id === fid)?.rulerId;
+    for (const gid of [...(rulerId ? [rulerId] : []), ...roster]) {
+      if (out[gid]) continue;
+      const city = cities.reduce((best, id) =>
+        load.get(id)! < load.get(best)! ? id : best,
+      );
+      out[gid] = city;
+      load.set(city, load.get(city)! + 1);
+    }
+  }
+
+  return out;
+}
+
+/**
+ * 208 赤壁没有手写名册，直接沿用武将表的默认驻城。
+ * 城池扩到 61 座后，新增城池会空置；这里把同势力“人满为患”城池里的非君主将领
+ * 摊一座到空城，保证每座有主城池至少一名带兵守将，同时保留君主与主力城的核心配置。
+ */
+function spreadGarrison(
+  cities: Record<string, City>,
+  generals: Record<string, General>,
+): void {
+  for (const city of Object.values(cities)) {
+    if (!city.ownerId) continue;
+    const defended = Object.values(generals).some(
+      (g) => g.status === 'active' && g.locationId === city.id && g.troops > 0,
+    );
+    if (defended) continue;
+
+    const donors = Object.values(cities)
+      .filter((c) => c.ownerId === city.ownerId)
+      .map((c) => ({
+        city: c,
+        gens: Object.values(generals).filter(
+          (g) => g.status === 'active' && g.locationId === c.id && !g.isRuler,
+        ),
+      }))
+      .filter((x) => x.gens.length > 0)
+      .sort((a, b) => b.gens.length - a.gens.length || a.city.id.localeCompare(b.city.id));
+
+    const donor =
+      donors.find((x) => x.gens.length >= 3) ?? donors.find((x) => x.gens.length >= 2);
+    if (!donor) continue;
+
+    const mover = [...donor.gens].sort((a, b) => a.troops - b.troops)[0];
+    if (!mover) continue;
+    mover.locationId = city.id;
+    if (mover.troops <= 0) mover.troops = 300;
+  }
+}
 
 // ── 189 董卓弄权 ──────────────────────────────────────────
 const DONGZHUO_FACTIONS: Faction[] = [
@@ -120,19 +264,56 @@ const DONGZHUO_FACTIONS: Faction[] = [
 ];
 
 const DONGZHUO_OWNERS: Record<string, string> = {
-  luoyang: 'dongzhuo', changan: 'dongzhuo', wan: 'dongzhuo',
-  ye: 'yuanshao', puyang: 'yuanshao', jinyang: 'yuanshao',
+  luoyang: 'dongzhuo', changan: 'dongzhuo', wan: 'dongzhuo', hongnong: 'dongzhuo',
+  nanpi: 'yuanshao', zhuo: 'yuanshao', ji: 'yuanshao', beiping: 'yuanshao',
+  shangdang: 'yuanshao', jinyang: 'yuanshao', ye: 'yuanshao', puyang: 'yuanshao',
+  pingyuan: 'yuanshao',
   chenliu: 'caocao', xuchang: 'caocao',
-  runan: 'yuanshu',
+  shouchun: 'yuanshu', hefei: 'yuanshu', runan: 'yuanshu',
   xiapi: 'taoqian', pengcheng: 'taoqian', xiaopei: 'taoqian', beihai: 'taoqian',
-  changsha: 'sunjian', guiyang: 'sunjian', lingling: 'sunjian',
-  jianye: 'sunjian', wu: 'sunjian', kuaiji: 'sunjian', chaisang: 'sunjian', lujiang: 'sunjian',
+  linzi: 'taoqian', langya: 'taoqian', guangling: 'taoqian',
+  ruxukou: 'sunjian', danyang: 'sunjian', chaisang: 'sunjian', lujiang: 'sunjian',
+  jianye: 'sunjian', wu: 'sunjian', kuaiji: 'sunjian', changsha: 'sunjian',
+  guiyang: 'sunjian', lingling: 'sunjian', yuzhang: 'sunjian', poyang: 'sunjian',
   xiangyang: 'liubiao', jiangling: 'liubiao', jiangxia: 'liubiao',
+  gongan: 'liubiao', yiling: 'liubiao', wuling: 'liubiao',
   chengdu: 'liuzhang', mianzhu: 'liuzhang', zhangtong: 'liuzhang', jiangzhou: 'liuzhang',
-  tianshui: 'mateng', wuwei: 'mateng', anding: 'mateng',
-  hanzhong: 'zhanglu', yangping: 'zhanglu',
+  langzhong: 'liuzhang', badong: 'liuzhang', jianning: 'liuzhang', yunnan: 'liuzhang',
+  tianshui: 'mateng', wuwei: 'mateng', anding: 'mateng', jincheng: 'mateng', wudu: 'mateng',
+  hanzhong: 'zhanglu', yangping: 'zhanglu', shangyong: 'zhanglu',
   xiangping: 'gongsundu',
   xinye: 'liubei',
+};
+
+/** 189 名册：董卓集团满编，关东诸侯各带本部；新增城由补位将领填满 */
+const DONGZHUO_ROSTERS: Record<string, string[]> = {
+  dongzhuo: [
+    'dongzhuo', 'lvbu', 'liru', 'huaxiong', 'lisu', 'xurong',
+    'guosi', 'lifan', 'niufu', 'zhangji',
+  ],
+  yuanshao: [
+    'yuanshao', 'yanliang', 'wenchou', 'tianfeng', 'jushou',
+    'shenpei', 'fengji', 'guotu', 'gaolan', 'chunyuqiong',
+  ],
+  caocao: [
+    'caocao', 'xiahoudun', 'xiahouyuan', 'caoren', 'caohong',
+    'caochun', 'yuejin', 'yujin', 'lidian',
+  ],
+  yuanshu: ['yuanshu', 'jiling', 'zhangxun', 'qiaorui', 'yanxiang'],
+  taoqian: ['taoqian', 'caobao', 'chendeng', 'zangba', 'zerong', 'lvyou', 'caohong2'],
+  sunjian: [
+    'sunjian', 'sunce', 'chengpu', 'huanggai', 'handang',
+    'zumao', 'zhuzhi', 'wujing', 'sunjing', 'sunben', 'sunfu', 'xukun',
+  ],
+  liubiao: ['liubiao', 'caimao', 'kuaiyue', 'huangzhong', 'wenpin', 'zhangyun', 'xianglang'],
+  liuzhang: [
+    'liuzhang', 'zhangren', 'yanyan', 'liyan', 'huangquan',
+    'wuyi', 'leitong', 'lengbao', 'dengxian',
+  ],
+  mateng: ['mateng', 'machao', 'pangde', 'madai', 'maxiu', 'matie', 'hansui', 'yanxing'],
+  zhanglu: ['zhanglu', 'zhangwei', 'yangren', 'yangang', 'yanpu'],
+  gongsundu: ['gongsundu', 'gongsunkang', 'gongsungong', 'yangyi'],
+  liubei: ['liubei', 'guanyu', 'zhangfei'],
 };
 
 // ── 200 曹操崛起 ──────────────────────────────────────────
@@ -150,17 +331,56 @@ const GUANDU_FACTIONS: Faction[] = [
 ];
 
 const GUANDU_OWNERS: Record<string, string> = {
-  xuchang: 'caocao', luoyang: 'caocao', changan: 'caocao', chenliu: 'caocao',
-  runan: 'caocao', wan: 'caocao', xiaopei: 'caocao', xiapi: 'caocao', pengcheng: 'caocao',
-  ye: 'yuanshao', puyang: 'yuanshao', jinyang: 'yuanshao', beihai: 'yuanshao',
+  hefei: 'caocao', shouchun: 'caocao', guangling: 'caocao', hongnong: 'caocao',
+  changan: 'caocao', xuchang: 'caocao', runan: 'caocao', xiaopei: 'caocao',
+  xiapi: 'caocao', pengcheng: 'caocao', chenliu: 'caocao', luoyang: 'caocao', wan: 'caocao',
+  nanpi: 'yuanshao', pingyuan: 'yuanshao', linzi: 'yuanshao', langya: 'yuanshao',
+  beihai: 'yuanshao', ji: 'yuanshao', beiping: 'yuanshao', zhuo: 'yuanshao',
+  shangdang: 'yuanshao', jinyang: 'yuanshao', ye: 'yuanshao', puyang: 'yuanshao',
   xinye: 'liubei',
-  xiangyang: 'liubiao', jiangling: 'liubiao', changsha: 'liubiao', jiangxia: 'liubiao',
-  jianye: 'sunquan', wu: 'sunquan', kuaiji: 'sunquan', chaisang: 'sunquan', lujiang: 'sunquan',
+  xiangyang: 'liubiao', jiangling: 'liubiao', jiangxia: 'liubiao', changsha: 'liubiao',
+  gongan: 'liubiao', yiling: 'liubiao', wuling: 'liubiao',
+  ruxukou: 'sunquan', danyang: 'sunquan', chaisang: 'sunquan', lujiang: 'sunquan',
+  jianye: 'sunquan', wu: 'sunquan', kuaiji: 'sunquan', yuzhang: 'sunquan', poyang: 'sunquan',
   chengdu: 'liuzhang', mianzhu: 'liuzhang', zhangtong: 'liuzhang', jiangzhou: 'liuzhang',
-  tianshui: 'mateng', wuwei: 'mateng', anding: 'mateng',
-  hanzhong: 'zhanglu', yangping: 'zhanglu',
+  langzhong: 'liuzhang', badong: 'liuzhang', jianning: 'liuzhang', yunnan: 'liuzhang',
+  tianshui: 'mateng', wuwei: 'mateng', anding: 'mateng', jincheng: 'mateng', wudu: 'mateng',
+  hanzhong: 'zhanglu', yangping: 'zhanglu', shangyong: 'zhanglu',
   guiyang: 'hanxuan', lingling: 'hanxuan',
   xiangping: 'gongsundu',
+};
+
+/** 200 名册：曹操集齐五子良将与谋士团，袁绍仍是河北最强 */
+const GUANDU_ROSTERS: Record<string, string[]> = {
+  caocao: [
+    'caocao', 'dianwei', 'xunyu', 'guojia', 'xiahoudun', 'xiahouyuan',
+    'caoren', 'caohong', 'zhangliao', 'xuhuang', 'yujin', 'yuejin',
+    'zhongyao', 'jiaxu', 'chengyu', 'liuye', 'manchong', 'xuchu',
+    'lidian', 'caochun', 'caoxiu', 'zangba',
+  ],
+  yuanshao: [
+    'yuanshao', 'yanliang', 'wenchou', 'zhanghe', 'tianfeng', 'jushou',
+    'shenpei', 'fengji', 'guotu', 'gaolan', 'chunyuqiong', 'lvkuang', 'lvxiang',
+  ],
+  liubei: ['liubei', 'guanyu', 'zhangfei', 'zhaoyun', 'jianyong', 'sunqian', 'mizhu'],
+  liubiao: [
+    'liubiao', 'caimao', 'kuaiyue', 'huangzhong', 'wenpin',
+    'zhangyun', 'huojun', 'xianglang', 'weiyan',
+  ],
+  sunquan: [
+    'sunquan', 'zhouyu', 'lusu', 'lvmeng', 'chengpu', 'taishici',
+    'zhangzhao', 'zhanghong', 'guyong', 'zhugejin', 'buzhi', 'zhoutai',
+    'jiangqin', 'handang', 'chenwu', 'xusheng', 'dingfeng', 'lingtong',
+    'lvxun', 'zhuran', 'huanggai',
+  ],
+  liuzhang: [
+    'liuzhang', 'zhangren', 'yanyan', 'liyan', 'huangquan',
+    'wuyi', 'leitong', 'lengbao', 'dengxian', 'fazheng', 'zhangsong',
+  ],
+  mateng: ['mateng', 'machao', 'pangde', 'madai', 'maxiu', 'matie', 'hansui', 'yanxing'],
+  zhanglu: ['zhanglu', 'zhangwei', 'yangren', 'yangang', 'yanpu'],
+  hanxuan: ['hanxuan', 'zhaofan', 'liudu', 'xingdaorong', 'yangling', 'gongzhi'],
+  gongsundu: ['gongsundu', 'gongsunkang', 'gongsungong', 'yangyi'],
 };
 
 // ── 208 赤壁之战（沿用城池表默认归属） ────────────────────
@@ -184,16 +404,47 @@ const SANGUO_FACTIONS: Faction[] = [
 ];
 
 const SANGUO_OWNERS: Record<string, string> = {
-  xuchang: 'caocao', luoyang: 'caocao', changan: 'caocao', chenliu: 'caocao',
-  puyang: 'caocao', ye: 'caocao', runan: 'caocao', wan: 'caocao',
-  xiaopei: 'caocao', xiapi: 'caocao', pengcheng: 'caocao', beihai: 'caocao',
-  jinyang: 'caocao', xiangping: 'caocao', tianshui: 'caocao', wuwei: 'caocao',
-  anding: 'caocao', xiangyang: 'caocao', xinye: 'caocao',
-  chengdu: 'liubei', mianzhu: 'liubei', zhangtong: 'liubei', jiangzhou: 'liubei',
-  hanzhong: 'liubei', yangping: 'liubei',
-  jianye: 'sunquan', wu: 'sunquan', kuaiji: 'sunquan', chaisang: 'sunquan',
-  lujiang: 'sunquan', jiangxia: 'sunquan', jiangling: 'sunquan',
-  changsha: 'sunquan', guiyang: 'sunquan', lingling: 'sunquan',
+  xiangyang: 'caocao', hefei: 'caocao', shouchun: 'caocao', hongnong: 'caocao',
+  shangyong: 'caocao', wudu: 'caocao', changan: 'caocao', luoyang: 'caocao',
+  xuchang: 'caocao', chenliu: 'caocao', puyang: 'caocao', ye: 'caocao',
+  jinyang: 'caocao', runan: 'caocao', wan: 'caocao', xiaopei: 'caocao',
+  xiapi: 'caocao', pengcheng: 'caocao', beihai: 'caocao', zhuo: 'caocao',
+  ji: 'caocao', beiping: 'caocao', nanpi: 'caocao', pingyuan: 'caocao',
+  shangdang: 'caocao', linzi: 'caocao', langya: 'caocao', guangling: 'caocao',
+  xinye: 'caocao', anding: 'caocao', tianshui: 'caocao', wuwei: 'caocao',
+  jincheng: 'caocao', xiangping: 'caocao',
+  chengdu: 'liubei', hanzhong: 'liubei', mianzhu: 'liubei', zhangtong: 'liubei',
+  jiangzhou: 'liubei', langzhong: 'liubei', badong: 'liubei', jianning: 'liubei',
+  yunnan: 'liubei', yangping: 'liubei',
+  ruxukou: 'sunquan', jiangling: 'sunquan', jiangxia: 'sunquan', yiling: 'sunquan',
+  gongan: 'sunquan', changsha: 'sunquan', guiyang: 'sunquan', lingling: 'sunquan',
+  wuling: 'sunquan', chaisang: 'sunquan', lujiang: 'sunquan', jianye: 'sunquan',
+  wu: 'sunquan', kuaiji: 'sunquan', danyang: 'sunquan', yuzhang: 'sunquan',
+  poyang: 'sunquan',
+};
+
+/** 220 名册：魏 34 / 蜀 22 / 吴 25；魏新增补位将领铺满 34 城 */
+const SANGUO_ROSTERS: Record<string, string[]> = {
+  caocao: [
+    'caocao', 'simayi', 'jiaxu', 'chengyu', 'liuye', 'manchong', 'jiangji',
+    'zhangliao', 'xuhuang', 'caoren', 'caohong', 'xiahoudun', 'zhongyao',
+    'zhanghe', 'zhangyan', 'caozhen', 'caoxiu', 'xuchu', 'lidian',
+    'caochun', 'xiahoushang', 'zangba', 'guohuai',
+    'dianwei', 'xunyu', 'guojia', 'yujin', 'yuejin',
+    'caozhang', 'haozhao', 'wangshuang', 'sunli', 'caoyu', 'caobiao',
+  ],
+  liubei: [
+    'liubei', 'guanyu', 'zhangfei', 'zhugeliang', 'zhaoyun', 'huangzhong',
+    'machao', 'weiyan', 'liaohua', 'guanping', 'chendao', 'jianyong',
+    'sunqian', 'mizhu', 'liuqi', 'jiangwei', 'wangping', 'guanxing',
+    'zhangbao', 'zhangyi', 'wuban', 'madai',
+  ],
+  sunquan: [
+    'sunquan', 'zhouyu', 'lusu', 'lvmeng', 'chengpu', 'taishici', 'ganning',
+    'zhangzhao', 'zhanghong', 'guyong', 'zhugejin', 'buzhi', 'zhoutai',
+    'jiangqin', 'handang', 'chenwu', 'xusheng', 'dingfeng', 'lingtong',
+    'lvxun', 'zhuran', 'huanggai', 'quancong', 'lvdai', 'sunshao',
+  ],
 };
 
 export const SCENARIOS: Record<string, ScenarioDef> = {
@@ -206,34 +457,22 @@ export const SCENARIOS: Record<string, ScenarioDef> = {
     difficulty: '偏高（群雄环伺）',
     factions: DONGZHUO_FACTIONS,
     cityOwners: DONGZHUO_OWNERS,
-    rosters: {
-      dongzhuo: ['dongzhuo', 'lvbu'],
-      yuanshao: ['yuanshao', 'yanliang', 'wenchou'],
-      caocao: ['caocao', 'xiahoudun'],
-      yuanshu: ['yuanshu', 'jiling'],
-      taoqian: ['taoqian'],
-      sunjian: ['sunjian', 'sunce', 'chengpu', 'taishici'],
-      liubiao: ['liubiao', 'caimao', 'huangzhong'],
-      liuzhang: ['liuzhang', 'zhangren', 'yanyan', 'liyan'],
-      mateng: ['mateng', 'machao', 'pangde'],
-      zhanglu: ['zhanglu', 'zhangwei'],
-      gongsundu: ['gongsundu', 'gongsunkang'],
-      liubei: ['liubei', 'guanyu', 'zhangfei'],
-    },
-    placements: {
-      dongzhuo: 'luoyang', lvbu: 'changan',
-      yuanshao: 'ye', yanliang: 'puyang', wenchou: 'jinyang',
-      caocao: 'chenliu', xiahoudun: 'xuchang',
-      yuanshu: 'runan', jiling: 'runan',
+    rosters: DONGZHUO_ROSTERS,
+    placements: placeRoster(DONGZHUO_ROSTERS, DONGZHUO_OWNERS, DONGZHUO_FACTIONS, {
+      dongzhuo: 'luoyang',
+      lvbu: 'changan',
+      sunjian: 'changsha',
       taoqian: 'xiapi',
-      sunjian: 'changsha', sunce: 'changsha', chengpu: 'chaisang', taishici: 'lujiang',
-      liubiao: 'xiangyang', caimao: 'jiangling', huangzhong: 'jiangxia',
-      liuzhang: 'chengdu', zhangren: 'mianzhu', yanyan: 'zhangtong', liyan: 'jiangzhou',
-      mateng: 'tianshui', machao: 'wuwei', pangde: 'anding',
-      zhanglu: 'hanzhong', zhangwei: 'yangping',
-      gongsundu: 'xiangping', gongsunkang: 'xiangping',
-      liubei: 'xinye', guanyu: 'xinye', zhangfei: 'xinye',
-    },
+      yuanshao: 'nanpi',
+      yuanshu: 'shouchun',
+      liubiao: 'xiangyang',
+      liuzhang: 'chengdu',
+      mateng: 'wuwei',
+      zhanglu: 'hanzhong',
+      gongsundu: 'xiangping',
+      caocao: 'chenliu',
+      liubei: 'xinye',
+    }),
     edges: MAP_EDGES,
   },
 
@@ -246,37 +485,21 @@ export const SCENARIOS: Record<string, ScenarioDef> = {
     difficulty: '中（袁绍最强）',
     factions: GUANDU_FACTIONS,
     cityOwners: GUANDU_OWNERS,
-    rosters: {
-      caocao: [
-        'caocao', 'dianwei', 'xunyu', 'guojia', 'xiahoudun', 'xiahouyuan',
-        'caoren', 'caohong', 'zhangliao', 'xuhuang', 'yujin', 'yuejin', 'zhongyao',
-      ],
-      yuanshao: ['yuanshao', 'yanliang', 'wenchou', 'zhanghe'],
-      liubei: ['liubei', 'guanyu', 'zhangfei', 'zhaoyun'],
-      liubiao: ['liubiao', 'caimao', 'huangzhong'],
-      sunquan: ['sunquan', 'zhouyu', 'lusu', 'lvmeng', 'chengpu', 'taishici'],
-      liuzhang: ['liuzhang', 'zhangren', 'yanyan', 'liyan'],
-      mateng: ['mateng', 'machao', 'pangde'],
-      zhanglu: ['zhanglu', 'zhangwei'],
-      hanxuan: ['hanxuan', 'zhaofan'],
-      gongsundu: ['gongsundu', 'gongsunkang'],
-    },
-    placements: {
-      caocao: 'xuchang', dianwei: 'xuchang', xunyu: 'xuchang', guojia: 'luoyang',
-      xiahoudun: 'chenliu', xiahouyuan: 'xiaopei', caoren: 'wan', caohong: 'runan',
-      zhangliao: 'xiapi', xuhuang: 'pengcheng', yujin: 'changan',
-      yuejin: 'chenliu', zhongyao: 'changan',
-      yuanshao: 'ye', yanliang: 'puyang', wenchou: 'jinyang', zhanghe: 'beihai',
-      liubei: 'xinye', guanyu: 'xinye', zhangfei: 'xinye', zhaoyun: 'xinye',
-      liubiao: 'xiangyang', caimao: 'jiangling', huangzhong: 'changsha',
-      sunquan: 'jianye', zhouyu: 'jianye', lusu: 'wu', lvmeng: 'kuaiji',
-      chengpu: 'chaisang', taishici: 'lujiang',
-      liuzhang: 'chengdu', zhangren: 'mianzhu', yanyan: 'zhangtong', liyan: 'jiangzhou',
-      mateng: 'tianshui', machao: 'wuwei', pangde: 'anding',
-      zhanglu: 'hanzhong', zhangwei: 'yangping',
-      hanxuan: 'guiyang', zhaofan: 'lingling',
-      gongsundu: 'xiangping', gongsunkang: 'xiangping',
-    },
+    rosters: GUANDU_ROSTERS,
+    placements: placeRoster(GUANDU_ROSTERS, GUANDU_OWNERS, GUANDU_FACTIONS, {
+      caocao: 'xuchang',
+      zhanghe: 'beihai',
+      zhaoyun: 'xinye',
+      yuanshao: 'nanpi',
+      sunquan: 'jianye',
+      liubiao: 'xiangyang',
+      liuzhang: 'chengdu',
+      mateng: 'wuwei',
+      zhanglu: 'hanzhong',
+      hanxuan: 'guiyang',
+      gongsundu: 'xiangping',
+      liubei: 'xinye',
+    }),
     edges: MAP_EDGES,
   },
 
@@ -300,20 +523,17 @@ export const SCENARIOS: Record<string, ScenarioDef> = {
     difficulty: '偏高（三强对峙）',
     factions: SANGUO_FACTIONS,
     cityOwners: SANGUO_OWNERS,
-    rosters: {
-      caocao: ['caocao', 'zhangliao', 'xuhuang', 'caoren', 'caohong', 'xiahoudun', 'zhongyao', 'zhanghe', 'zhangyan'],
-      liubei: ['liubei', 'guanyu', 'zhangfei', 'zhugeliang', 'zhaoyun', 'huangzhong', 'machao'],
-      sunquan: ['sunquan', 'zhouyu', 'lusu', 'lvmeng', 'chengpu', 'taishici', 'ganning'],
-    },
-    placements: {
-      caocao: 'xuchang', zhangliao: 'xiapi', xuhuang: 'pengcheng', caoren: 'wan',
-      caohong: 'runan', xiahoudun: 'chenliu', zhongyao: 'changan',
-      zhanghe: 'ye', zhangyan: 'jinyang',
-      liubei: 'chengdu', zhugeliang: 'chengdu', zhaoyun: 'chengdu', huangzhong: 'chengdu',
-      guanyu: 'zhangtong', zhangfei: 'jiangzhou', machao: 'hanzhong',
-      sunquan: 'jianye', zhouyu: 'jianye', lusu: 'jiangling', lvmeng: 'changsha',
-      chengpu: 'chaisang', taishici: 'lujiang', ganning: 'jiangxia',
-    },
+    rosters: SANGUO_ROSTERS,
+    placements: placeRoster(SANGUO_ROSTERS, SANGUO_OWNERS, SANGUO_FACTIONS, {
+      caocao: 'xuchang',
+      liubei: 'chengdu',
+      sunquan: 'jianye',
+      huangzhong: 'chengdu',
+      machao: 'hanzhong',
+      simayi: 'changan',
+      zhugeliang: 'chengdu',
+      zhouyu: 'jiangling',
+    }),
     edges: MAP_EDGES,
   },
 };
@@ -415,6 +635,9 @@ export function createGame(opts: CreateGameOptions = {}): GameState {
         if (g.troops <= 0) g.troops = 400;
       }
     }
+  } else {
+    // 208 赤壁：没有手写名册，把多余守将摊到新增空城
+    spreadGarrison(cities, generals);
   }
 
   const playerFactionId =

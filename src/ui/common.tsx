@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { listSaves, type SaveSlotInfo } from '../save/db';
+import { audio } from '../audio';
 
 export {
   fmt,
@@ -45,6 +46,7 @@ export function useEscape(handler: () => void, enabled = true): void {
       if (e.key !== 'Escape') return;
       e.preventDefault();
       e.stopPropagation();
+      audio.play('ui.cancel');
       ref.current();
     };
     window.addEventListener('keydown', onKey);

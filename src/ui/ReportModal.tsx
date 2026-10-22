@@ -1,5 +1,7 @@
+import { useEffect } from 'react';
 import type { Report } from '../core/state';
 import { gameStore } from '../store/gameStore';
+import { audio } from '../audio';
 import { useEscape } from './common';
 
 const RESULT_LABEL: Record<string, string> = {
@@ -19,6 +21,17 @@ const TONE_MARK: Record<string, string> = {
 export function ReportModal({ report }: { report: Report }) {
   const dismiss = () => gameStore.dispatch({ t: 'DISMISS_REPORT' });
   useEscape(dismiss);
+
+  // 战报/月报展开时：先给一声收束音，再把音乐压低，让玩家读数字
+  useEffect(() => {
+    if (report.kind === 'battle') {
+      audio.play(report.result === 'victory' ? 'stinger.victory' : 'stinger.defeat');
+    } else {
+      audio.play('stinger.report');
+    }
+    audio.setDuckHeld(true);
+    return () => audio.setDuckHeld(false);
+  }, [report]);
 
   return (
     <div className="modal">

@@ -1,7 +1,7 @@
 import { BALANCE } from '../../data/tables/balance';
 import { affinityOf, terrainModifier } from '../../data/tables/unitClasses';
 import type { BattleTerrain, UnitClass, Weather } from '../../core/state';
-import { clamp, trainingMultiplier } from '../formulas';
+import { cityDamageMultiplier, clamp, trainingMultiplier } from '../formulas';
 
 /**
  * 战斗伤害真值函数（报告 §3.1 公式 v2）。
@@ -31,6 +31,8 @@ export interface DamageContext {
   weather: Weather;
   /** 攻守距离；弓兵距离 1 时触发贴脸衰减 */
   distance: number;
+  /** 目标城池城防 0–100；未给出按 0（旧存档 / 沙盒） */
+  fortification?: number;
   /** 随机系数 0.9–1.1；模拟器与单测可传 1 */
   rngMult: number;
 }
@@ -83,7 +85,7 @@ export function computeDamageValue(ctx: DamageContext): number {
     ctx.defenderTerrain,
   );
   const cityMult =
-    ctx.defenderTerrain === 'city' ? BALANCE.CITY_DEFENSE_REDUCTION : 1;
+    ctx.defenderTerrain === 'city' ? cityDamageMultiplier(ctx.fortification) : 1;
   const melee =
     attacker.unitClass === 'archer' && ctx.distance === 1
       ? BALANCE.ARCHER_MELEE_PENALTY

@@ -53,6 +53,17 @@ export function migrateSave(state: GameState): GameState {
     c.training ??= 0;
     c.tradeVolume ??= 0;
     c.searchPity ??= 0;
+    // 旧档没有规模与城防：按人口与地形补一个合理默认值
+    c.size ??=
+      c.population >= 70000
+        ? 'capital'
+        : c.population >= 40000
+          ? 'large'
+          : c.population >= 25000
+            ? 'medium'
+            : 'small';
+    c.fortification ??=
+      c.terrain === 'mountain' ? 70 : c.terrain === 'forest' ? 50 : c.isWaterCity ? 55 : 45;
   }
 
   if (state.battle) {
@@ -62,6 +73,8 @@ export function migrateSave(state: GameState): GameState {
       state.turn,
       state.battleSerial,
     );
+    state.battle.fortification ??=
+      state.cities[state.battle.targetCityId]?.fortification ?? 0;
     state.battle.tacticUses ??= {};
     for (const u of Object.values(state.battle.units)) {
       u.training ??= 0;

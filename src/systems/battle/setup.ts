@@ -1,3 +1,4 @@
+import { BALANCE } from '../../data/tables/balance';
 import { nextFloat, streamFor, type RngState } from '../../core/rng';
 import { done, fail, type OpResult } from '../../core/result';
 import type {
@@ -126,7 +127,9 @@ export function createBattle(
     return { result: fail('目标城池与出发城池不相邻') };
   }
   if (generalIds.length === 0) return { result: fail('至少选择一名武将') };
-  if (generalIds.length > 5) return { result: fail('单次出征最多 5 名武将') };
+  if (generalIds.length > BALANCE.BATTLE_MAX_ATTACKERS) {
+    return { result: fail(`单次出征最多 ${BALANCE.BATTLE_MAX_ATTACKERS} 名武将`) };
+  }
 
   const attackers: General[] = [];
   for (const id of generalIds) {
@@ -143,17 +146,22 @@ export function createBattle(
     return { result: captureUndefended(state, fromCityId, targetCityId, attackers, attackerFactionId) };
   }
 
+  // 【适配】守将超过出生点上限时，按兵力取前 N 名上场，其余留作预备队
+  const fielded = [...defenders]
+    .sort((a, b) => b.troops - a.troops)
+    .slice(0, BALANCE.BATTLE_MAX_DEFENDERS);
+
   const grid = emptyGrid(target.terrain);
   const units: Record<string, BattleUnit> = {};
   const atkCommander = attackers.find((g) => g.isRuler)?.id ?? attackers[0]!.id;
-  const defCommander = [...defenders].sort((a, b) => b.troops - a.troops)[0]!.id;
+  const defCommander = fielded[0]!.id;
 
   attackers.forEach((g, i) => {
     const [x, y] = SPAWN_ATTACKER[Math.min(i, SPAWN_ATTACKER.length - 1)]!;
     const u = unitFromGeneral(state, g, 'attacker', x, y, g.id === atkCommander);
     units[u.id] = u;
   });
-  defenders.forEach((g, i) => {
+  fielded.forEach((g, i) => {
     const [x, y] = SPAWN_DEFENDER[Math.min(i, SPAWN_DEFENDER.length - 1)]!;
     const u = unitFromGeneral(state, g, 'defender', x, y, g.id === defCommander);
     units[u.id] = u;
@@ -176,6 +184,11 @@ export function createBattle(
     defenderFactionId: target.ownerId ?? 'neutral',
     playerSide,
     playerInvolved,
+    // 城池专属技能：守城城防加成（如濡须水寨 / 逍遥津固守）
+    fortification: Math.min(
+      100,
+      target.fortification + (target.skill?.fortificationBonus ?? 0),
+    ),
     grid,
     units,
     side: playerSide,

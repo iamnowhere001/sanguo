@@ -25,7 +25,7 @@ export const TERRAIN_LABEL: Record<BattleTerrain, string> = {
 
 /**
  * 地形修正表（报告 §3.3）：行 = 兵种，列 = 所在格地形。
- * >1 表示该兵种在此地形占优；城池列统一 1.00，守城减伤由 CITY_DEFENSE_REDUCTION 单独承担。
+ * >1 表示该兵种在此地形占优；城池列统一 1.00，守城减伤由 formulas.cityDamageMultiplier(城防) 单独承担。
  */
 export const TERRAIN_MODIFIER: Record<UnitClass, Record<BattleTerrain, number>> = {
   infantry: { plain: 1.0, mountain: 1.1, forest: 1.0, water: 0.6, city: 1.0 },

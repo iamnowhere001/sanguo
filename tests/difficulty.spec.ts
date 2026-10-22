@@ -19,6 +19,11 @@ function setup(difficulty: Difficulty) {
     if (g.id === 'caocao') continue;
     if (s.cities[g.locationId]?.ownerId === 'caocao') g.troops = 0;
   }
+  // 赤壁开局新野有 6 名守将；这里只验证兵力比阈值，先归一成“张飞 800 兵”
+  for (const g of Object.values(s.generals)) {
+    if (g.status === 'active' && g.locationId === 'xinye') g.troops = 0;
+  }
+  s.generals.zhangfei!.troops = 800;
   s.generals.caocao!.troops = 1100;
   return s;
 }

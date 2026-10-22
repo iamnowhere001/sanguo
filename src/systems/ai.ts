@@ -9,7 +9,7 @@ import {
   generalsOf,
   neighborsOf,
 } from '../core/state';
-import { monthlyFoodUpkeep, recruitCap } from './formulas';
+import { garrisonCapOf, monthlyFoodUpkeep, recruitCap } from './formulas';
 import { doDomestic, doRecruit, troopCapOf } from './domestic';
 import { autoResolveBattle, createBattle } from './battle';
 import { log } from './economy';
@@ -54,6 +54,10 @@ export function runAiFaction(state: GameState, factionId: string): 'battle' | 'd
     const target = withGap[0]!;
     const goldBudget = city.gold * 0.4 * difficulty.resourceMult;
     const foodBudget = city.food * 0.5 * difficulty.resourceMult;
+    const garrisonRoom = Math.max(
+      0,
+      garrisonCapOf(city.size) - gens.reduce((sum, g) => sum + g.troops, 0),
+    );
     const amount = Math.floor(
       Math.min(
         target.gap,
@@ -61,6 +65,7 @@ export function runAiFaction(state: GameState, factionId: string): 'battle' | 'd
         goldBudget / BALANCE.RECRUIT.goldPerTroop,
         foodBudget,
         BALANCE.AI.recruitPerAction,
+        garrisonRoom,
       ),
     );
     if (amount >= 40) {
@@ -114,9 +119,10 @@ export function runAiFaction(state: GameState, factionId: string): 'battle' | 'd
   } | null = null;
 
   for (const city of cities) {
+    // 将领变多后 AI 不再固定只带 3 人：按带兵上限取最强的一批，上限与玩家一致
     const attackers = defendersOf(state, city.id)
       .sort((a, b) => b.troops - a.troops)
-      .slice(0, 3);
+      .slice(0, BALANCE.BATTLE_MAX_ATTACKERS);
     if (attackers.length === 0) continue;
     const myTroops = attackers.reduce((sum, g) => sum + g.troops, 0);
 
@@ -135,7 +141,8 @@ export function runAiFaction(state: GameState, factionId: string): 'battle' | 'd
       const defTroops = defenders.reduce((sum, g) => sum + g.troops, 0);
       const ratio = myTroops / (defTroops + 100);
       if (ratio < difficulty.attackRatio) continue;
-      const score = ratio + (target.gold + target.food) / 4000;
+      // 城防越高越难啃：同等兵力比下，AI 更愿意先打薄城
+      const score = ratio + (target.gold + target.food) / 4000 - target.fortification / 60;
       if (!best || score > best.score) {
         best = {
           fromId: city.id,

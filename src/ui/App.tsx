@@ -13,7 +13,7 @@ function GameScreen({ state }: { state: GameState }) {
   return (
     <div className="app-shell">
       {state.phase === 'battle' && state.battle ? <BattleScreen /> : <MapScreen />}
-      {state.report ? <ReportModal report={state.report} /> : null}
+      {state.report && !state.gameOver ? <ReportModal report={state.report} /> : null}
       {state.phase === 'gameover' && state.gameOver ? <GameOver state={state} /> : null}
     </div>
   );

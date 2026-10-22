@@ -4,6 +4,8 @@ import type { RandomStream, RngState } from './rng';
 export type UnitClass = 'infantry' | 'cavalry' | 'archer' | 'navy' | 'elite' | 'mystic';
 export type Terrain = 'plain' | 'mountain' | 'forest' | 'water';
 export type BattleTerrain = Terrain | 'city';
+/** 城池规模：决定可驻扎的兵力上限，并作为地图节点大小与面板标签 */
+export type CitySize = 'capital' | 'large' | 'medium' | 'small';
 export type ItemType = 'weapon' | 'tally' | 'book' | 'mount';
 export type GeneralStatus = 'active' | 'captured' | 'inactive' | 'wild' | 'dead';
 export type DomesticCmd = 'reclaim' | 'commerce' | 'patrol' | 'govern' | 'drill';
@@ -14,6 +16,19 @@ export type BattleStatus = 'ongoing' | 'victory' | 'defeat' | 'retreat';
 export type Weather = 'clear' | 'rain' | 'fog';
 export type SearchResultKind = 'general' | 'item' | 'gold' | 'food';
 export type LogKind = 'info' | 'warn' | 'danger' | 'good';
+/** 现代默认规则 / 原版规则：经典模式关闭国策、事件、政令上限与军令点 */
+export type Ruleset = 'modern' | 'classic';
+/** 国策：每 3 回合三选一，提供一条长期路线 */
+export type PolicyId =
+  | 'tuntian'
+  | 'salt'
+  | 'qiuxian'
+  | 'lianbing'
+  | 'huairou'
+  | 'juntun'
+  | 'zongheng'
+  | 'qimou';
+export type BattleCommand = 'inspire' | 'guard' | 'march';
 
 // ── 数据模型（对齐 GDD §5.1，字段只增不改） ─────────────────
 export interface Item {
@@ -57,6 +72,34 @@ export interface SearchEntry {
   onceOnly?: boolean;
 }
 
+/**
+ * 城池专属技能：数据驱动的被动效果。
+ * 所有字段都是可选倍率 / 加成，未填写的维度按中性值处理；
+ * 新增城池可以只挑其中一到两项，避免为“专属”硬造新系统。
+ */
+export interface CitySkill {
+  name: string;
+  description: string;
+  /** 月粮产出倍率 */
+  foodMult?: number;
+  /** 季税倍率 */
+  taxMult?: number;
+  /** 单次征兵上限倍率 */
+  recruitCapMult?: number;
+  /** 征兵金 / 粮消耗倍率 */
+  recruitCostMult?: number;
+  /** 演武额外训练度 */
+  drillBonus?: number;
+  /** 守城时城防加成（攻城中生效） */
+  fortificationBonus?: number;
+  /** 搜索稀有命中率加算（0–1） */
+  rareBonus?: number;
+  /** 交易月度额度倍率 */
+  tradeLimitMult?: number;
+  /** 从本城发起劝降的成功率加成（百分点） */
+  persuadeBonus?: number;
+}
+
 export interface City {
   id: string;
   name: string;
@@ -65,6 +108,14 @@ export interface City {
   y: number;
   terrain: Terrain;
   isWaterCity?: boolean;
+  /** 规模：都城 / 大城 / 中城 / 小城 */
+  size: CitySize;
+  /** 城防 0–100：攻城战中守方受击减伤，越高越易守难攻 */
+  fortification: number;
+  /** 历史背景：城池面板展示 */
+  history?: string;
+  /** 专属技能：数据驱动的城池被动 */
+  skill?: CitySkill;
   ownerId: string | null;
   agriculture: number;
   commerce: number;
@@ -78,6 +129,8 @@ export interface City {
   tradeVolume?: number;
   /** 连续未搜到稀有的次数，用于保底权重 */
   searchPity?: number;
+  /** 本月已执行的内政政令数（现代规则每城每月有上限） */
+  domesticUsed?: number;
   gold: number;
   food: number;
   population: number;
@@ -98,6 +151,38 @@ export interface MapEdge {
   a: string;
   b: string;
   cost: number;
+}
+
+/** 国策运行期状态：offer 非空时 UI 弹出三选一 */
+export interface PolicyState {
+  active?: PolicyId;
+  /** 到期回合（不含）：turn >= expiresTurn 时国策失效并重新发牌 */
+  expiresTurn?: number;
+  offer?: PolicyId[];
+  /** 最近一次发牌回合，避免同一回合重复弹窗 */
+  offeredTurn?: number;
+}
+
+/** 月度事件：只存事件与目标城，选项与效果由事件表推导，保证存档可序列化 */
+export interface PendingEvent {
+  eventId: string;
+  cityId: string;
+  turn: number;
+}
+
+export type ChapterGoalKind = 'cities' | 'troops' | 'gold';
+
+export interface ChapterGoal {
+  id: string;
+  label: string;
+  kind: ChapterGoalKind;
+  target: number;
+}
+
+/** 章节目标：每完成一组目标推进到下一章，给长局提供阶段感 */
+export interface ChapterState {
+  stage: number;
+  goals: ChapterGoal[];
 }
 
 export interface LogEntry {
@@ -139,6 +224,8 @@ export interface BattleUnit {
   routed: boolean;
   /** 极兵突击：每战限 1 次 */
   chargeUsed?: boolean;
+  /** 军令「急袭」提供的额外移动力，次日清除 */
+  bonusMove?: number;
 }
 
 export interface BattleState {
@@ -150,6 +237,8 @@ export interface BattleState {
   playerSide: BattleSide;
   /** 这场战斗是否涉及玩家（AI 互殴时为 false，不弹战报） */
   playerInvolved: boolean;
+  /** 目标城池城防，参与守城减伤；旧存档缺省按 0 处理 */
+  fortification?: number;
   /** [y][x] */
   grid: BattleTerrain[][];
   units: Record<string, BattleUnit>;
@@ -162,6 +251,12 @@ export interface BattleState {
   tacticUses?: Record<string, number>;
   /** 战斗专属随机流：随 BattleState 入档，读档续战可复现 */
   rng: RngState;
+  /** 军令点：现代规则每场战斗 3 点，用于鼓舞 / 固守 / 急袭 */
+  commandPoints?: number;
+  /** 当日鼓舞方：该方攻击伤害 ×1.2 */
+  inspireSide?: BattleSide;
+  /** 当日固守方：该方受到伤害 ×0.7 */
+  guardSide?: BattleSide;
 }
 
 /** 月报 / 战报：把结算结果变成可读、可归因的文本 */
@@ -264,8 +359,16 @@ export interface GameState {
   unifyReady?: boolean;
   /** 上次拒绝统一的回合，避免每月重复弹窗 */
   unifyDismissedTurn?: number;
+  /** 国策：现代规则每 3 回合三选一 */
+  policy?: PolicyState;
+  /** 待处理的月度事件；报告关闭且 AI 队列跑完后弹出 */
+  pendingEvent?: PendingEvent;
+  /** 章节目标 */
+  chapter?: ChapterState;
   settings: {
     easterEggEnabled: boolean;
+    /** 现代默认规则 / 原版规则 */
+    ruleset: Ruleset;
     /** 【裁决】④ 粮食将溢出时的二次确认开关 */
     overflowConfirm: boolean;
     /** 【优化】E02 溢出处理：safe = 截断 + 折损 50%；classic = 原版归零 */

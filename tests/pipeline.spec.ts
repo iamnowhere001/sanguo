@@ -69,24 +69,24 @@ describe('月度流水线', () => {
 
     s = endTurn(s); // → 3 月，结算季税
     // 税率 1.2：江夏 com200 / 民忠 75 → floor(200*75/100*1.2)=180
-    // 新野 com140 / 民忠 70 → floor(140*70/100*1.2)=117
+    // 新野 com160 / 民忠 70 → floor(160*70/100*1.2)=134
     expect(s.cities.jiangxia!.gold).toBe(300 + 180);
-    expect(s.cities.xinye!.gold).toBe(250 + 117);
+    expect(s.cities.xinye!.gold).toBe(250 + 134);
   });
 
   it('军粮按 ceil(总兵力/20) 扣除', () => {
     let s = fresh();
-    // 刘备 800 + 关羽 900 + 张飞 800 + 诸葛亮 0 = 2500 → 125 粮
+    // 赤壁开局刘备 12 将：800+900+800+0+80+80+100+250+400+300+250+300 = 4260 → 213 粮
     const foodBefore = s.cities.jiangxia!.food + s.cities.xinye!.food;
     s = endTurn(s);
     const foodAfter = s.cities.jiangxia!.food + s.cities.xinye!.food;
-    const produced = Math.floor((180 * 75) / 100) + Math.floor((150 * 70) / 100);
-    expect(foodAfter).toBe(foodBefore - 125 + produced);
+    const produced = Math.floor((200 * 75) / 100) + Math.floor((200 * 70) / 100);
+    expect(foodAfter).toBe(foodBefore - 213 + produced);
   });
 
   it('粮食安全溢出：不归零，按超出部分折损 50%', () => {
     let s = fresh();
-    s.cities.jiangxia!.food = 65530;
+    s.cities.jiangxia!.food = 65600;
     const { state, result } = reduce(s, { t: 'END_TURN', confirmed: true });
     expect(result.warnings?.length).toBeGreaterThan(0);
     expect(state.cities.jiangxia!.food).toBeGreaterThan(0);
@@ -101,7 +101,7 @@ describe('月度流水线', () => {
       overflowMode: 'classic',
     });
     for (const c of Object.values(s.cities)) c.defense = 100;
-    s.cities.jiangxia!.food = 65530;
+    s.cities.jiangxia!.food = 65600;
     const { state } = reduce(s, { t: 'END_TURN', confirmed: true });
     expect(state.cities.jiangxia!.food).toBe(0);
   });
@@ -136,7 +136,7 @@ describe('内政与军备', () => {
     expect(result.ok).toBe(true);
     expect(state.cities.jiangxia!.gold).toBe(240);
     expect(state.generals.guanyu!.stamina).toBe(90);
-    const delta = state.cities.jiangxia!.agriculture - 180;
+    const delta = state.cities.jiangxia!.agriculture - 200;
     expect(delta).toBeGreaterThanOrEqual(8);
     expect(delta).toBeLessThanOrEqual(12);
   });
@@ -264,6 +264,8 @@ describe('内政与军备', () => {
 
   it('全城宴请：一次结算全城忠诚与体力，费用聚合', () => {
     const s = fresh();
+    // 江夏 6 将，宴请费用按人头聚合，钱要够
+    s.cities.jiangxia!.gold = 2000;
     s.generals.guanyu!.loyalty = 50;
     s.generals.guanyu!.stamina = 10;
     const gensInCity = Object.values(s.generals).filter(
@@ -273,7 +275,7 @@ describe('内政与军备', () => {
     expect(r.result.ok).toBe(true);
     expect(r.state.generals.guanyu!.loyalty).toBe(55);
     expect(r.state.generals.guanyu!.stamina).toBe(50);
-    expect(r.state.cities.jiangxia!.gold).toBe(300 - gensInCity * BALANCE.BANQUET.gold);
+    expect(r.state.cities.jiangxia!.gold).toBe(2000 - gensInCity * BALANCE.BANQUET.gold);
   });
 });
 

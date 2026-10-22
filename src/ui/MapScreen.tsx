@@ -1,12 +1,14 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { BALANCE } from '../data/tables/balance';
 import { difficultyOf } from '../data/tables/difficulty';
 import type { GameState } from '../core/state';
 import { neighborsOf } from '../core/state';
 import { gameStore, useGameStore } from '../store/gameStore';
 import { MapCanvas } from '../render/MapCanvas';
-import { factionPattern, PATTERN_LABEL } from '../render/factionPattern';
+import { audio } from '../audio';
+import { AudioSettingsButton } from './AudioSettings';
 import { CityPanel, DeployDialog } from './CityPanel';
+import { RosterDialog } from './RosterDialog';
 import { SaveDialog } from './SaveDialog';
 import { Bar } from './atoms';
 import { ConfirmDialog, cityTroops, factionColor, factionName, fmt } from './common';
@@ -39,8 +41,10 @@ export function MapScreen() {
   );
   const [deploy, setDeploy] = useState<{ from: string; target: string } | null>(null);
   const [saveOpen, setSaveOpen] = useState(false);
+  const [rosterOpen, setRosterOpen] = useState(false);
   const [confirmTurn, setConfirmTurn] = useState<string | null>(null);
   const [quitOpen, setQuitOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   /** 能从选中城池出征的相邻敌城 */
   const attackFromSelected = useMemo(() => {
@@ -75,6 +79,38 @@ export function MapScreen() {
     const res = store.dispatch({ t: 'END_TURN' });
     if (res.needConfirm) setConfirmTurn(res.message);
   };
+
+  /** 【优化】§5.2 键盘全流程：? 看快捷键，E 结束回合，Esc 关闭帮助 */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = document.activeElement as HTMLElement | null;
+      if (el && ['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName)) return;
+      const otherModal =
+        Boolean(deploy) ||
+        saveOpen ||
+        rosterOpen ||
+        quitOpen ||
+        Boolean(state.report) ||
+        Boolean(state.unifyReady);
+      if (e.key === '?') {
+        if (!otherModal) {
+          e.preventDefault();
+          setHelpOpen((v) => !v);
+        }
+        return;
+      }
+      if (helpOpen && e.key === 'Escape') {
+        setHelpOpen(false);
+        return;
+      }
+      if ((e.key === 'e' || e.key === 'E') && !helpOpen && !otherModal) {
+        e.preventDefault();
+        endTurn();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [helpOpen, deploy, saveOpen, rosterOpen, quitOpen, state.report, state.unifyReady]);
 
   return (
     <div className="map-screen">
@@ -128,6 +164,17 @@ export function MapScreen() {
           <span className="mini" title={difficultyOf(state.settings.difficulty).note}>
             AI {difficultyOf(state.settings.difficulty).label}
           </span>
+          <button className="btn ghost sm" onClick={() => setHelpOpen(true)} title="快捷键（?）">
+            快捷键
+          </button>
+          <AudioSettingsButton />
+          <button
+            className="btn sm"
+            onClick={() => setRosterOpen(true)}
+            title="查看全势力武将分布"
+          >
+            武将 {generals.length}
+          </button>
           <button className="btn sm" onClick={() => setSaveOpen(true)}>
             存档
           </button>
@@ -234,7 +281,11 @@ export function MapScreen() {
             state={state}
             selectedCityId={selectedCityId}
             attackTargetIds={attackFromSelected}
-            onSelect={setSelectedCityId}
+            onSelect={(id) => {
+              // 地图点选走画布，不经过按钮委托，这里单独补声
+              if (id !== selectedCityId) audio.play('ui.select');
+              setSelectedCityId(id);
+            }}
           />
           <div className={`map-hint${attackFromSelected.length > 0 ? ' accent' : ''}`}>
             {state.cities[selectedCityId]?.ownerId === state.playerFactionId
@@ -306,6 +357,44 @@ export function MapScreen() {
       ) : null}
 
       {saveOpen ? <SaveDialog mode="save" onClose={() => setSaveOpen(false)} /> : null}
+
+      {rosterOpen ? (
+        <RosterDialog
+          state={state}
+          onClose={() => setRosterOpen(false)}
+          onPickCity={(id) => setSelectedCityId(id)}
+        />
+      ) : null}
+
+      {helpOpen ? (
+        <div className="modal" onClick={() => setHelpOpen(false)}>
+          <div className="modal-card keyboard-help" onClick={(e) => e.stopPropagation()}>
+            <header className="modal-head">
+              <h3>快捷键</h3>
+              <button className="btn ghost sm" onClick={() => setHelpOpen(false)}>
+                关闭
+              </button>
+            </header>
+            <div className="kb-grid">
+              {[
+                ['Tab', '切换焦点（城池列表 / 操作按钮）'],
+                ['Enter / Space', '触发当前按钮'],
+                ['E', '结束回合'],
+                ['?', '打开 / 关闭快捷键'],
+                ['Esc', '关闭弹窗 / 取消战棋指令'],
+                ['战棋 Tab', '切换待行动部队'],
+                ['战棋 Space', '结束本回合'],
+                ['战棋 Esc', '取消选择 / 计策 / 突击'],
+              ].map(([key, desc]) => (
+                <div className="kb-row" key={key}>
+                  <kbd>{key}</kbd>
+                  <span>{desc}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {quitOpen ? (
         <ConfirmDialog

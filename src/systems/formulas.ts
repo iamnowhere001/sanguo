@@ -1,3 +1,4 @@
+import type { CitySize } from '../core/state';
 import { BALANCE } from '../data/tables/balance';
 
 /**
@@ -62,9 +63,28 @@ export function trainingMultiplier(training: number): number {
   return 1 + (clamp(training, 0, 100) / 100) * BALANCE.TRAINING_DAMAGE_BONUS;
 }
 
-/** 【优化】E01 单城每月交易限额 = 商业 × 2 */
-export function tradeLimit(commerce: number): number {
-  return Math.floor(Math.max(0, commerce) * BALANCE.TRADE.monthlyVolumePerCommerce);
+/** 单城驻军上限：都城 9000 / 大城 6000 / 中城 4200 / 小城 2600 */
+export function garrisonCapOf(size: CitySize): number {
+  return BALANCE.CITY_SIZE[size].garrison;
+}
+
+/**
+ * 城防减伤下的守方受击倍率：城防越高，城池格内的守军越难被啃动。
+ * 城防 0 → 0.5，100 → 0.3；非城池格不调用此函数。
+ */
+export function cityDamageMultiplier(fortification = 0): number {
+  const ratio = clamp(fortification, 0, 100) / 100;
+  return Math.max(
+    BALANCE.FORTIFICATION_MIN_MULT,
+    BALANCE.CITY_DEFENSE_REDUCTION - BALANCE.FORTIFICATION_MAX_REDUCTION * ratio,
+  );
+}
+
+/** 【优化】E01 单城每月交易限额 = 商业 × 2；城池技能可再乘一个额度倍率 */
+export function tradeLimit(commerce: number, multiplier = 1): number {
+  return Math.floor(
+    Math.max(0, commerce) * BALANCE.TRADE.monthlyVolumePerCommerce * multiplier,
+  );
 }
 
 /**

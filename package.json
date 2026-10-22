@@ -12,7 +12,8 @@
     "sim:battle": "vite-node scripts/sim-battle.ts",
     "sim:economy": "vite-node scripts/sim-economy.ts",
     "perf:check": "vite-node scripts/perf-check.ts",
-    "verify": "npm run typecheck && npm test && npm run build"
+    "contrast:check": "vite-node scripts/contrast-check.ts",
+    "verify": "npm run typecheck && npm test && npm run contrast:check && npm run build"
   },
   "engines": {
     "node": ">=20"

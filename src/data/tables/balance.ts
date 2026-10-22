@@ -19,6 +19,24 @@ export const BALANCE = {
   /** 粮食占上限超过这个比例就预警 */
   FOOD_WARN_RATIO: 0.95,
 
+  // ── 城池规模与城防 【新增】大城市 / 小城市 / 易守难攻 ──────
+  /**
+   * 规模决定单城驻军上限。小城只能养少量守军，大城与都城可屯重兵；
+   * 开局兵力均低于上限，上限主要约束中后期的长期囤兵。
+   */
+  CITY_SIZE: {
+    capital: { garrison: 9000 },
+    large: { garrison: 6000 },
+    medium: { garrison: 4200 },
+    small: { garrison: 2600 },
+  },
+  /**
+   * 城防减伤：守方在城池格受击倍率 = 0.5 − 0.2 × 城防%。
+   * 城防 0 → ×0.5；50 → ×0.4；100 → ×0.3（下限）。
+   */
+  FORTIFICATION_MAX_REDUCTION: 0.2,
+  FORTIFICATION_MIN_MULT: 0.3,
+
   // ── 内政 【GDD】4.3 效果 / 【优化】E10 边际递减 ─────────────
   DOMESTIC: {
     reclaim: {
@@ -144,6 +162,12 @@ export const BALANCE = {
   BATTLE_ZOC: true,
   BATTLE_MAX_DAYS: 30,
   /**
+   * 【适配】单场战斗上场上限。将领表扩到百人后，单城守将经常超过出生点数量：
+   * 攻方仍是经典 5 人；守方最多 8 人上场，超出者编为预备队，城破时随城陷没。
+   */
+  BATTLE_MAX_ATTACKERS: 5,
+  BATTLE_MAX_DEFENDERS: 8,
+  /**
    * 【优化】E06 守城方每天恢复兵力，让“拖”对攻方不利。
    * 报告建议 2%；I3 用 432 万场沙盒复核：2% 会把 1.8:1 攻方胜率压到 42.2%、2:1 只有 50%，
    * 故保留 1%（1.8:1 51.7%、2:1 61.1%），既惩罚拖延，也不改写“1.8:1 可攻城”的目标区间。
@@ -198,6 +222,27 @@ export const BALANCE = {
     developGoldReserve: 150,
     /** 每个 AI 势力每月最多出兵次数 */
     attacksPerMonth: 1,
+  },
+
+  // ── 现代重制：国策 / 政令 / 军令 / 事件 / 章节 ─────────────
+  MODERN: {
+    /** 国策每 3 回合重新三选一 */
+    POLICY_TURNS: 3,
+    /** 每城内政政令上限 = min(max, base + floor(在城武将 / perGenerals)) */
+    EDICT: { base: 2, perGenerals: 3, max: 4 },
+    /** 每场战斗的军令点 */
+    COMMAND_POINTS: 3,
+    COMMAND: {
+      inspire: { label: '鼓舞', cost: 1, damageMult: 1.2 },
+      guard: { label: '固守', cost: 1, damageTakenMult: 0.7 },
+      march: { label: '急袭', cost: 1, moveBonus: 2 },
+    },
+    /** 夹击：按攻击者之外、与目标相邻的友军数量计算 */
+    FLANK: { one: 1.08, two: 1.15, three: 1.2 },
+    /** 现代模式每月触发事件的概率 */
+    EVENT_CHANCE: 0.45,
+    /** 章节完成奖励 */
+    CHAPTER_REWARD_GOLD: 800,
   },
 } as const;
 

@@ -63,12 +63,20 @@ const CHAR_TERRAIN: Record<string, BattleTerrain> = {
   C: 'city',
 };
 
+/**
+ * 出生点：攻方贴左缘、守方贴右缘/城内。
+ * 数量按 BALANCE.BATTLE_MAX_ATTACKERS / MAX_DEFENDERS 的上限留足独立格，
+ * 避免将领变多后多个单位叠在同一格。
+ */
 export const SPAWN_ATTACKER: Array<[number, number]> = [
   [0, 3],
   [0, 4],
   [1, 3],
   [1, 4],
   [0, 2],
+  [1, 2],
+  [0, 5],
+  [1, 5],
 ];
 
 export const SPAWN_DEFENDER: Array<[number, number]> = [
@@ -77,6 +85,11 @@ export const SPAWN_DEFENDER: Array<[number, number]> = [
   [8, 3],
   [7, 4],
   [7, 2],
+  [9, 3],
+  [9, 4],
+  [6, 3],
+  [6, 4],
+  [7, 5],
 ];
 
 export function otherSide(side: BattleSide): BattleSide {

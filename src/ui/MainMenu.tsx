@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { gameStore, useGameStore } from '../store/gameStore';
 import { getSave } from '../save/db';
+import { AudioSettingsButton } from './AudioSettings';
 import { useEscape, useSaveSlots } from './common';
 import { SaveDialog } from './SaveDialog';
 
@@ -82,7 +83,7 @@ function AboutModal({ onClose }: { onClose: () => void }) {
         </p>
         <p className="muted">
           技术：TypeScript + React + Canvas；规则层为纯函数，随机数可复现，配表启动即校验。
-          当前内容为 189 / 200 / 208 / 220 四个剧本、35 城，含内政、战棋、计策、外交与俘虏。后续继续补齐搜索点位、伤害预览与原版细节。
+          当前内容为 189 / 200 / 208 / 220 四个剧本、61 城，含内政、战棋、计策、外交与俘虏。后续继续补齐搜索点位、伤害预览与原版细节。
         </p>
         <button className="btn primary" onClick={onClose}>
           知道了
@@ -115,6 +116,9 @@ export function MainMenu() {
   return (
     <div className="menu">
       <MenuArt />
+      <div className="menu-corner">
+        <AudioSettingsButton />
+      </div>
       <div className="menu-inner">
         <span className="eyebrow">步步高 9288T · WEB REMAKE</span>
         <h1>
@@ -143,7 +147,7 @@ export function MainMenu() {
         </div>
 
         <div className="menu-foot">
-          四剧本 · 35 城 · 回合制单机
+          四剧本 · 61 城 · 回合制单机
         </div>
       </div>
       {loadOpen ? <SaveDialog mode="load" onClose={() => setLoadOpen(false)} /> : null}

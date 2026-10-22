@@ -21,28 +21,6 @@ export function FactionTag({
   );
 }
 
-export function Stat({
-  label,
-  value,
-  hint,
-  danger,
-  wide,
-}: {
-  label: string;
-  value: string | number;
-  hint?: string;
-  danger?: boolean;
-  wide?: boolean;
-}) {
-  return (
-    <div className={`stat${danger ? ' danger' : ''}${wide ? ' wide' : ''}`}>
-      <span>{label}</span>
-      <b>{value}</b>
-      {hint ? <em>{hint}</em> : null}
-    </div>
-  );
-}
-
 export function Bar({
   value,
   max,

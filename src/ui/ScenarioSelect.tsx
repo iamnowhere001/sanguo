@@ -46,13 +46,11 @@ export function ScenarioSelect() {
                 return cityIds.includes(g.locationId);
               })
               .map((g) => g.id);
-        const troops = roster
-          ? roster.reduce((sum, id) => sum + (GENERAL_TABLE[id]?.troops || 400), 0)
-          : generalIds.reduce((sum, id) => {
-              const g = GENERAL_TABLE[id];
-              if (!g) return sum;
-              return sum + g.troops;
-            }, 0);
+        // 文官带兵本来可以是 0，不能再用 `|| 400` 兜底，否则开局兵力会虚高
+        const troops = generalIds.reduce((sum, id) => {
+          const g = GENERAL_TABLE[id];
+          return sum + (g ? g.troops : 400);
+        }, 0);
         return { faction: f, cities: cityIds.length, generals: generalIds.length, troops };
       })
       .filter((r) => r.cities > 0)

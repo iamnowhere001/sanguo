@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  cityDamageMultiplier,
   desertionRate,
   disasterChance,
   expToNext,
   foodOutput,
+  garrisonCapOf,
   monthlyFoodUpkeep,
   recruitCap,
   safeOverflowFood,
@@ -213,6 +215,20 @@ describe('边界与裁决值', () => {
     expect(trainingMultiplier(0)).toBe(1);
     expect(trainingMultiplier(100)).toBeCloseTo(1.25, 5);
     expect(trainingMultiplier(40)).toBeCloseTo(1.1, 5);
+  });
+
+  it('城防：0 → 守城受击 ×0.5，50 → ×0.4，100 → ×0.3', () => {
+    expect(cityDamageMultiplier(0)).toBeCloseTo(0.5, 5);
+    expect(cityDamageMultiplier(50)).toBeCloseTo(0.4, 5);
+    expect(cityDamageMultiplier(100)).toBeCloseTo(0.3, 5);
+    expect(cityDamageMultiplier(999)).toBeCloseTo(0.3, 5);
+  });
+
+  it('驻军上限：都城 > 大城 > 中城 > 小城', () => {
+    expect(garrisonCapOf('capital')).toBe(9000);
+    expect(garrisonCapOf('large')).toBe(6000);
+    expect(garrisonCapOf('medium')).toBe(4200);
+    expect(garrisonCapOf('small')).toBe(2600);
   });
 
   it('安全溢出：上限 65536、当前 70000 → 63304（不清零）', () => {

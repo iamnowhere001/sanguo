@@ -14,14 +14,18 @@ export interface SpawnCandidate {
 }
 
 export const SPAWN_CANDIDATES: Record<string, SpawnCandidate> = {
-  tally_iron: { kind: 'item', cities: ['jiangxia', 'xiangyang', 'xinye'], weight: 5 },
-  book_sunzi: { kind: 'item', cities: ['xiaopei', 'pengcheng', 'beihai'], weight: 4 },
-  tally_mystic: { kind: 'item', cities: ['chengdu', 'mianzhu', 'zhangtong'], weight: 5 },
-  weapon_fangtian: { kind: 'item', cities: ['zhangtong', 'jiangzhou', 'chengdu'], weight: 4 },
-  mount_dilu: { kind: 'item', cities: ['tianshui', 'wuwei', 'anding'], weight: 4 },
-  zhaoyun: { kind: 'general', cities: ['jiangxia', 'xinye', 'beihai'], weight: 3 },
-  ganning: { kind: 'general', cities: ['jiangxia', 'jianye', 'lujiang'], weight: 3 },
-  nanfang_xiaogui: { kind: 'general', cities: ['jinyang', 'xiangping', 'beihai'], weight: 2 },
+  tally_iron: { kind: 'item', cities: ['jiangxia', 'xiangyang', 'xinye', 'yiling'], weight: 5 },
+  book_sunzi: { kind: 'item', cities: ['xiaopei', 'pengcheng', 'beihai', 'guangling'], weight: 4 },
+  tally_mystic: { kind: 'item', cities: ['chengdu', 'mianzhu', 'zhangtong', 'langzhong'], weight: 5 },
+  weapon_fangtian: { kind: 'item', cities: ['zhangtong', 'jiangzhou', 'chengdu', 'badong'], weight: 4 },
+  mount_dilu: { kind: 'item', cities: ['tianshui', 'wuwei', 'anding', 'jincheng'], weight: 4 },
+  zhaoyun: { kind: 'general', cities: ['jiangxia', 'xinye', 'beihai', 'zhuo'], weight: 3 },
+  ganning: { kind: 'general', cities: ['jiangxia', 'jianye', 'lujiang', 'jiangzhou'], weight: 3 },
+  pangtong: { kind: 'general', cities: ['xiangyang', 'jiangling', 'jiangxia', 'gongan'], weight: 3 },
+  xushu: { kind: 'general', cities: ['xinye', 'xiangyang', 'xuchang', 'runan'], weight: 3 },
+  tianchou: { kind: 'general', cities: ['xiangping', 'beihai', 'ye', 'ji'], weight: 2 },
+  yanbaihu: { kind: 'general', cities: ['wu', 'kuaiji', 'jianye', 'danyang'], weight: 2 },
+  nanfang_xiaogui: { kind: 'general', cities: ['jinyang', 'xiangping', 'beihai', 'yunnan'], weight: 2 },
 };
 
 function scenarioSalt(scenarioId: string, index: number): number {

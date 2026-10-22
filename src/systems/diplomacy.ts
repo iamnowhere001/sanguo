@@ -210,9 +210,11 @@ export function persuadeRate(
   agent: General,
 ): number {
   const garrison = defendersOf(state, city.id).reduce((sum, g) => sum + g.troops, 0);
+  // 城池专属技能：从本城发起劝降的加成（如平原仁政）
+  const persuadeBonus = state.cities[agent.locationId]?.skill?.persuadeBonus ?? 0;
   return Math.round(
     clamp(
-      85 - garrison / 20 - city.loyalty / 2 + effIntellect(state, agent) / 5,
+      85 - garrison / 20 - city.loyalty / 2 + effIntellect(state, agent) / 5 + persuadeBonus,
       10,
       95,
     ),

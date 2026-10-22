@@ -1,15 +1,30 @@
 import { useEffect, useRef, useState } from 'react';
-import type { City, GameState } from '../core/state';
+import type { City, CitySize, GameState } from '../core/state';
 import { cityTroops } from '../core/selectors';
 import { BALANCE } from '../data/tables/balance';
+import { CITY_SIZE_LABEL, fortificationLabel } from '../data/tables/cities';
 import { TERRAIN_LABEL } from '../data/tables/unitClasses';
-import { drawFactionPattern, factionPattern } from './factionPattern';
+import { drawFactionPattern, factionPattern, PATTERN_LABEL } from './factionPattern';
 
 interface ProjectedCity {
   city: City;
   x: number;
   y: number;
 }
+
+/** 规模直接映射到节点半径：都城最大、小城最小，一眼能分出主次 */
+const NODE_RADIUS: Record<CitySize, number> = {
+  capital: 10,
+  large: 8.6,
+  medium: 7.6,
+  small: 6.4,
+};
+const SIZE_RANK: Record<CitySize, number> = {
+  capital: 0,
+  large: 1,
+  medium: 2,
+  small: 3,
+};
 
 function project(state: GameState, w: number, h: number): ProjectedCity[] {
   const cities = Object.values(state.cities);
@@ -168,7 +183,7 @@ export function MapCanvas({
       }
     }
 
-    // 地形装饰（35 城下收敛为两个小标记）
+    // 地形装饰（61 城下收敛为两个小标记）
     for (const p of pts) {
       const c = p.city;
       if (c.terrain === 'mountain') {
@@ -201,10 +216,11 @@ export function MapCanvas({
       const isSel = c.id === selectedCityId;
       const isHover = c.id === hover;
       const isTarget = attackSet.has(c.id);
+      const r = NODE_RADIUS[c.size];
 
       if (isTarget) {
         ctx.beginPath();
-        ctx.arc(p.x, p.y, 14.5, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, r + 6.5, 0, Math.PI * 2);
         ctx.strokeStyle = 'rgba(193,74,58,0.85)';
         ctx.lineWidth = 1.2;
         ctx.setLineDash([3, 3]);
@@ -213,7 +229,7 @@ export function MapCanvas({
       }
       if (isSel) {
         ctx.beginPath();
-        ctx.arc(p.x, p.y, 16, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, r + 8, 0, Math.PI * 2);
         ctx.strokeStyle = 'rgba(200,164,94,0.9)';
         ctx.lineWidth = 1.4;
         ctx.setLineDash([3, 4]);
@@ -222,13 +238,13 @@ export function MapCanvas({
       }
       if (isHover) {
         ctx.beginPath();
-        ctx.arc(p.x, p.y, 12, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, r + 4, 0, Math.PI * 2);
         ctx.fillStyle = 'rgba(239,230,210,0.08)';
         ctx.fill();
       }
 
       ctx.beginPath();
-      ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
       ctx.fillStyle = '#14130f';
       ctx.fill();
       ctx.lineWidth = 2;
@@ -236,10 +252,10 @@ export function MapCanvas({
       ctx.stroke();
 
       // 【优化】§5.5 颜色 + 纹样双编码，灰度下仍能区分势力
-      drawFactionPattern(ctx, p.x, p.y, factionPattern(c.ownerId));
+      drawFactionPattern(ctx, p.x, p.y, factionPattern(c.ownerId), r - 1.7);
 
       ctx.beginPath();
-      ctx.arc(p.x, p.y, 2.8, 0, Math.PI * 2);
+      ctx.arc(p.x, p.y, Math.max(2.2, r * 0.35), 0, Math.PI * 2);
       ctx.fillStyle = color;
       ctx.fill();
 
@@ -304,7 +320,12 @@ export function MapCanvas({
 
     const priority = (c: City): number =>
       c.id === selectedCityId ? 0 : c.id === hover ? 1 : c.ownerId === state.playerFactionId ? 2 : 3;
-    const ordered = [...pts].sort((a, b) => priority(a.city) - priority(b.city) || a.y - b.y);
+    const ordered = [...pts].sort(
+      (a, b) =>
+        priority(a.city) - priority(b.city) ||
+        SIZE_RANK[a.city.size] - SIZE_RANK[b.city.size] ||
+        a.y - b.y,
+    );
 
     for (const p of ordered) {
       const c = p.city;
@@ -358,8 +379,9 @@ export function MapCanvas({
       const nearCapTooltip =
         c.ownerId === state.playerFactionId &&
         c.food >= BALANCE.FOOD_CAP * BALANCE.FOOD_WARN_RATIO;
-      const w = 178;
-      const h = nearCapTooltip ? 114 : 98;
+      const hasSkill = Boolean(c.skill);
+      const w = 196;
+      const h = (hasSkill ? 136 : 120) + (nearCapTooltip ? 16 : 0);
       let x = hoverPoint.x + 14;
       let y = hoverPoint.y - 44;
       if (x + w > size.w - 8) x = hoverPoint.x - w - 14;
@@ -387,9 +409,19 @@ export function MapCanvas({
       ctx.fillStyle = '#a3977e';
       ctx.font = '10px "PingFang SC", "Noto Sans SC", sans-serif';
       ctx.fillText(
-        `${c.ownerId ? state.factions[c.ownerId]?.name ?? '' : '无主'} · ${TERRAIN_LABEL[c.terrain]}`,
+        `${c.ownerId ? state.factions[c.ownerId]?.name ?? '' : '无主'} · ${TERRAIN_LABEL[c.terrain]}${
+          c.isWaterCity ? ' · 水城' : ''
+        }`,
         x + 23,
         y + 36,
+      );
+
+      ctx.fillStyle = '#c8a45e';
+      ctx.font = '10px "PingFang SC", "Noto Sans SC", sans-serif';
+      ctx.fillText(
+        `${CITY_SIZE_LABEL[c.size]} · 城防 ${c.fortification}（${fortificationLabel(c.fortification)}）`,
+        x + 12,
+        y + 52,
       );
 
       ctx.fillStyle = '#efe6d2';
@@ -397,21 +429,25 @@ export function MapCanvas({
       ctx.fillText(
         `守将 ${governor ? `${governor.name} ${governor.troops}` : '无'} · 总兵 ${cityTroops(state, c.id)}`,
         x + 12,
-        y + 53,
+        y + 69,
       );
       ctx.fillStyle = '#a3977e';
       ctx.fillText(
         `农 ${c.agriculture} · 商 ${c.commerce} · 民忠 ${c.loyalty} · 防灾 ${c.defense}`,
         x + 12,
-        y + 70,
+        y + 86,
       );
-      ctx.fillText(`金 ${c.gold} · 粮 ${c.food}`, x + 12, y + 87);
+      ctx.fillText(`金 ${c.gold} · 粮 ${c.food}`, x + 12, y + 103);
+      if (c.skill) {
+        ctx.fillStyle = '#c8a45e';
+        ctx.fillText(`专属 ${c.skill.name}`, x + 12, y + 120);
+      }
       if (
         c.ownerId === state.playerFactionId &&
         c.food >= BALANCE.FOOD_CAP * BALANCE.FOOD_WARN_RATIO
       ) {
         ctx.fillStyle = '#d8a54a';
-        ctx.fillText('! 粮草已达上限 95%：征兵 / 卖粮 / 分城', x + 12, y + 101);
+        ctx.fillText('! 粮草已达上限 95%：征兵 / 卖粮 / 分城', x + 12, y + (hasSkill ? 136 : 120));
       }
     }
   }, [state, selectedCityId, attackTargetIds, hover, size]);
