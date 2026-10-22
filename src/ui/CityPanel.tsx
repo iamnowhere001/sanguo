@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { BALANCE } from '../data/tables/balance';
 import { MOVE_RANGE, TERRAIN_LABEL, UNIT_CLASS_LABEL } from '../data/tables/unitClasses';
-import type { DomesticCmd, GameState } from '../core/state';
-import { neighborsOf } from '../core/state';
+import type { DomesticCmd, GameState, General } from '../core/state';
+import { effForce, effIntellect, neighborsOf } from '../core/state';
 import {
   foodOutput,
   monthlyFoodUpkeep,
@@ -13,6 +13,7 @@ import {
   trainingMultiplier,
 } from '../systems/formulas';
 import { troopCapOf } from '../systems/domestic';
+import { persuadePlan } from '../systems/diplomacy';
 import { prisonerRecruitRate, prisonersIn } from '../systems/prisoners';
 import { gameStore } from '../store/gameStore';
 import { DiplomacyDialog } from './DiplomacyDialog';
@@ -36,6 +37,46 @@ const FIELD_LABEL: Record<string, string> = {
   defense: '防灾',
   training: '训练',
 };
+
+/**
+ * 【优化】§5.3 按武将推荐道具：武力/智力/移动分别找最需要的人。
+ * 返回同城且道具栏未满的推荐人；没有合适人选时返回 null。
+ */
+function recommendItemHolder(
+  state: GameState,
+  from: General,
+  itemId: string,
+): General | null {
+  const item = state.items[itemId];
+  if (!item) return null;
+  const pool = cityGenerals(state, from.locationId).filter(
+    (g) => g.id !== from.id && g.items.length < BALANCE.ITEM_SLOTS,
+  );
+  if (pool.length === 0) return null;
+
+  if (item.forceBonus) {
+    return [...pool].sort((a, b) => effForce(state, b) - effForce(state, a))[0]!;
+  }
+  if (item.intellectBonus) {
+    return [...pool].sort((a, b) => effIntellect(state, b) - effIntellect(state, a))[0]!;
+  }
+  if (item.moveBonus) {
+    const order: Record<string, number> = {
+      cavalry: 0,
+      elite: 0,
+      navy: 1,
+      archer: 2,
+      infantry: 3,
+      mystic: 4,
+    };
+    return [...pool].sort(
+      (a, b) =>
+        (order[a.unitClass] ?? 9) - (order[b.unitClass] ?? 9) ||
+        MOVE_RANGE[b.unitClass] - MOVE_RANGE[a.unitClass],
+    )[0]!;
+  }
+  return pool[0]!;
+}
 
 export function CityPanel({
   state,
@@ -115,6 +156,7 @@ export function CityPanel({
   );
   const lowLoyalty = gens.filter((g) => !g.isRuler && g.loyalty < 40);
   const banquetCost = gens.length * BALANCE.BANQUET.gold;
+  const persuade = city.ownerId ? null : persuadePlan(state, city.id);
 
   const act = (cmd: DomesticCmd) => {
     if (!agent) {
@@ -138,7 +180,9 @@ export function CityPanel({
             </span>
           </div>
         </div>
-        <span className={`owner-badge${isMine ? ' mine' : ''}`}>{isMine ? '我方' : '他方'}</span>
+        <span className={`owner-badge${isMine ? ' mine' : ''}`}>
+          {isMine ? '我方' : city.ownerId ? '他方' : '中立'}
+        </span>
       </header>
 
       <div className="panel-scroll">
@@ -269,6 +313,14 @@ export function CityPanel({
                   onClick={() => setRecruitAmount(maxRecruit)}
                 >
                   最大
+                </button>
+                <button
+                  className="btn sm"
+                  disabled={gens.length === 0}
+                  onClick={() => gameStore.dispatch({ t: 'RECRUIT_ALL', cityId })}
+                  title="按每名武将的带兵余量自动分配，一次填满全城"
+                >
+                  按上限分配
                 </button>
                 <button
                   className="btn primary sm"
@@ -403,6 +455,39 @@ export function CityPanel({
                         color={g.troops >= troopCapOf(state, g) * 0.9 ? 'var(--gold)' : 'var(--teal)'}
                       />
                     </div>
+                    {g.items.length > 0 ? (
+                      <div className="g-items">
+                        <span className="g-items-label">道具 · 点击转给推荐人</span>
+                        {g.items.map((itemId) => {
+                          const item = state.items[itemId];
+                          const rec = recommendItemHolder(state, g, itemId);
+                          return (
+                            <button
+                              key={itemId}
+                              className="item-chip"
+                              disabled={!rec}
+                              title={
+                                rec
+                                  ? `把「${item?.name ?? itemId}」转给 ${rec.name}（推荐）`
+                                  : '同城没有道具栏未满的武将'
+                              }
+                              onClick={() => {
+                                if (!rec) return;
+                                gameStore.dispatch({
+                                  t: 'TRANSFER_ITEM',
+                                  fromGeneralId: g.id,
+                                  toGeneralId: rec.id,
+                                  itemId,
+                                });
+                              }}
+                            >
+                              {item?.name ?? itemId}
+                              {rec ? ` → ${rec.name}` : ''}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : null}
                     {adjacentMine.length > 0 ? (
                       <div className="g-move">
                         <select
@@ -502,33 +587,67 @@ export function CityPanel({
             ) : null}
           </>
         ) : (
-          <section className="panel-section">
-            <div className="section-title">
-              <span>守军</span>
-              <span className="muted small">需先出征相邻城</span>
-            </div>
-            <div className="general-list">
-              {gens.length === 0 ? (
-                <p className="muted">无守军，出征可直接占领。</p>
-              ) : (
-                gens.map((g) => (
-                  <div className="general-row" key={g.id}>
-                    <div className="g-main">
-                      <b>{g.name}</b>
-                      {g.isRuler ? <span className="mini">君主</span> : null}
-                      <ClassTag c={g.unitClass} />
+          <>
+            {!city.ownerId ? (
+              <section className="panel-section">
+                <div className="section-title">
+                  <span>劝降</span>
+                  <span className="muted small">中立空城</span>
+                </div>
+                {persuade ? (
+                  <>
+                    <div className="form-hint">
+                      成功率 {persuade.rate}% · {persuade.agent.name} 执行 ·{' '}
+                      {BALANCE.DIPLOMACY.gold} 金 / {BALANCE.DIPLOMACY.stamina} 体力
                     </div>
-                    <div className="g-stats">
-                      <span>武 {g.force}</span>
-                      <span>智 {g.intellect}</span>
-                      <span>Lv{g.level}</span>
-                      <span>兵 {g.troops}</span>
+                    <button
+                      className="btn primary wide"
+                      onClick={() => {
+                        const r = gameStore.dispatch({
+                          t: 'PERSUADE_CITY',
+                          cityId: city.id,
+                        });
+                        if (r.ok) gameStore.notify(r.message, r.success ? 'good' : 'warn');
+                      }}
+                    >
+                      劝降 · {persuade.rate}%
+                    </button>
+                  </>
+                ) : (
+                  <p className="muted small">
+                    相邻己方城池没有可执行的武将，或钱/体力不足。
+                  </p>
+                )}
+              </section>
+            ) : null}
+            <section className="panel-section">
+              <div className="section-title">
+                <span>守军</span>
+                <span className="muted small">需先出征相邻城</span>
+              </div>
+              <div className="general-list">
+                {gens.length === 0 ? (
+                  <p className="muted">无守军，出征可直接占领。</p>
+                ) : (
+                  gens.map((g) => (
+                    <div className="general-row" key={g.id}>
+                      <div className="g-main">
+                        <b>{g.name}</b>
+                        {g.isRuler ? <span className="mini">君主</span> : null}
+                        <ClassTag c={g.unitClass} />
+                      </div>
+                      <div className="g-stats">
+                        <span>武 {g.force}</span>
+                        <span>智 {g.intellect}</span>
+                        <span>Lv{g.level}</span>
+                        <span>兵 {g.troops}</span>
+                      </div>
                     </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </section>
+                  ))
+                )}
+              </div>
+            </section>
+          </>
         )}
       </div>
 

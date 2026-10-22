@@ -432,6 +432,10 @@ export function BattleCanvas({
 
       ctx.fillStyle = '#efe6d2';
       ctx.font = `600 ${Math.floor(cell * 0.2)}px "JetBrains Mono", monospace`;
+      // 【优化】§5.5 数字加描边，保证在任何地形色上可读
+      ctx.lineWidth = Math.max(2, cell * 0.06);
+      ctx.strokeStyle = 'rgba(10,9,7,0.9)';
+      ctx.strokeText(String(u.troops), px, py + r + cell * 0.13);
       ctx.fillText(String(u.troops), px, py + r + cell * 0.13);
 
       if (u.isCommander) {

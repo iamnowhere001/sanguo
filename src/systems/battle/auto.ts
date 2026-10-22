@@ -44,7 +44,7 @@ export function autoResolveBattle(
       return afterDef;
     }
 
-    const { timedOut } = advanceBattleDay(state, battle);
+    const { timedOut } = advanceBattleDay(battle);
     if (timedOut) {
       // 【优化】E06 超时按撤退结算，保留 70% 残兵
       resolveBattle(state, battle, BALANCE.TIMEOUT_OUTCOME);

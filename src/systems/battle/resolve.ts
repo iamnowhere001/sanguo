@@ -4,12 +4,14 @@ import { chance } from '../../core/rng';
 import type {
   BattleState,
   BattleUnit,
+  Faction,
   GameState,
   ReportLine,
 } from '../../core/state';
-import { syncFactionCities } from '../../core/state';
+import { factionTroops, syncFactionCities } from '../../core/state';
 import { log } from '../economy';
 import { clamp } from '../formulas';
+import { collapseEliminatedFactions } from '../elimination';
 import { grantExp } from './combat';
 import { activeUnits, otherSide } from './grid';
 
@@ -87,8 +89,8 @@ export function resolveBattle(
       g.troops = u.troops;
       let captured = u.isCommander;
       if (!captured) {
-        const [hit, next] = chance(state.rng, BALANCE.CAPTURE_RATE_SUBORDINATE);
-        state.rng = next;
+        const [hit, next] = chance(b.rng, BALANCE.CAPTURE_RATE_SUBORDINATE);
+        b.rng = next;
         captured = hit;
       }
       if (captured) {
@@ -227,6 +229,7 @@ export function resolveBattle(
 }
 
 export function checkGameOver(state: GameState): void {
+  collapseEliminatedFactions(state);
   const mine = Object.values(state.cities).filter(
     (c) => c.ownerId === state.playerFactionId,
   ).length;
@@ -244,5 +247,36 @@ export function checkGameOver(state: GameState): void {
   if (alive.length === 0) {
     state.phase = 'gameover';
     state.gameOver = { result: 'victory', reason: '扫平群雄，一统天下' };
+    return;
   }
+
+  checkUnify(state, mine, alive);
+}
+
+/**
+ * 【优化】§4.4 大势已定：控制 ≥70% 城池，且兵力对最强诸侯有 1.2 倍优势。
+ * 满足时给出提示，玩家可直接统一，也可继续亲征；拒绝后 3 回合内不再弹窗。
+ */
+function checkUnify(state: GameState, mine: number, alive: Faction[]): void {
+  const total = Object.keys(state.cities).length;
+  if (total === 0 || mine / total < 0.7) {
+    state.unifyReady = false;
+    return;
+  }
+  const playerTroops = factionTroops(state, state.playerFactionId);
+  const strongest = alive
+    .map((f) => factionTroops(state, f.id))
+    .sort((a, b) => b - a)[0] ?? 0;
+  if (playerTroops < strongest * 1.2) {
+    state.unifyReady = false;
+    return;
+  }
+  if (
+    state.unifyDismissedTurn !== undefined &&
+    state.turn - state.unifyDismissedTurn < 3
+  ) {
+    state.unifyReady = false;
+    return;
+  }
+  state.unifyReady = true;
 }

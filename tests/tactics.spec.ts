@@ -11,13 +11,13 @@ import { availableTactics, tacticStaminaCost } from '../src/data/tables/tactics'
 import type { BattleState, BattleUnit, GameState } from '../src/core/state';
 import { nextFloat, restoreRng } from '../src/core/rng';
 
-/** 把随机流拨到一个满足条件的游标，便于确定性测试 */
-function forceRoll(state: GameState, pred: (v: number) => boolean): void {
+/** 把战斗随机流拨到一个满足条件的游标，便于确定性测试 */
+function forceRoll(b: BattleState, pred: (v: number) => boolean): void {
   for (let c = 0; c < 800; c++) {
-    const rng = restoreRng(state.seed, c);
+    const rng = restoreRng(b.rng.seed, c);
     const [v] = nextFloat(rng);
     if (pred(v)) {
-      state.rng = rng;
+      b.rng = rng;
       return;
     }
   }
@@ -84,7 +84,7 @@ describe('计策解锁与数值', () => {
     ally.x = 6;
     ally.y = 3;
     ally.troops = 780;
-    forceRoll(s, (v) => v < 0.5);
+    forceRoll(b!, (v) => v < 0.5);
     const r = castTactic(s, b!, u.id, 'heal', ally.id);
     expect(r.ok).toBe(true);
     expect(ally.troops).toBe(ally.maxTroops);
@@ -108,7 +108,7 @@ describe('计策限制与状态', () => {
     b!.grid[3]![5] = 'plain';
     expect(castTactic(s, b!, u.id, 'rock', d.id).ok).toBe(false);
     b!.grid[3]![5] = 'mountain';
-    forceRoll(s, (v) => v < 0.5);
+    forceRoll(b!, (v) => v < 0.5);
     const r = castTactic(s, b!, u.id, 'rock', d.id);
     expect(r.ok).toBe(true);
     expect(r.success).toBe(true);
@@ -118,7 +118,7 @@ describe('计策限制与状态', () => {
     const { s, b, u } = mageBattle();
     const d = b!.units['defender:lvbu']!;
     const before = tacticRate(b!, u, d, 'fire');
-    forceRoll(s, (v) => v < 0.5);
+    forceRoll(b!, (v) => v < 0.5);
     castTactic(s, b!, u.id, 'fire', d.id);
     u.hasActed = false;
     u.stamina = 100;
@@ -129,7 +129,7 @@ describe('计策限制与状态', () => {
   it('混乱对同一目标每战限一次', () => {
     const { s, b, u } = mageBattle();
     const d = b!.units['defender:lvbu']!;
-    forceRoll(s, (v) => v < 0.5);
+    forceRoll(b!, (v) => v < 0.5);
     const first = castTactic(s, b!, u.id, 'confuse', d.id);
     expect(first.ok).toBe(true);
     expect(first.success).toBe(true);
@@ -143,7 +143,7 @@ describe('计策限制与状态', () => {
   it('混乱使目标无法行动，且天数在 1–3 之间', () => {
     const { s, b, u } = mageBattle();
     const d = b!.units['defender:lvbu']!;
-    forceRoll(s, (v) => v < 0.5);
+    forceRoll(b!, (v) => v < 0.5);
     const r = castTactic(s, b!, u.id, 'confuse', d.id);
     expect(r.ok).toBe(true);
     expect(d.stunned).toBeGreaterThanOrEqual(1);
@@ -153,7 +153,7 @@ describe('计策限制与状态', () => {
   it('施放计策消耗体力、标记已行动，并结算经验', () => {
     const { s, b, u } = mageBattle();
     const d = b!.units['defender:lvbu']!;
-    forceRoll(s, (v) => v < 0.5);
+    forceRoll(b!, (v) => v < 0.5);
     const r = castTactic(s, b!, u.id, 'fire', d.id);
     expect(r.ok).toBe(true);
     expect(r.success).toBe(true);
@@ -169,7 +169,7 @@ describe('计策限制与状态', () => {
     d2.x = 7;
     d2.y = 4;
     const before = d2.troops;
-    forceRoll(s, (v) => v < 0.5);
+    forceRoll(b!, (v) => v < 0.5);
     castTactic(s, b!, u.id, 'fire', d.id);
     expect(d2.troops).toBeLessThan(before);
   });

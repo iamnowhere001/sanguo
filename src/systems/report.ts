@@ -1,5 +1,19 @@
-import type { GameState, MonthSnapshot, Report, ReportLine } from '../core/state';
-import { citiesOf, factionFood, factionGold, factionTroops } from '../core/state';
+import { BALANCE } from '../data/tables/balance';
+import type {
+  GameState,
+  MonthFacts,
+  MonthSnapshot,
+  Report,
+  ReportLine,
+} from '../core/state';
+import {
+  citiesOf,
+  emptyMonthFacts,
+  factionFood,
+  factionGold,
+  factionTroops,
+  generalsOf,
+} from '../core/state';
 
 /** 玩家势力当前快照；月报用它对比月初与月末。 */
 export function playerSnapshot(state: GameState): MonthSnapshot {
@@ -13,67 +27,191 @@ export function playerSnapshot(state: GameState): MonthSnapshot {
 }
 
 const signed = (n: number): string => (n >= 0 ? `+${n}` : `${n}`);
+const cityName = (state: GameState, cityId: string): string =>
+  state.cities[cityId]?.name ?? cityId;
+const pct = (v: number): string => `${Math.round(v * 100)}%`;
+
+/** 已经在结构化行里解释过的日志，不再在“事件”里重复 */
+const SUMMARIZED_LOG = ['军粮不足', '旱灾', '水灾', '季末', '粮草超过上限'];
 
 export function buildMonthReport(
   state: GameState,
   before: MonthSnapshot,
   logStart: number,
   warnings: string[],
+  facts: MonthFacts = emptyMonthFacts(),
 ): Report {
   const after = playerSnapshot(state);
-  const lines: ReportLine[] = [
-    {
-      label: '资源',
-      text: `金钱 ${signed(after.gold - before.gold)}（${after.gold}） · 粮食 ${signed(
-        after.food - before.food,
-      )}（${after.food}）`,
-      tone: 'info',
-    },
-    {
-      label: '军备',
-      text: `总兵力 ${after.troops}（${signed(after.troops - before.troops)}） · 城池 ${after.cities}`,
-      tone: 'info',
-    },
-  ];
+  const lines: ReportLine[] = [];
 
-  const labels: Record<string, string> = {
-    danger: '风险',
-    warn: '警示',
-    good: '喜讯',
-    info: '军情',
-  };
-  const newLogs = state.log.slice(logStart);
-  const own = newLogs.filter((l) => l.source !== 'ai');
-  const ai = newLogs.filter((l) => l.source === 'ai');
+  const totalFood = facts.outputs.reduce((sum, o) => sum + o.food, 0);
+  const totalTax = facts.taxes.reduce((sum, t) => sum + t.gold, 0);
+  const disasterFoodLoss = facts.disasters.reduce((sum, d) => sum + d.foodLoss, 0);
+  const goldDelta = after.gold - before.gold;
+  const foodDelta = after.food - before.food;
 
-  for (const entry of own.slice(-6)) {
-    lines.push({ label: labels[entry.kind] ?? '军情', text: entry.text, tone: entry.kind });
+  const topFood = [...facts.outputs]
+    .sort((a, b) => b.food - a.food)
+    .slice(0, 3)
+    .map((o) => `${cityName(state, o.cityId)} +${o.food}`)
+    .join(' · ');
+  const topTax = [...facts.taxes]
+    .sort((a, b) => b.gold - a.gold)
+    .slice(0, 3)
+    .map((t) => `${cityName(state, t.cityId)} +${t.gold}`)
+    .join(' · ');
+
+  const reasonParts = [
+    totalFood > 0 ? `月产粮 +${totalFood}` : '',
+    totalTax > 0 ? `季税 +${totalTax}` : '',
+    facts.upkeep > 0 ? `驻军耗粮 −${facts.upkeep}` : '',
+    disasterFoodLoss > 0 ? `灾害损失 −${disasterFoodLoss}` : '',
+  ].filter(Boolean);
+
+  lines.push({
+    label: '资源',
+    text: `金钱 ${signed(goldDelta)}（${after.gold}） · 粮食 ${signed(foodDelta)}（${after.food}）`,
+    tone: foodDelta < 0 ? 'warn' : 'info',
+    reason: reasonParts.length > 0 ? reasonParts.join('；') : '本月没有额外收支',
+    detail:
+      [topFood ? `产粮：${topFood}` : '', topTax ? `税金：${topTax}` : '']
+        .filter(Boolean)
+        .join('；') || undefined,
+    advice:
+      warnings.length > 0
+        ? '先处理粮草上限预警：征兵、卖粮或分城。'
+        : foodDelta < 0
+          ? '粮食在下降，下月优先开垦或买粮。'
+          : undefined,
+  });
+
+  const troopDelta = after.troops - before.troops;
+  lines.push({
+    label: '军备',
+    text: `总兵力 ${after.troops}（${signed(troopDelta)}） · 城池 ${after.cities}`,
+    tone: troopDelta < 0 ? 'warn' : 'info',
+    reason:
+      facts.starvation.length > 0
+        ? `断粮逃亡：${facts.starvation
+            .map((s) => `${s.cityName} ${pct(s.desertionRate)}`)
+            .join('、')}`
+        : '兵力变化来自征兵、战斗与逃亡',
+    detail: facts.upkeep > 0 ? `本月养兵耗粮 ${facts.upkeep}` : undefined,
+    advice:
+      facts.starvation.length > 0
+        ? '优先补粮：开垦、买粮或减少驻军。'
+        : undefined,
+  });
+
+  if (facts.disasters.length > 0) {
+    lines.push({
+      label: '灾害',
+      text: `${facts.disasters.length} 城受灾，粮食 −${disasterFoodLoss}`,
+      tone: 'danger',
+      reason: facts.disasters
+        .map((d) => {
+          const extras = [
+            d.loyaltyLoss ? `民忠 −${d.loyaltyLoss}` : '',
+            d.agriLoss ? `农业 −${d.agriLoss}` : '',
+          ]
+            .filter(Boolean)
+            .join('、');
+          return `${d.cityName} ${d.kind}（概率 ${pct(d.chance)}）：粮 −${d.foodLoss}、人口 −${d.popLoss}${
+            extras ? `、${extras}` : ''
+          }`;
+        })
+        .join('；'),
+      advice: '提升防灾（治理）或预留 1–2 个月军粮。',
+    });
   }
 
+  const lowLoyalty = generalsOf(state, state.playerFactionId).filter(
+    (g) => !g.isRuler && g.loyalty < 40,
+  );
+  if (lowLoyalty.length > 0 || facts.starvation.length > 0) {
+    lines.push({
+      label: '忠诚',
+      text:
+        lowLoyalty.length > 0
+          ? `低忠诚：${lowLoyalty.map((g) => `${g.name} ${g.loyalty}`).join('、')}`
+          : '断粮影响了武将忠诚',
+      tone: lowLoyalty.length > 0 ? 'danger' : 'warn',
+      reason:
+        facts.starvation.length > 0
+          ? `断粮：${facts.starvation.length} 处军粮不足，武将忠诚 ${BALANCE.LOYALTY.starvation}`
+          : '忠诚低于 40 会触发叛变判定',
+      advice: '全城宴请，或把低忠诚武将调离前线。',
+    });
+  }
+
+  if (warnings.length > 0) {
+    lines.push({
+      label: '上限',
+      text: `${warnings.length} 处粮草已达上限 95% 以上`,
+      tone: 'danger',
+      reason: warnings.join('；'),
+      detail: `上限 ${BALANCE.FOOD_CAP}：${
+        (state.settings.overflowMode ?? 'safe') === 'classic'
+          ? '溢出归零'
+          : '超出部分折损 50%'
+      }`,
+      advice: '本月内征兵、卖粮或分城，三选一。',
+    });
+  }
+
+  const newLogs = state.log.slice(logStart);
+  const ai = newLogs.filter((l) => l.source === 'ai');
   if (ai.length > 0) {
+    const attacks = ai.filter((l) => l.text.includes('出兵') || l.text.includes('攻占'));
     lines.push({
       label: '境外',
-      text: `AI 势力本月 ${ai.length} 项动向`,
-      tone: 'info',
+      text: `AI 势力本月 ${ai.length} 项动向${attacks.length > 0 ? `，其中 ${attacks.length} 项军事行动` : ''}`,
+      tone: attacks.length > 0 ? 'warn' : 'info',
+      reason: ai
+        .slice(-6)
+        .map((l) => l.text)
+        .join('；'),
+      detail: ai.length > 6 ? `另有 ${ai.length - 6} 项动向未展开` : undefined,
+      advice:
+        attacks.length > 0
+          ? '关注边境兵力比，必要时增援或外交牵制。'
+          : undefined,
     });
-    const significant = ai.filter((l) => l.kind !== 'info');
-    for (const entry of (significant.length > 0 ? significant : ai).slice(-3)) {
-      lines.push({ label: '动向', text: entry.text, tone: entry.kind });
-    }
   }
 
-  for (const w of warnings) {
-    lines.push({ label: '上限', text: w, tone: 'danger' });
+  const own = newLogs
+    .filter((l) => l.source !== 'ai')
+    .filter((l) => !SUMMARIZED_LOG.some((key) => l.text.includes(key)));
+  const noteworthy = own.filter((l) => l.kind !== 'info');
+  const shown = (noteworthy.length > 0 ? noteworthy : own).slice(-4);
+  if (shown.length > 0) {
+    lines.push({
+      label: '事件',
+      text: shown.map((l) => l.text).join('；'),
+      tone: shown.some((l) => l.kind === 'danger')
+        ? 'danger'
+        : shown.some((l) => l.kind === 'warn')
+          ? 'warn'
+          : 'info',
+    });
   }
 
-  if (lines.length === 2) {
-    lines.push({ label: '局势', text: '本月无战事，各城按部就班', tone: 'info' });
-  }
+  const advice =
+    warnings.length > 0
+      ? `粮草近上限：优先征兵、卖粮或分城（${warnings.length} 城）。`
+      : facts.starvation.length > 0
+        ? '军粮不足：优先开垦或买粮，避免下月继续逃亡。'
+        : lowLoyalty.length > 0
+          ? '低忠诚武将有叛变风险：全城宴请或调离前线。'
+          : foodDelta < 0
+            ? '粮食在下降：开垦或买粮，保持 2 个月军粮余量。'
+            : '局势平稳：可搜索武将，或出征相邻弱城。';
+  lines.push({ label: '建议', text: advice, tone: 'info' });
 
   return {
     kind: 'month',
     title: `${state.year} 年 ${state.month} 月 · 月报`,
-    subtitle: '月结已结算，点击继续回到大地图',
+    subtitle: '月结已结算 · 展开“原因与明细”查看归因',
     lines,
   };
 }

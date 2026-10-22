@@ -1,7 +1,7 @@
 import { BALANCE } from '../data/tables/balance';
-import type { GameState, General } from '../core/state';
-import { effIntellect, neighborsOf, syncFactionCities } from '../core/state';
-import { chance } from '../core/rng';
+import type { City, GameState, General } from '../core/state';
+import { defendersOf, effIntellect, neighborsOf, syncFactionCities } from '../core/state';
+import { chance, draw } from '../core/rng';
 import { fail, type OpResult } from '../core/result';
 import { clamp } from './formulas';
 import { log } from './economy';
@@ -110,8 +110,7 @@ export function doDiplomacy(
 
     city.gold -= BALANCE.DIPLOMACY.gold;
     agent.stamina -= BALANCE.DIPLOMACY.stamina;
-    const [hit, next] = chance(state.rng, rate / 100);
-    state.rng = next;
+    const hit = draw(state, 'events', (rng) => chance(rng, rate / 100));
 
     if (!hit) {
       targetCity.loyalty = Math.min(100, targetCity.loyalty + 3);
@@ -149,8 +148,7 @@ export function doDiplomacy(
 
   if (kind === 'alienate') {
     const rate = alienateRate(state, agent, target);
-    const [hit, next] = chance(state.rng, rate / 100);
-    state.rng = next;
+    const hit = draw(state, 'events', (rng) => chance(rng, rate / 100));
     if (!hit) {
       log(state, 'warn', `${agent.name} 离间 ${target.name} 失败（成功率 ${rate}%）`);
       return { ok: true, message: `离间失败（成功率 ${rate}%）`, rate, success: false };
@@ -166,8 +164,7 @@ export function doDiplomacy(
 
   // 招揽
   const rate = poachRate(state, agent, target);
-  const [hit, next] = chance(state.rng, rate / 100);
-  state.rng = next;
+  const hit = draw(state, 'events', (rng) => chance(rng, rate / 100));
   if (!hit) {
     log(state, 'warn', `${agent.name} 招揽 ${target.name} 失败（成功率 ${rate}%）`);
     return { ok: true, message: `招揽失败（成功率 ${rate}%）`, rate, success: false };
@@ -198,4 +195,101 @@ export function defectTargets(state: GameState, cityId: string): string[] {
     const c = state.cities[id];
     return Boolean(c && c.ownerId && c.ownerId !== state.playerFactionId);
   });
+}
+
+export interface PersuadePlan {
+  agent: General;
+  fromCity: City;
+  rate: number;
+}
+
+/** 【优化】§4.4 中立空城劝降：成功率由守军规模与民忠决定 */
+export function persuadeRate(
+  state: GameState,
+  city: City,
+  agent: General,
+): number {
+  const garrison = defendersOf(state, city.id).reduce((sum, g) => sum + g.troops, 0);
+  return Math.round(
+    clamp(
+      85 - garrison / 20 - city.loyalty / 2 + effIntellect(state, agent) / 5,
+      10,
+      95,
+    ),
+  );
+}
+
+/** 找到一座相邻己方城池里最合适的劝降武将；没有则返回 null */
+export function persuadePlan(state: GameState, cityId: string): PersuadePlan | null {
+  const city = state.cities[cityId];
+  if (!city || city.ownerId) return null;
+
+  const plans: PersuadePlan[] = [];
+  for (const neighborId of neighborsOf(state, cityId)) {
+    const fromCity = state.cities[neighborId];
+    if (!fromCity || fromCity.ownerId !== state.playerFactionId) continue;
+    if (fromCity.gold < BALANCE.DIPLOMACY.gold) continue;
+    for (const agent of Object.values(state.generals)) {
+      if (
+        agent.status !== 'active' ||
+        agent.locationId !== neighborId ||
+        agent.stamina < BALANCE.DIPLOMACY.stamina
+      ) {
+        continue;
+      }
+      plans.push({ agent, fromCity, rate: persuadeRate(state, city, agent) });
+    }
+  }
+
+  return (
+    plans.sort(
+      (a, b) =>
+        b.rate - a.rate ||
+        effIntellect(state, b.agent) - effIntellect(state, a.agent),
+    )[0] ?? null
+  );
+}
+
+/** 【优化】§4.4 劝降中立空城；失败只提升守城民忠，不改变归属 */
+export function doPersuadeCity(state: GameState, cityId: string): DiplomacyResult {
+  const city = state.cities[cityId];
+  if (!city) return fail('城池不存在');
+  if (city.ownerId) return fail('目标不是中立空城');
+
+  const plan = persuadePlan(state, cityId);
+  if (!plan) {
+    return fail(
+      `没有可执行的相邻武将，或钱/体力不足（需 ${BALANCE.DIPLOMACY.gold} 金 / ${BALANCE.DIPLOMACY.stamina} 体力）`,
+    );
+  }
+
+  plan.fromCity.gold -= BALANCE.DIPLOMACY.gold;
+  plan.agent.stamina -= BALANCE.DIPLOMACY.stamina;
+
+  const hit = draw(state, 'events', (rng) => chance(rng, plan.rate / 100));
+  if (!hit) {
+    city.loyalty = Math.min(100, city.loyalty + 5);
+    log(state, 'warn', `${plan.agent.name} 劝降 ${city.name} 失败（成功率 ${plan.rate}%）`);
+    return {
+      ok: true,
+      message: `劝降失败（成功率 ${plan.rate}%）`,
+      rate: plan.rate,
+      success: false,
+    };
+  }
+
+  for (const g of defendersOf(state, city.id)) {
+    g.status = 'inactive';
+    g.troops = 0;
+  }
+  city.ownerId = state.playerFactionId;
+  city.loyalty = 50;
+  syncFactionCities(state, state.playerFactionId);
+  log(state, 'good', `${plan.agent.name} 劝降 ${city.name} 成功，城池归入我方`);
+  return {
+    ok: true,
+    message: `${city.name} 归降`,
+    rate: plan.rate,
+    success: true,
+  };
 }

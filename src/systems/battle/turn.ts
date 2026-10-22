@@ -1,6 +1,6 @@
 import { BALANCE } from '../../data/tables/balance';
 import { WEATHER_LABEL } from '../../data/tables/tactics';
-import type { BattleSide, BattleState, GameState } from '../../core/state';
+import type { BattleSide, BattleState } from '../../core/state';
 import { activeUnits } from './grid';
 import { rollWeather } from './setup';
 
@@ -16,17 +16,17 @@ export function beginSideTurn(b: BattleState, side: BattleSide): void {
 
 /** 推进一天：天气每 5 天重掷，混乱倒计时，行动重置 */
 export function advanceBattleDay(
-  state: GameState,
   b: BattleState,
 ): { timedOut: boolean } {
   b.day += 1;
   if (b.day > BALANCE.BATTLE_MAX_DAYS) return { timedOut: true };
 
   if (b.day % 5 === 0) {
-    const w = rollWeather(state);
-    if (w !== b.weather) {
-      b.weather = w;
-      b.log.push(`天气转为${WEATHER_LABEL[w]}`);
+    const rolled = rollWeather(b.rng);
+    b.rng = rolled.rng;
+    if (rolled.weather !== b.weather) {
+      b.weather = rolled.weather;
+      b.log.push(`天气转为${WEATHER_LABEL[rolled.weather]}`);
     }
   }
 

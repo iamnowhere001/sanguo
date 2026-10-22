@@ -104,7 +104,9 @@ export function isOccupied(b: BattleState, x: number, y: number, exceptUnitId?: 
 }
 
 export function activeUnits(b: BattleState, side?: BattleSide): BattleUnit[] {
-  return Object.values(b.units).filter((u) => !u.routed && (!side || u.side === side));
+  return Object.values(b.units).filter(
+    (u) => !u.routed && u.troops > 0 && (!side || u.side === side),
+  );
 }
 
 export function moveRangeOf(unitClass: UnitClass): number {
@@ -184,7 +186,7 @@ export function reachableTiles(b: BattleState, unit: BattleUnit): Map<string, nu
 }
 
 export function attackTargets(b: BattleState, unit: BattleUnit): BattleUnit[] {
-  if (unit.hasActed || unit.routed || unit.stunned > 0) return [];
+  if (unit.hasActed || unit.routed || unit.troops <= 0 || unit.stunned > 0) return [];
   return activeUnits(b, otherSide(unit.side)).filter((e) =>
     inAttackRange(unit, e, unit.unitClass),
   );

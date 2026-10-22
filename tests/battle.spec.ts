@@ -170,12 +170,17 @@ describe('伤害与战棋规则', () => {
     expect(tired / normal).toBeCloseTo(0.85, 1);
   });
 
-  it('玄兵普攻 ×0.6', () => {
+  it('玄兵普攻 ×0.6（同地形同相性下对比）', () => {
     const s = fresh();
     const b = startXiangyangBattle(s);
     const a = b.units['attacker:guanyu']!;
     const d = b.units['defender:lvbu']!;
-    d.unitClass = 'infantry';
+    // 双方都站城池格：地形与守城系数相同，只留兵种系数差异
+    a.x = 8;
+    a.y = 3;
+    d.x = 7;
+    d.y = 3;
+    d.unitClass = 'mystic';
     a.unitClass = 'infantry';
     const normal = computeDamage(b, a, d, 1);
     a.unitClass = 'mystic';

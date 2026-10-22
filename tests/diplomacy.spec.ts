@@ -14,7 +14,7 @@ function forceRoll(state: GameState, pred: (v: number) => boolean): void {
     const rng = restoreRng(state.seed, c);
     const [v] = nextFloat(rng);
     if (pred(v)) {
-      state.rng = rng;
+      state.streams.events = rng;
       return;
     }
   }

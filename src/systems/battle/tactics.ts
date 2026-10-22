@@ -115,6 +115,7 @@ export function castTactic(
   const u = b.units[unitId];
   const def = TACTICS[tacticId];
   if (!u || u.routed) return { ok: false, message: '单位不存在' };
+  if (u.troops <= 0) return { ok: false, message: '该单位已溃散' };
   if (u.hasActed) return { ok: false, message: '该单位本回合已行动' };
   if (u.stunned > 0) return { ok: false, message: '该单位处于混乱状态' };
   if (!tacticUnlocked(u, tacticId)) {
@@ -148,8 +149,8 @@ export function castTactic(
   b.tacticUses[useKey] = (b.tacticUses[useKey] ?? 0) + 1;
 
   const rate = tacticRate(b, u, target, tacticId);
-  const [hit, next] = chance(state.rng, rate / 100);
-  state.rng = next;
+  const [hit, next] = chance(b.rng, rate / 100);
+  b.rng = next;
   const g = state.generals[u.generalId];
 
   if (!hit) {

@@ -1,4 +1,4 @@
-import { nextFloat } from '../../core/rng';
+import { nextFloat, streamFor, type RngState } from '../../core/rng';
 import { done, fail, type OpResult } from '../../core/result';
 import type {
   BattleSide,
@@ -19,12 +19,12 @@ import { log } from '../economy';
 import { emptyGrid, moveRangeOf, SPAWN_ATTACKER, SPAWN_DEFENDER } from './grid';
 import { checkGameOver } from './resolve';
 
-function rollWeather(state: GameState): Weather {
-  const [v, next] = nextFloat(state.rng);
-  state.rng = next;
-  if (v < 0.6) return 'clear';
-  if (v < 0.85) return 'rain';
-  return 'fog';
+/** 从指定战斗流掷天气；返回新流状态，避免偷用其它系统的随机数 */
+function rollWeather(rng: RngState): { weather: Weather; rng: RngState } {
+  const [v, next] = nextFloat(rng);
+  if (v < 0.6) return { weather: 'clear', rng: next };
+  if (v < 0.85) return { weather: 'rain', rng: next };
+  return { weather: 'fog', rng: next };
 }
 
 function makeUnit(
@@ -164,6 +164,11 @@ export function createBattle(
   const playerSide: BattleSide =
     attackerFactionId === state.playerFactionId ? 'attacker' : 'defender';
 
+  // 【优化】E14 战斗随机流独立派生；同回合多场战斗用 battleSerial 加盐
+  const battleRng = streamFor(state.seed, 'battle', state.turn, state.battleSerial);
+  state.battleSerial += 1;
+  const rolled = rollWeather(battleRng);
+
   const battle: BattleState = {
     fromCityId,
     targetCityId,
@@ -175,12 +180,13 @@ export function createBattle(
     units,
     side: playerSide,
     day: 1,
-    weather: rollWeather(state),
+    weather: rolled.weather,
     status: 'ongoing',
     log: [
       `${state.factions[attackerFactionId]?.name ?? attackerFactionId} 进攻 ${target.name}，${attackers.length} 将出征`,
     ],
     tacticUses: {},
+    rng: rolled.rng,
   };
 
   state.battle = battle;

@@ -145,6 +145,20 @@ export function BattleScreen() {
   );
   const readyCount = readyUnits.length;
 
+  /** 【优化】§5.4 行动顺序条：一眼看到本回合谁还没动 */
+  const actionOrder = useMemo(
+    () =>
+      Object.values(battle.units)
+        .filter((u) => !u.routed && u.troops > 0)
+        .sort((a, c) => {
+          if (a.side !== c.side) return a.side === playerSide ? -1 : 1;
+          const aReady = !a.hasActed && a.stunned === 0 ? 0 : 1;
+          const cReady = !c.hasActed && c.stunned === 0 ? 0 : 1;
+          return aReady - cReady || a.y - c.y || a.x - c.x;
+        }),
+    [battle, playerSide],
+  );
+
   useEffect(() => {
     setSelectedId(readyUnits[0]?.id ?? null);
     setPendingTactic(null);
@@ -294,6 +308,11 @@ export function BattleScreen() {
     advanceSelection(selectedId);
   };
 
+  const undoMove = () => {
+    if (!selectedId || enemyTurn) return;
+    store.dispatch({ t: 'BATTLE_UNDO_MOVE', unitId: selectedId });
+  };
+
   const canCharge = Boolean(
     selected &&
       selected.unitClass === 'elite' &&
@@ -407,7 +426,7 @@ export function BattleScreen() {
   const breakDays = estimateBreakDays(battle);
   const remainingDays = BALANCE.BATTLE_MAX_DAYS - battle.day + 1;
   const budgetTone =
-    breakDays != null && breakDays > remainingDays ? 'warn-text' : 'muted';
+    breakDays == null || breakDays > remainingDays ? 'warn-text' : 'muted';
 
   return (
     <div className="battle-screen">
@@ -467,6 +486,25 @@ export function BattleScreen() {
 
       <div className="battle-grid">
         <div className="battle-main">
+          <div className="action-order" aria-label="本回合行动顺序">
+            {actionOrder.map((u) => (
+              <button
+                key={u.id}
+                className={`ao-chip ${u.side === playerSide ? 'mine' : 'foe'}${
+                  u.id === selectedId ? ' on' : ''
+                }${u.hasActed ? ' done' : ''}`}
+                onClick={() => onUnitClick(u.id)}
+                title={`${u.name} · ${u.troops} 兵${
+                  u.stunned > 0 ? ' · 混乱' : u.hasActed ? ' · 已行动' : ' · 待行动'
+                }`}
+              >
+                <i />
+                <span>{u.name}</span>
+                <em>{u.troops}</em>
+                {u.stunned > 0 ? <b>乱</b> : u.hasActed ? <b>✓</b> : null}
+              </button>
+            ))}
+          </div>
           <BattleCanvas
             battle={battle}
             selectedUnitId={selectedId}
@@ -514,6 +552,16 @@ export function BattleScreen() {
             </div>
             <UnitCard b={battle} unitId={selectedId} />
             <div className="row-actions">
+              {selected?.hasMoved && !selected.hasActed && selected.stunned === 0 ? (
+                <button
+                  className="btn ghost sm"
+                  disabled={enemyTurn}
+                  onClick={undoMove}
+                  title="把本日移动退回原位，不消耗行动"
+                >
+                  撤销移动
+                </button>
+              ) : null}
               <button
                 className="btn sm"
                 disabled={!selectedId || selected?.hasActed || enemyTurn}
@@ -617,9 +665,9 @@ export function BattleScreen() {
                         <span>
                           {u.troops} 兵 · 成功率 {tacticRate(battle, selected, u, pendingTactic)}%
                           {repeat > 0
-                            ? `（重复 −${repeat * BALANCE.TACTIC_REPEAT_PENALTY}）`
-                            : ''}{' '}
-                          ·{' '}
+                            ? ` · 本目标已施放 ${repeat} 次（−${repeat * BALANCE.TACTIC_REPEAT_PENALTY}）`
+                            : ' · 本目标首次施放'}{' '}
+                          · 体力 −{tacticStaminaCost(selected, pendingTactic)} ·{' '}
                           {pendingTactic === 'heal'
                             ? `恢复 ${effect}`
                             : pendingTactic === 'confuse'
@@ -658,6 +706,14 @@ export function BattleScreen() {
                           {pendingCharge
                             ? `突击约 ${Math.floor(p.min * 1.5)}–${Math.floor(p.max * 1.5)} 伤害`
                             : `${p.min}–${p.max} 伤害`}
+                          {!pendingCharge && battleTerrainAt(battle, u.x, u.y) === 'city'
+                            ? ' · 守城减伤 50%'
+                            : ''}
+                          {!pendingCharge &&
+                          u.unitClass === 'archer' &&
+                          battleTerrainAt(battle, u.x, u.y) === 'forest'
+                            ? ' · 森林隐蔽 −20%'
+                            : ''}
                           {p.rout ? <em className="kill-mark">可击溃</em> : null}
                         </span>
                       </button>

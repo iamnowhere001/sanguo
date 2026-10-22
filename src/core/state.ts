@@ -1,4 +1,4 @@
-import type { RngState } from './rng';
+import type { RandomStream, RngState } from './rng';
 
 // ── 基础枚举 ────────────────────────────────────────────────
 export type UnitClass = 'infantry' | 'cavalry' | 'archer' | 'navy' | 'elite' | 'mystic';
@@ -133,6 +133,9 @@ export interface BattleUnit {
   isCommander: boolean;
   hasMoved: boolean;
   hasActed: boolean;
+  /** 本次移动前的坐标：用于“移动后未攻击可撤销” */
+  prevX?: number;
+  prevY?: number;
   routed: boolean;
   /** 极兵突击：每战限 1 次 */
   chargeUsed?: boolean;
@@ -157,6 +160,8 @@ export interface BattleState {
   log: string[];
   /** 同一目标重复施放同一计策的次数，用于成功率衰减 */
   tacticUses?: Record<string, number>;
+  /** 战斗专属随机流：随 BattleState 入档，读档续战可复现 */
+  rng: RngState;
 }
 
 /** 月报 / 战报：把结算结果变成可读、可归因的文本 */
@@ -164,6 +169,12 @@ export interface ReportLine {
   label: string;
   text: string;
   tone?: LogKind;
+  /** 原因层：为什么会出现这个结果 */
+  reason?: string;
+  /** 明细层：按城 / 按人的拆分 */
+  detail?: string;
+  /** 下一步建议 */
+  advice?: string;
 }
 
 export interface Report {
@@ -182,15 +193,53 @@ export interface MonthSnapshot {
   cities: number;
 }
 
+/** 月结期间收集的结构化事实，供月报做“原因 / 明细”层 */
+export interface MonthFacts {
+  outputs: Array<{ cityId: string; food: number }>;
+  taxes: Array<{ cityId: string; gold: number }>;
+  /** 玩家势力本月养兵耗粮 */
+  upkeep: number;
+  starvation: Array<{
+    cityName: string;
+    need: number;
+    paid: number;
+    desertionRate: number;
+  }>;
+  disasters: Array<{
+    cityName: string;
+    kind: '旱灾' | '水灾';
+    chance: number;
+    foodLoss: number;
+    popLoss: number;
+    loyaltyLoss?: number;
+    agriLoss?: number;
+  }>;
+}
+
+export function emptyMonthFacts(): MonthFacts {
+  return {
+    outputs: [],
+    taxes: [],
+    upkeep: 0,
+    starvation: [],
+    disasters: [],
+  };
+}
+
 export interface PendingMonth {
   before: MonthSnapshot;
   logStart: number;
   warnings: string[];
+  facts?: MonthFacts;
 }
 
 export interface GameState {
+  /** 本局随机种子（runSeed） */
   seed: number;
-  rng: RngState;
+  /** 按系统分流的随机数状态：battle / search / disaster / ai / events */
+  streams: Record<RandomStream, RngState>;
+  /** 同一回合内多场战斗的序号，用于给 battle 流加盐 */
+  battleSerial: number;
   year: number;
   /** 1–12 */
   month: number;
@@ -211,12 +260,18 @@ export interface GameState {
   /** 月结快照：AI 队列全部跑完后统一出月报 */
   pendingMonth?: PendingMonth;
   gameOver?: { result: 'victory' | 'defeat'; reason: string };
+  /** 【优化】§4.4 大势已定：可主动统一，也可继续亲征 */
+  unifyReady?: boolean;
+  /** 上次拒绝统一的回合，避免每月重复弹窗 */
+  unifyDismissedTurn?: number;
   settings: {
     easterEggEnabled: boolean;
     /** 【裁决】④ 粮食将溢出时的二次确认开关 */
     overflowConfirm: boolean;
     /** 【优化】E02 溢出处理：safe = 截断 + 折损 50%；classic = 原版归零 */
     overflowMode: 'safe' | 'classic';
+    /** 【优化】E11 经典点位：稀有物/在野武将沿用固定城池 */
+    classicSpawn: boolean;
     /** 战略 AI；调试 / 沙盒模式可关闭 */
     aiEnabled: boolean;
     /** AI 难度：影响出兵阈值、补员与战棋目标选择 */

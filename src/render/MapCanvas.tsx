@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import type { City, GameState } from '../core/state';
 import { cityTroops } from '../core/selectors';
+import { BALANCE } from '../data/tables/balance';
 import { TERRAIN_LABEL } from '../data/tables/unitClasses';
+import { drawFactionPattern, factionPattern } from './factionPattern';
 
 interface ProjectedCity {
   city: City;
@@ -233,10 +235,49 @@ export function MapCanvas({
       ctx.strokeStyle = color;
       ctx.stroke();
 
+      // 【优化】§5.5 颜色 + 纹样双编码，灰度下仍能区分势力
+      drawFactionPattern(ctx, p.x, p.y, factionPattern(c.ownerId));
+
       ctx.beginPath();
       ctx.arc(p.x, p.y, 2.8, 0, Math.PI * 2);
       ctx.fillStyle = color;
       ctx.fill();
+
+      // 【优化】§2.2 95% 上限预警：地图徽标用“斜纹 + !”双编码，灰度下也可辨
+      const nearCap =
+        c.ownerId === state.playerFactionId &&
+        c.food >= BALANCE.FOOD_CAP * BALANCE.FOOD_WARN_RATIO;
+      if (nearCap) {
+        const bx = p.x + 9;
+        const by = p.y - 10;
+        ctx.beginPath();
+        ctx.arc(bx, by, 5.5, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(28,22,14,0.95)';
+        ctx.fill();
+        ctx.strokeStyle = '#d8a54a';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(bx, by, 4.2, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.strokeStyle = 'rgba(216,165,74,0.5)';
+        ctx.lineWidth = 1;
+        for (let off = -7; off <= 7; off += 3) {
+          ctx.beginPath();
+          ctx.moveTo(bx + off, by - 6);
+          ctx.lineTo(bx + off + 6, by + 6);
+          ctx.stroke();
+        }
+        ctx.restore();
+
+        ctx.fillStyle = '#f0d79a';
+        ctx.font = '700 8px "PingFang SC", "Noto Sans SC", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('!', bx, by + 0.5);
+      }
     }
 
     // 标签：按优先级绘制，碰撞则隐藏（悬停有 tooltip 兜底）
@@ -314,8 +355,11 @@ export function MapCanvas({
         .filter((g) => g.status === 'active' && g.locationId === c.id)
         .sort((a, b) => b.troops - a.troops);
       const governor = gens[0];
+      const nearCapTooltip =
+        c.ownerId === state.playerFactionId &&
+        c.food >= BALANCE.FOOD_CAP * BALANCE.FOOD_WARN_RATIO;
       const w = 178;
-      const h = 98;
+      const h = nearCapTooltip ? 114 : 98;
       let x = hoverPoint.x + 14;
       let y = hoverPoint.y - 44;
       if (x + w > size.w - 8) x = hoverPoint.x - w - 14;
@@ -362,6 +406,13 @@ export function MapCanvas({
         y + 70,
       );
       ctx.fillText(`金 ${c.gold} · 粮 ${c.food}`, x + 12, y + 87);
+      if (
+        c.ownerId === state.playerFactionId &&
+        c.food >= BALANCE.FOOD_CAP * BALANCE.FOOD_WARN_RATIO
+      ) {
+        ctx.fillStyle = '#d8a54a';
+        ctx.fillText('! 粮草已达上限 95%：征兵 / 卖粮 / 分城', x + 12, y + 101);
+      }
     }
   }, [state, selectedCityId, attackTargetIds, hover, size]);
 
@@ -398,12 +449,18 @@ export function MapCanvas({
       <div className="map-legend">
         {Object.values(state.factions)
           .filter((f) => f.cityIds.length > 0)
-          .map((f) => (
-            <span key={f.id}>
-              <i style={{ background: f.color }} />
-              {f.name}
-            </span>
-          ))}
+          .map((f) => {
+            const pattern = factionPattern(f.id);
+            return (
+              <span key={f.id} aria-label={`${f.name}（${PATTERN_LABEL[pattern]}）`}>
+                <i
+                  className={`faction-dot pat-${pattern}`}
+                  style={{ backgroundColor: f.color }}
+                />
+                {f.name}
+              </span>
+            );
+          })}
       </div>
     </div>
   );

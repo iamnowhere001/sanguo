@@ -4,6 +4,9 @@ dist/
 coverage/
 *.tsbuildinfo
 
+# 数值沙盒输出
+reports/
+
 # 本机与编辑器
 .DS_Store
 .vscode/

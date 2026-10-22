@@ -5,6 +5,7 @@ import type { GameState } from '../core/state';
 import { neighborsOf } from '../core/state';
 import { gameStore, useGameStore } from '../store/gameStore';
 import { MapCanvas } from '../render/MapCanvas';
+import { factionPattern, PATTERN_LABEL } from '../render/factionPattern';
 import { CityPanel, DeployDialog } from './CityPanel';
 import { SaveDialog } from './SaveDialog';
 import { Bar } from './atoms';
@@ -269,6 +270,11 @@ export function MapScreen() {
           <span>{fmt(cityTroops(state, selectedCityId))} 兵</span>
         </div>
         <div className="sb-right">
+          {import.meta.env.DEV ? (
+            <span className="sb-flag" title="本月大地图决策点击；目标 ≤ 40">
+              本月点击 {store.clickStats.total}
+            </span>
+          ) : null}
           {attackFromSelected.length > 0 ? (
             <span className="sb-flag">可出征 {attackFromSelected.length} 城</span>
           ) : (
@@ -285,6 +291,17 @@ export function MapScreen() {
           fromCityId={deploy.from}
           initialTargetId={deploy.target}
           onClose={() => setDeploy(null)}
+        />
+      ) : null}
+
+      {state.unifyReady && !state.report ? (
+        <ConfirmDialog
+          title="大势已定"
+          body={`已控制 ${mine.length} / ${Object.keys(state.cities).length} 城，最强诸侯已无力反攻。可直接统一天下，也可继续亲征。`}
+          confirmLabel="直接统一"
+          cancelLabel="继续征战"
+          onConfirm={() => store.dispatch({ t: 'UNIFY' })}
+          onCancel={() => store.dispatch({ t: 'DISMISS_UNIFY' })}
         />
       ) : null}
 

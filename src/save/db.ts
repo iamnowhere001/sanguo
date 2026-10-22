@@ -1,14 +1,91 @@
 import type { GameState } from '../core/state';
+import { migrateSave } from './migrate';
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 export const DB_NAME = 'sanguo-baye';
 export const STORE_NAME = 'saves';
 
+/** 【优化】§6.4 平衡预设：classic 锁原版参数，balanced 走校准值 */
+export interface SavePresets {
+  balance: 'classic' | 'balanced';
+  rules: Record<string, boolean>;
+}
+
 export interface SaveFile {
-  version: number;
+  schemaVersion: number;
   createdAt: number;
   label: string;
+  runSeed: number;
+  turn: number;
+  presets: SavePresets;
   state: GameState;
+}
+
+/** 磁盘上的原始行：兼容 v2 及更早的 `version` 字段 */
+interface StoredSaveFile {
+  slot: string;
+  schemaVersion?: number;
+  /** v2 及更早 */
+  version?: number;
+  createdAt: number;
+  label: string;
+  runSeed?: number;
+  turn?: number;
+  presets?: SavePresets;
+  state: GameState;
+}
+
+export function defaultPresets(state: GameState): SavePresets {
+  return {
+    balance: 'balanced',
+    rules: {
+      safeOverflow: (state.settings?.overflowMode ?? 'safe') === 'safe',
+      classicSpawn: state.settings?.classicSpawn ?? false,
+    },
+  };
+}
+
+/**
+ * 版本迁移链：每个函数只负责“上一版 → 下一版”，失败时抛明确错误。
+ * 当前只有 v2 → v3（随机数分流 + 顶层 runSeed / presets）。
+ */
+const migrations: Record<number, (file: StoredSaveFile) => StoredSaveFile> = {
+  2: (file) => ({
+    ...file,
+    schemaVersion: 3,
+    runSeed: file.runSeed ?? file.state.seed,
+    turn: file.turn ?? file.state.turn,
+    presets: file.presets ?? defaultPresets(file.state),
+  }),
+};
+
+export function migrateSaveFile(row: StoredSaveFile): SaveFile {
+  const from = row.schemaVersion ?? row.version ?? 0;
+  if (from > SAVE_VERSION) {
+    throw new Error('存档来自更高版本，请更新游戏后再读取');
+  }
+
+  let file = row;
+  let version = from;
+  while (version < SAVE_VERSION) {
+    const step = migrations[version];
+    if (!step) {
+      throw new Error(`存档缺少 v${version} → v${version + 1} 的迁移，无法读取`);
+    }
+    file = step(file);
+    version = file.schemaVersion ?? version + 1;
+  }
+
+  const state = migrateSave(file.state);
+  return {
+    schemaVersion: SAVE_VERSION,
+    createdAt: file.createdAt,
+    label: file.label,
+    runSeed: file.runSeed ?? state.seed,
+    turn: file.turn ?? state.turn,
+    presets: file.presets ?? defaultPresets(state),
+    state,
+  };
 }
 
 export interface SaveSlotInfo {
@@ -116,7 +193,10 @@ function tx<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequ
 export async function putSave(slot: string, state: GameState, label: string): Promise<void> {
   const file: SaveFile & { slot: string } = {
     slot,
-    version: SAVE_VERSION,
+    schemaVersion: SAVE_VERSION,
+    runSeed: state.seed,
+    turn: state.turn,
+    presets: defaultPresets(state),
     createdAt: Date.now(),
     label,
     state,
@@ -125,25 +205,18 @@ export async function putSave(slot: string, state: GameState, label: string): Pr
 }
 
 export async function getSave(slot: string): Promise<SaveFile | null> {
-  const row = await tx<((SaveFile & { slot: string }) | undefined)>('readonly', (store) =>
-    store.get(slot),
-  );
+  const row = await tx<StoredSaveFile | undefined>('readonly', (store) => store.get(slot));
   if (!row) return null;
-  if (row.version > SAVE_VERSION) {
-    throw new Error('存档来自更高版本，请更新游戏后再读取');
-  }
-  if (row.version < SAVE_VERSION) {
-    throw new Error('存档来自旧版本（11 城数据），请开始新游戏');
-  }
-  return row;
+  return migrateSaveFile(row);
 }
 
 export async function listSaves(): Promise<SaveSlotInfo[]> {
-  const rows = await tx<Array<SaveFile & { slot: string }>>('readonly', (store) =>
-    store.getAll(),
-  );
+  const rows = await tx<StoredSaveFile[]>('readonly', (store) => store.getAll());
   return rows
-    .filter((r) => r.version === SAVE_VERSION)
+    .filter((r) => {
+      const version = r.schemaVersion ?? r.version ?? 0;
+      return version >= 1 && version <= SAVE_VERSION;
+    })
     .sort((a, b) => a.slot.localeCompare(b.slot))
     .map((r) => ({
       slot: r.slot,

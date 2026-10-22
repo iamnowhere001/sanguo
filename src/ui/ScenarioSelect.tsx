@@ -25,6 +25,7 @@ export function ScenarioSelect() {
   const [selected, setSelected] = useState('liubei');
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
   const [overflowMode, setOverflowMode] = useState<'safe' | 'classic'>('safe');
+  const [classicSpawn, setClassicSpawn] = useState(false);
 
   const scenario = SCENARIOS[scenarioId]!;
 
@@ -83,6 +84,7 @@ export function ScenarioSelect() {
       seed: arr[0]!,
       difficulty,
       overflowMode,
+      classicSpawn,
     });
     gameStore.start(state);
   };
@@ -209,6 +211,29 @@ export function ScenarioSelect() {
                   {overflowMode === 'safe'
                     ? '超过上限按上限截断，并折损超出部分的 50%'
                     : '原版规则：粮食超过上限直接归零（高风险）'}
+                </span>
+              </div>
+
+              <div className="difficulty-pick">
+                <span className="muted small">稀有物点位</span>
+                <div className="seg">
+                  <button
+                    className={classicSpawn ? '' : 'on'}
+                    onClick={() => setClassicSpawn(false)}
+                  >
+                    随机点位
+                  </button>
+                  <button
+                    className={classicSpawn ? 'on' : ''}
+                    onClick={() => setClassicSpawn(true)}
+                  >
+                    经典点位
+                  </button>
+                </div>
+                <span className="muted small">
+                  {classicSpawn
+                    ? '固定江夏铁骑、成都/绵竹太玄等原版点位'
+                    : '每个稀有物在 2–3 个候选城池中按种子抽取，同一局内固定'}
                 </span>
               </div>
 

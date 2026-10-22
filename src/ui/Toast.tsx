@@ -8,6 +8,13 @@ const LIFETIME: Record<ToastData['tone'], number> = {
   danger: 3800,
 };
 
+const TONE_MARK: Record<ToastData['tone'], string> = {
+  info: '·',
+  good: '✓',
+  warn: '!',
+  danger: '▲',
+};
+
 function ToastItem({ toast }: { toast: ToastData }) {
   const store = useGameStore();
   const [leaving, setLeaving] = useState(false);
@@ -23,6 +30,9 @@ function ToastItem({ toast }: { toast: ToastData }) {
 
   return (
     <div className={`toast toast-${toast.tone}${leaving ? ' leaving' : ''}`} role="status">
+      <span className="toast-mark" aria-hidden>
+        {TONE_MARK[toast.tone]}
+      </span>
       {toast.text}
     </div>
   );

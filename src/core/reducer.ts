@@ -1,4 +1,5 @@
 import type { DomesticCmd, GameState } from './state';
+import { emptyMonthFacts } from './state';
 import { BALANCE } from '../data/tables/balance';
 import type { TacticId } from '../data/tables/tactics';
 import {
@@ -17,8 +18,10 @@ import {
   doDomestic,
   doMoveGeneral,
   doRecruit,
+  doRecruitAll,
   doSearch,
   doTrade,
+  doTransferItem,
   type OpResult,
 } from '../systems/domestic';
 import {
@@ -33,25 +36,30 @@ import {
   performCharge,
   resolveBattle,
   runAiTurn,
+  undoMove,
   waitUnit,
 } from '../systems/battle';
 import { continueAiPhase, startAiPhase } from '../systems/ai';
-import { doDiplomacy, type DiplomacyKind } from '../systems/diplomacy';
+import { doDiplomacy, doPersuadeCity, type DiplomacyKind } from '../systems/diplomacy';
 import { doPrisoner, type PrisonerAction } from '../systems/prisoners';
 import { playerSnapshot } from '../systems/report';
 
 export type Action =
   | { t: 'DOMESTIC'; cityId: string; cmd: DomesticCmd; generalId: string }
   | { t: 'RECRUIT'; cityId: string; generalId: string; amount: number }
+  | { t: 'RECRUIT_ALL'; cityId: string }
   | { t: 'TRADE'; cityId: string; buyFood: boolean; amount: number }
   | { t: 'BANQUET'; cityId: string }
   | { t: 'SEARCH'; cityId: string; generalId: string }
+  | { t: 'TRANSFER_ITEM'; fromGeneralId: string; toGeneralId: string; itemId: string }
   | { t: 'CLASS_CHANGE'; generalId: string; tallyItemId: string }
   | { t: 'MOVE_GENERAL'; generalId: string; toCityId: string }
   | { t: 'DIPLOMACY'; kind: DiplomacyKind; agentId: string; targetGeneralId?: string; targetCityId?: string }
+  | { t: 'PERSUADE_CITY'; cityId: string }
   | { t: 'PRISONER'; prisonerId: string; action: PrisonerAction; agentId?: string }
   | { t: 'DEPLOY'; fromCityId: string; targetCityId: string; generalIds: string[] }
   | { t: 'BATTLE_MOVE'; unitId: string; x: number; y: number }
+  | { t: 'BATTLE_UNDO_MOVE'; unitId: string }
   | { t: 'BATTLE_ATTACK'; attackerId: string; targetId: string }
   | { t: 'BATTLE_CHARGE'; attackerId: string; targetId: string }
   | { t: 'BATTLE_TACTIC'; unitId: string; tacticId: TacticId; targetId: string }
@@ -59,6 +67,8 @@ export type Action =
   | { t: 'BATTLE_END_TURN' }
   | { t: 'BATTLE_RETREAT' }
   | { t: 'DISMISS_REPORT' }
+  | { t: 'UNIFY' }
+  | { t: 'DISMISS_UNIFY' }
   | { t: 'END_TURN'; confirmed?: boolean };
 
 export interface ActionResult extends OpResult {
@@ -77,14 +87,14 @@ export interface ActionResult extends OpResult {
  * 月度流水线 —— 顺序写死，不可调换（规划文档 §3.3）。
  * AI 势力行动在流水线之后由 aiQueue 串行执行，以便玩家防守战可以暂停。
  */
-export function runMonthlyPipeline(s: GameState): string[] {
+export function runMonthlyPipeline(s: GameState, facts = emptyMonthFacts()): string[] {
   advanceTime(s);
   // 【优化】E09 忠诚改为事件驱动，不再全员每月 −1
   runStaminaRecovery(s);
-  runUpkeep(s);
-  runDisaster(s);
-  runOutput(s);
-  runTax(s);
+  runUpkeep(s, facts);
+  runDisaster(s, facts);
+  runOutput(s, facts);
+  runTax(s, facts);
   checkGameOver(s);
   return clampResources(s);
 }
@@ -109,6 +119,10 @@ export function reduce(
       const r = doRecruit(s, action.cityId, action.generalId, action.amount);
       return { state: r.ok ? s : state, result: r };
     }
+    case 'RECRUIT_ALL': {
+      const r = doRecruitAll(s, action.cityId);
+      return { state: r.ok ? s : state, result: r };
+    }
     case 'TRADE': {
       const r = doTrade(s, action.cityId, action.buyFood, action.amount);
       return { state: r.ok ? s : state, result: r };
@@ -119,6 +133,15 @@ export function reduce(
     }
     case 'SEARCH': {
       const r = doSearch(s, action.cityId, action.generalId);
+      return { state: r.ok ? s : state, result: r };
+    }
+    case 'TRANSFER_ITEM': {
+      const r = doTransferItem(
+        s,
+        action.fromGeneralId,
+        action.toGeneralId,
+        action.itemId,
+      );
       return { state: r.ok ? s : state, result: r };
     }
     case 'CLASS_CHANGE': {
@@ -144,6 +167,11 @@ export function reduce(
       const r = doPrisoner(s, action.prisonerId, action.action, action.agentId);
       return { state: r.ok ? s : state, result: r };
     }
+    case 'PERSUADE_CITY': {
+      const r = doPersuadeCity(s, action.cityId);
+      if (r.ok && r.success) checkGameOver(s);
+      return { state: r.ok ? s : state, result: r };
+    }
     case 'DEPLOY': {
       if (s.phase !== 'map') return { state, result: { ok: false, message: '当前不在大地图阶段' } };
       const { result } = createBattle(s, action.fromCityId, action.targetCityId, action.generalIds);
@@ -157,6 +185,16 @@ export function reduce(
         return { state, result: { ok: false, message: '敌方回合，请稍候' } };
       }
       const r = moveUnit(s.battle, action.unitId, action.x, action.y);
+      return { state: r.ok ? s : state, result: r };
+    }
+    case 'BATTLE_UNDO_MOVE': {
+      if (!s.battle || s.phase !== 'battle') {
+        return { state, result: { ok: false, message: '当前无战斗' } };
+      }
+      if (s.battle.side !== s.battle.playerSide) {
+        return { state, result: { ok: false, message: '敌方回合，请稍候' } };
+      }
+      const r = undoMove(s.battle, action.unitId);
       return { state: r.ok ? s : state, result: r };
     }
     case 'BATTLE_ATTACK': {
@@ -244,7 +282,7 @@ export function reduce(
         };
       }
 
-      const { timedOut } = advanceBattleDay(s, s.battle);
+      const { timedOut } = advanceBattleDay(s.battle);
       if (timedOut) {
         // 【优化】E06 超时改为撤退：保留残兵，惩罚仍然存在
         resolveBattle(s, s.battle, BALANCE.TIMEOUT_OUTCOME);
@@ -280,6 +318,20 @@ export function reduce(
       }
       return { state: s, result: { ok: true, message: '' } };
     }
+    case 'UNIFY': {
+      if (!s.unifyReady) {
+        return { state, result: { ok: false, message: '尚未满足统一条件' } };
+      }
+      s.unifyReady = false;
+      s.phase = 'gameover';
+      s.gameOver = { result: 'victory', reason: '大势已定，天下一统' };
+      return { state: s, result: { ok: true, message: '天下一统' } };
+    }
+    case 'DISMISS_UNIFY': {
+      s.unifyReady = false;
+      s.unifyDismissedTurn = s.turn;
+      return { state: s, result: { ok: true, message: '继续亲征' } };
+    }
     case 'END_TURN': {
       if (s.phase !== 'map') {
         return { state, result: { ok: false, message: '当前阶段无法结束回合' } };
@@ -306,13 +358,14 @@ export function reduce(
 
       const before = playerSnapshot(s);
       const logStart = s.log.length;
-      const warnings = runMonthlyPipeline(s);
+      const facts = emptyMonthFacts();
+      const warnings = runMonthlyPipeline(s, facts);
 
       if (s.gameOver) {
         return { state: s, result: { ok: true, message: '回合结束', warnings } };
       }
 
-      s.pendingMonth = { before, logStart, warnings };
+      s.pendingMonth = { before, logStart, warnings, facts };
       startAiPhase(s);
       return { state: s, result: { ok: true, message: '回合结束', warnings } };
     }

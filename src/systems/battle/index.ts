@@ -12,6 +12,7 @@
  * - auto      AI 对 AI 自动战斗
  */
 export * from './grid';
+export * from './damage';
 export * from './combat';
 export * from './tactics';
 export * from './ai';

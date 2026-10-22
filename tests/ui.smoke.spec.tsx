@@ -4,13 +4,25 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import App from '../src/ui/App';
 import { CityPanel } from '../src/ui/CityPanel';
+import { ReportModal } from '../src/ui/ReportModal';
 import { createGame } from '../src/data/tables/scenarios';
+import { createBattle } from '../src/systems/battle';
 import { gameStore } from '../src/store/gameStore';
+import type { Report } from '../src/core/state';
 
 declare global {
   // React 19 的 act 环境标记
   // eslint-disable-next-line no-var
   var IS_REACT_ACT_ENVIRONMENT: boolean | undefined;
+}
+
+// jsdom 没有 ResizeObserver / canvas 2d；战棋冒烟只需要组件能挂载
+if (!globalThis.ResizeObserver) {
+  globalThis.ResizeObserver = class {
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  } as unknown as typeof ResizeObserver;
 }
 
 describe('UI 冒烟', () => {
@@ -63,6 +75,8 @@ describe('UI 冒烟', () => {
     expect(el.textContent).toContain('粮草溢出规则');
     expect(el.textContent).toContain('安全模式');
     expect(el.textContent).toContain('经典归零');
+    expect(el.textContent).toContain('稀有物点位');
+    expect(el.textContent).toContain('随机点位');
   });
 
   it('城池面板展示训练、交易额度、演武与全城宴请', async () => {
@@ -79,5 +93,92 @@ describe('UI 冒烟', () => {
     expect(el.textContent).toContain('本月额度');
     expect(el.textContent).toContain('全城宴请');
     expect(el.textContent).toContain('事件驱动');
+    expect(el.textContent).toContain('按上限分配');
+  });
+
+  it('月报渲染结论、建议与可展开的原因/明细', async () => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const report: Report = {
+      kind: 'month',
+      title: '208 年 3 月 · 月报',
+      subtitle: '月结已结算',
+      lines: [
+        {
+          label: '资源',
+          text: '粮食 +200',
+          tone: 'info',
+          reason: '月产粮 +200',
+          detail: '江夏 +200',
+          advice: '局势平稳',
+        },
+      ],
+    };
+    el = document.createElement('div');
+    document.body.appendChild(el);
+    root = createRoot(el);
+    await act(async () => {
+      root!.render(<ReportModal report={report} />);
+    });
+    expect(el.textContent).toContain('粮食 +200');
+    expect(el.textContent).toContain('建议：局势平稳');
+    expect(el.textContent).toContain('原因与明细');
+    expect(el.textContent).toContain('月产粮 +200');
+    expect(el.textContent).toContain('江夏 +200');
+  });
+
+  it('战棋渲染行动顺序条与六层信息入口', async () => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const state = createGame({ playerFactionId: 'liubei', aiEnabled: false });
+    createBattle(state, 'jiangxia', 'xiangyang', ['liubei', 'guanyu']);
+    gameStore.start(state);
+
+    el = document.createElement('div');
+    document.body.appendChild(el);
+    root = createRoot(el);
+    await act(async () => {
+      root!.render(<App />);
+    });
+
+    expect(el.querySelector('.action-order')).toBeTruthy();
+    expect(el.querySelectorAll('.ao-chip').length).toBeGreaterThan(0);
+    expect(el.textContent).toContain('战场部队');
+    expect(el.textContent).toContain('显示威胁范围');
+    expect(el.textContent).toContain('预计破城');
+  });
+
+  it('中立空城面板显示劝降入口', async () => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const state = createGame({ playerFactionId: 'liubei', aiEnabled: false });
+    state.cities.xiangyang!.ownerId = null;
+    for (const g of Object.values(state.generals)) {
+      if (g.locationId === 'xiangyang') {
+        g.status = 'inactive';
+        g.troops = 0;
+      }
+    }
+    el = document.createElement('div');
+    document.body.appendChild(el);
+    root = createRoot(el);
+    await act(async () => {
+      root!.render(<CityPanel state={state} cityId="xiangyang" onDeploy={() => {}} />);
+    });
+    expect(el.textContent).toContain('劝降');
+    expect(el.textContent).toContain('中立空城');
+  });
+
+  it('大势已定时显示统一弹窗', async () => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const state = createGame({ playerFactionId: 'liubei', aiEnabled: false });
+    state.unifyReady = true;
+    gameStore.start(state);
+    el = document.createElement('div');
+    document.body.appendChild(el);
+    root = createRoot(el);
+    await act(async () => {
+      root!.render(<App />);
+    });
+    expect(el.textContent).toContain('大势已定');
+    expect(el.textContent).toContain('直接统一');
+    expect(el.textContent).toContain('继续征战');
   });
 });

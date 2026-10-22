@@ -77,40 +77,6 @@ export function safeOverflowFood(food: number, cap: number, lossRate: number): n
   return Math.max(0, cap - Math.floor(excess * lossRate));
 }
 
-export interface DamageInput {
-  /** 攻方当前兵力 */
-  troops: number;
-  /** 攻方有效武力 */
-  atkForce: number;
-  /** 守方有效武力 */
-  defForce: number;
-  /** 兵种相性 */
-  affinity: number;
-  /** 地形修正（由 terrainModifier 算出的比值，默认 1） */
-  terrainMod?: number;
-  /** 随机系数 0.9–1.1（默认 1，便于断言） */
-  rngMult?: number;
-  /** 力竭等其他乘数 */
-  extraMult?: number;
-}
-
-/**
- * 普攻伤害 = floor(基础 × 武力系数 × 相性 × 地形修正 × 随机)
- *   基础 = 兵力 × 10%
- *   武力系数 = 1 + (攻武 − 守武) / 200
- */
-export function damage(i: DamageInput): number {
-  const base = i.troops * BALANCE.DAMAGE_BASE_RATE;
-  const forceCoef = clamp(
-    BALANCE.FORCE_COEF.base + (i.atkForce - i.defForce) / BALANCE.FORCE_COEF.slope,
-    BALANCE.FORCE_COEF.min,
-    BALANCE.FORCE_COEF.max,
-  );
-  return Math.floor(
-    base * forceCoef * i.affinity * (i.terrainMod ?? 1) * (i.rngMult ?? 1) * (i.extraMult ?? 1),
-  );
-}
-
 /** 计策成功率 = clamp(50 + 智差 + 等级差×2, 10, 95) */
 export function tacticSuccess(
   casterIntellect: number,

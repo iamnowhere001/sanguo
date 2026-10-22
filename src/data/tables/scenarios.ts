@@ -1,9 +1,10 @@
-import { createRng } from '../../core/rng';
+import { createStreams } from '../../core/rng';
 import type { Difficulty, Faction, GameState, MapEdge } from '../../core/state';
 import { validateTables } from '../schema';
 import { CITY_TABLE } from './cities';
 import { GENERAL_TABLE } from './generals';
 import { ITEM_TABLE } from './items';
+import { applySpawnPools } from './spawn';
 
 export interface ScenarioDef {
   id: string;
@@ -325,6 +326,8 @@ export interface CreateGameOptions {
   aiEnabled?: boolean;
   difficulty?: Difficulty;
   overflowMode?: 'safe' | 'classic';
+  /** 【优化】E11 经典点位：true 时稀有物/在野武将沿用固定城池 */
+  classicSpawn?: boolean;
 }
 
 let validated = false;
@@ -364,6 +367,9 @@ export function createGame(opts: CreateGameOptions = {}): GameState {
     c.tradeVolume ??= 0;
     c.searchPity ??= 0;
   }
+
+  // 【优化】E11 稀有物与在野武将候选池：按种子重排，经典模式保持原表
+  applySpawnPools(cities, seed, scenarioId, opts.classicSpawn ?? false);
 
   const factions: Record<string, Faction> = {};
   for (const f of structuredClone(scenario.factions)) factions[f.id] = f;
@@ -431,7 +437,8 @@ export function createGame(opts: CreateGameOptions = {}): GameState {
 
   return {
     seed,
-    rng: createRng(seed),
+    streams: createStreams(seed, 1),
+    battleSerial: 0,
     year: scenario.year,
     month: scenario.month,
     turn: 1,
@@ -447,6 +454,7 @@ export function createGame(opts: CreateGameOptions = {}): GameState {
       easterEggEnabled: opts.easterEggEnabled ?? false,
       overflowConfirm: true,
       overflowMode: opts.overflowMode ?? 'safe',
+      classicSpawn: opts.classicSpawn ?? false,
       aiEnabled: opts.aiEnabled ?? true,
       difficulty: opts.difficulty ?? 'normal',
     },

@@ -1,6 +1,6 @@
 import { BALANCE } from '../data/tables/balance';
-import { chance, randRange } from '../core/rng';
-import type { GameState, General, LogKind } from '../core/state';
+import { chance, createStreams, draw, randRange } from '../core/rng';
+import type { GameState, General, LogKind, MonthFacts } from '../core/state';
 import { citiesOf } from '../core/state';
 import {
   desertionRate,
@@ -32,7 +32,7 @@ function factionOfGeneral(s: GameState, g: General): string | null {
   return s.cities[g.locationId]?.ownerId ?? null;
 }
 
-/** ① 时间推进，并重置各城本月交易额度 */
+/** ① 时间推进，重置交易额度，并按新回合重新派生各随机流 */
 export function advanceTime(s: GameState): void {
   s.month += 1;
   if (s.month > 12) {
@@ -40,6 +40,8 @@ export function advanceTime(s: GameState): void {
     s.year += 1;
   }
   s.turn += 1;
+  // 【优化】E14 随机数按系统分流：每回合从 runSeed + 回合重新派生
+  s.streams = createStreams(s.seed, s.turn);
   for (const c of Object.values(s.cities)) c.tradeVolume = 0;
 }
 
@@ -52,7 +54,7 @@ export function runStaminaRecovery(s: GameState): void {
 }
 
 /** ③ 军粮扣除 → 缺粮逃亡 */
-export function runUpkeep(s: GameState): void {
+export function runUpkeep(s: GameState, facts: MonthFacts): void {
   const groups = new Map<string, General[]>();
   for (const g of Object.values(s.generals)) {
     if (g.status !== 'active' || g.troops <= 0) continue;
@@ -72,6 +74,7 @@ export function runUpkeep(s: GameState): void {
       .reduce((sum, g) => sum + g.troops, 0);
     const need = monthlyFoodUpkeep(troops, eliteTroops);
     if (need <= 0) continue;
+    if (fid === s.playerFactionId) facts.upkeep += need;
 
     const cities = citiesOf(s, fid);
     let available = cities.reduce((sum, c) => sum + c.food, 0);
@@ -96,6 +99,14 @@ export function runUpkeep(s: GameState): void {
       for (const g of list) {
         if (!g.isRuler) g.loyalty = Math.max(0, g.loyalty + BALANCE.LOYALTY.starvation);
       }
+      if (fid === s.playerFactionId) {
+        facts.starvation.push({
+          cityName: cities.map((c) => c.name).join('、') || faction?.name || fid,
+          need,
+          paid,
+          desertionRate: rate,
+        });
+      }
       log(
         s,
         'danger',
@@ -106,17 +117,15 @@ export function runUpkeep(s: GameState): void {
 }
 
 /** ④ 灾害判定：直接扣存量，不走"系数"，避免与产出重复计算 */
-export function runDisaster(s: GameState): void {
+export function runDisaster(s: GameState, facts: MonthFacts): void {
   for (const c of Object.values(s.cities)) {
     if (!c.ownerId) continue;
     const p = disasterChance(c.defense);
     if (p <= 0) continue;
-    const [hit, r1] = chance(s.rng, p);
-    s.rng = r1;
+    const hit = draw(s, 'disaster', (rng) => chance(rng, p));
     if (!hit) continue;
 
-    const [roll, r2] = randRange(s.rng, 0, 1);
-    s.rng = r2;
+    const roll = draw(s, 'disaster', (rng) => randRange(rng, 0, 1));
     const D = BALANCE.DISASTER;
     const isDrought = roll < D.drought.share;
 
@@ -126,6 +135,16 @@ export function runDisaster(s: GameState): void {
       c.food -= foodLoss;
       c.population = Math.max(0, c.population - popLoss);
       c.agriculture = Math.max(0, c.agriculture - D.drought.agriLoss);
+      if (c.ownerId === s.playerFactionId) {
+        facts.disasters.push({
+          cityName: c.name,
+          kind: '旱灾',
+          chance: p,
+          foodLoss,
+          popLoss,
+          agriLoss: D.drought.agriLoss,
+        });
+      }
       log(s, 'warn', `${c.name} 旱灾：粮 −${foodLoss}，人口 −${popLoss}，农业 −${D.drought.agriLoss}`);
     } else {
       const foodLoss = Math.floor(c.food * D.flood.foodLoss);
@@ -133,6 +152,16 @@ export function runDisaster(s: GameState): void {
       c.food -= foodLoss;
       c.population = Math.max(0, c.population - popLoss);
       c.loyalty = Math.max(0, c.loyalty - D.flood.loyaltyLoss);
+      if (c.ownerId === s.playerFactionId) {
+        facts.disasters.push({
+          cityName: c.name,
+          kind: '水灾',
+          chance: p,
+          foodLoss,
+          popLoss,
+          loyaltyLoss: D.flood.loyaltyLoss,
+        });
+      }
       log(
         s,
         'warn',
@@ -143,23 +172,27 @@ export function runDisaster(s: GameState): void {
 }
 
 /** ⑤ 粮产结算 */
-export function runOutput(s: GameState): void {
+export function runOutput(s: GameState, facts: MonthFacts): void {
   for (const c of Object.values(s.cities)) {
     if (!c.ownerId) continue;
     const gain = foodOutput(c.agriculture, c.loyalty);
     c.food += gain;
+    if (c.ownerId === s.playerFactionId) facts.outputs.push({ cityId: c.id, food: gain });
   }
 }
 
 /** ⑥ 季税结算（3/6/9/12 月） */
-export function runTax(s: GameState): void {
+export function runTax(s: GameState, facts: MonthFacts): void {
   if (!isTaxMonth(s.month)) return;
   let mine = 0;
   for (const c of Object.values(s.cities)) {
     if (!c.ownerId) continue;
     const gain = taxIncome(c.commerce, c.loyalty);
     c.gold += gain;
-    if (c.ownerId === s.playerFactionId) mine += gain;
+    if (c.ownerId === s.playerFactionId) {
+      mine += gain;
+      facts.taxes.push({ cityId: c.id, gold: gain });
+    }
   }
   log(s, 'info', `${s.month} 月季末，我方征收税金 ${mine} 金`);
 }

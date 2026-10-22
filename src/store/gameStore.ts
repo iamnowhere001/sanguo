@@ -16,15 +16,50 @@ export interface Toast {
 
 const TOAST_LIMIT = 3;
 
+/** 【优化】§5.6 月度点击埋点：只统计大地图上的决策点击，不含结束回合 */
+const COUNTED_ACTIONS = new Set([
+  'DOMESTIC',
+  'RECRUIT',
+  'RECRUIT_ALL',
+  'TRADE',
+  'BANQUET',
+  'SEARCH',
+  'TRANSFER_ITEM',
+  'CLASS_CHANGE',
+  'MOVE_GENERAL',
+  'DIPLOMACY',
+  'PERSUADE_CITY',
+  'PRISONER',
+  'DEPLOY',
+]);
+
+export interface MonthClickStats {
+  label: string;
+  total: number;
+  byAction: Record<string, number>;
+}
+
 class GameStore {
   state: GameState | null = null;
   screen: Screen = 'menu';
   /** 反馈队列：连续的提示不会互相覆盖，最多同屏三条 */
   toasts: Toast[] = [];
+  /** 当前月点击统计，供开发模式 HUD / 验收使用 */
+  clickStats: MonthClickStats = { label: '', total: 0, byAction: {} };
+  lastMonthClicks?: MonthClickStats;
 
   private listeners = new Set<() => void>();
   private version = 0;
   private toastSeq = 0;
+
+  private resetClicks(label: string): void {
+    this.clickStats = { label, total: 0, byAction: {} };
+    this.lastMonthClicks = undefined;
+  }
+
+  private monthLabel(state: GameState): string {
+    return `${state.year} 年 ${state.month} 月`;
+  }
 
   subscribe = (cb: () => void): (() => void) => {
     this.listeners.add(cb);
@@ -62,13 +97,16 @@ class GameStore {
     this.state = state;
     this.screen = 'game';
     this.toasts = [];
+    this.resetClicks(this.monthLabel(state));
     this.emit();
   }
 
   load(state: GameState): void {
-    this.state = migrateSave(state);
+    const migrated = migrateSave(state);
+    this.state = migrated;
     this.screen = 'game';
     this.toasts = [];
+    this.resetClicks(this.monthLabel(migrated));
     this.emit();
   }
 
@@ -76,6 +114,7 @@ class GameStore {
     this.state = null;
     this.screen = 'menu';
     this.toasts = [];
+    this.resetClicks('');
     this.emit();
   }
 
@@ -85,7 +124,30 @@ class GameStore {
     }
     const before = this.state;
     const { state, result } = reduce(before, action);
-    if (result.ok) this.state = state;
+    if (result.ok) {
+      this.state = state;
+      if (action.t === 'END_TURN') {
+        this.lastMonthClicks = {
+          ...this.clickStats,
+          byAction: { ...this.clickStats.byAction },
+        };
+        if (import.meta.env.DEV && import.meta.env.MODE !== 'test' && this.clickStats.total > 0) {
+          console.info(
+            `[click-stats] ${this.clickStats.label} 共 ${this.clickStats.total} 次`,
+            this.clickStats.byAction,
+          );
+        }
+        this.clickStats = {
+          label: this.monthLabel(state),
+          total: 0,
+          byAction: {},
+        };
+      } else if (before.phase === 'map' && COUNTED_ACTIONS.has(action.t)) {
+        this.clickStats.total += 1;
+        this.clickStats.byAction[action.t] =
+          (this.clickStats.byAction[action.t] ?? 0) + 1;
+      }
+    }
 
     if (!result.ok && !result.needConfirm) {
       this.notify(result.message, 'warn');

@@ -230,6 +230,7 @@ export function continueAiPhase(state: GameState): void {
       state.pendingMonth.before,
       state.pendingMonth.logStart,
       state.pendingMonth.warnings,
+      state.pendingMonth.facts,
     );
     state.pendingMonth = undefined;
   }

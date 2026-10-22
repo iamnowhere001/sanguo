@@ -5,7 +5,7 @@ import {
   tacticUnlocked,
   type TacticId,
 } from '../../data/tables/tactics';
-import { GRADE_MULT, TERRAIN_GRADE } from '../../data/tables/unitClasses';
+import { TERRAIN_MODIFIER } from '../../data/tables/unitClasses';
 import { nextFloat } from '../../core/rng';
 import type { BattleSide, BattleState, BattleTerrain, BattleUnit, GameState } from '../../core/state';
 import { computeDamage, performAttack, performCharge } from './combat';
@@ -41,9 +41,8 @@ function aiPickTactic(
   return null;
 }
 
-function terrainGrade(unit: BattleUnit, terrain: BattleTerrain): number {
-  const t = terrain === 'city' ? 'plain' : terrain;
-  return GRADE_MULT[TERRAIN_GRADE[unit.unitClass][t]];
+function terrainScore(unit: BattleUnit, terrain: BattleTerrain): number {
+  return TERRAIN_MODIFIER[unit.unitClass][terrain];
 }
 
 /**
@@ -85,7 +84,7 @@ function bestTacticalStep(
   for (const [x, y] of candidates) {
     const canStrike = enemies.some((e) => inAttackRange({ x, y }, e, unit.unitClass));
     const nearest = Math.min(...enemies.map((e) => distanceBetween({ x, y }, e)));
-    const terr = terrainGrade(unit, battleTerrainAt(b, x, y));
+    const terr = terrainScore(unit, battleTerrainAt(b, x, y));
     const threat = estimateThreat(b, unit, x, y);
     const cityBonus = battleTerrainAt(b, x, y) === 'city' ? 8 : 0;
     let score =
@@ -108,8 +107,8 @@ function chooseAttackTarget(
 ): BattleUnit {
   const diff = difficultyOf(state.settings.difficulty);
   if (diff.id === 'easy') {
-    const [v, next] = nextFloat(state.rng);
-    state.rng = next;
+    const [v, next] = nextFloat(b.rng);
+    b.rng = next;
     return targets[Math.floor(v * targets.length)] ?? targets[0]!;
   }
 

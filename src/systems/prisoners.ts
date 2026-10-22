@@ -1,7 +1,7 @@
 import { BALANCE } from '../data/tables/balance';
 import type { GameState, General } from '../core/state';
 import { effIntellect } from '../core/state';
-import { chance } from '../core/rng';
+import { chance, draw } from '../core/rng';
 import { done, fail, type OpResult } from '../core/result';
 import { clamp } from './formulas';
 import { log } from './economy';
@@ -82,8 +82,7 @@ export function doPrisoner(
 
   agent.stamina -= BALANCE.PRISONER.recruitStamina;
   const rate = prisonerRecruitRate(state, prisoner, agent);
-  const [hit, next] = chance(state.rng, rate / 100);
-  state.rng = next;
+  const hit = draw(state, 'events', (rng) => chance(rng, rate / 100));
 
   if (!hit) {
     log(state, 'warn', `${agent.name} 招降 ${prisoner.name} 失败（成功率 ${rate}%）`);

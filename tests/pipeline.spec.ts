@@ -4,6 +4,7 @@ import { reduce } from '../src/core/reducer';
 import { BALANCE } from '../src/data/tables/balance';
 import type { GameState } from '../src/core/state';
 import { nextFloat, serializeRng, restoreRng } from '../src/core/rng';
+import { troopCapOf } from '../src/systems/domestic';
 
 /** 造一个可预测的局面：关掉灾害随机性，避免测试被 5% 概率打断 */
 function fresh(): GameState {
@@ -16,13 +17,13 @@ function endTurn(s: GameState): GameState {
   return reduce(s, { t: 'END_TURN', confirmed: true }).state;
 }
 
-/** 把随机流拨到满足条件的游标，便于确定性测试 */
+/** 把搜索随机流拨到满足条件的游标，便于确定性测试 */
 function forceRoll(s: GameState, pred: (v: number) => boolean): void {
   for (let c = 0; c < 800; c++) {
     const rng = restoreRng(s.seed, c);
     const [v] = nextFloat(rng);
     if (pred(v)) {
-      s.rng = rng;
+      s.streams.search = rng;
       return;
     }
   }
@@ -67,11 +68,10 @@ describe('月度流水线', () => {
     expect(s.cities.jiangxia!.gold + s.cities.xinye!.gold).toBe(before);
 
     s = endTurn(s); // → 3 月，结算季税
-    // 注意：每月 −1 的是**武将忠诚**，城池民忠不衰减（GDD 4.2 只写"所有武将忠诚−1"）
-    // 江夏 com200 / 民忠 75 → floor(200*75/100*3)=450
-    // 新野 com140 / 民忠 70 → floor(140*70/100*3)=294
-    expect(s.cities.jiangxia!.gold).toBe(300 + 450);
-    expect(s.cities.xinye!.gold).toBe(250 + 294);
+    // 税率 1.2：江夏 com200 / 民忠 75 → floor(200*75/100*1.2)=180
+    // 新野 com140 / 民忠 70 → floor(140*70/100*1.2)=117
+    expect(s.cities.jiangxia!.gold).toBe(300 + 180);
+    expect(s.cities.xinye!.gold).toBe(250 + 117);
   });
 
   it('军粮按 ceil(总兵力/20) 扣除', () => {
@@ -167,6 +167,28 @@ describe('内政与军备', () => {
     expect(state.generals.guanyu!.troops).toBe(1050);
     expect(state.cities.jiangxia!.gold).toBe(0);
     expect(state.cities.jiangxia!.food).toBe(1050);
+  });
+
+  it('批量征兵：按带兵余量一次分配全城，且不超上限', () => {
+    const s = fresh();
+    s.cities.jiangxia!.gold = 10000;
+    s.cities.jiangxia!.food = 10000;
+    const gens = Object.values(s.generals).filter(
+      (g) => g.status === 'active' && g.locationId === 'jiangxia',
+    );
+    const before = gens.reduce((sum, g) => sum + g.troops, 0);
+
+    const r = reduce(s, { t: 'RECRUIT_ALL', cityId: 'jiangxia' });
+    expect(r.result.ok).toBe(true);
+
+    const after = gens.reduce((sum, g) => sum + r.state.generals[g.id]!.troops, 0);
+    expect(after).toBeGreaterThan(before);
+    for (const g of gens) {
+      const next = r.state.generals[g.id]!;
+      expect(next.troops).toBeLessThanOrEqual(troopCapOf(r.state, next));
+    }
+    expect(r.state.cities.jiangxia!.gold).toBeLessThan(10000);
+    expect(r.state.cities.jiangxia!.food).toBeLessThan(10000);
   });
 
   it('交易：买粮 8 钱 / 卖粮 2 钱，买卖差价切断套利', () => {
@@ -305,11 +327,11 @@ describe('随机数可复现', () => {
     expect(JSON.stringify(a.log)).toBe(JSON.stringify(b.log));
   });
 
-  it('存档只存 seed+cursor 即可恢复同一随机流', () => {
+  it('每条随机流只存 seed+cursor 即可恢复', () => {
     const s = createGame({ playerFactionId: 'liubei', seed: 999 });
-    const saved = serializeRng(s.rng);
+    const saved = serializeRng(s.streams.search);
     const restored = restoreRng(saved.seed, saved.cursor);
-    expect(restored.s).toBe(s.rng.s);
-    expect(restored.cursor).toBe(s.rng.cursor);
+    expect(restored.s).toBe(s.streams.search.s);
+    expect(restored.cursor).toBe(s.streams.search.cursor);
   });
 });

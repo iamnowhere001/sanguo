@@ -1,6 +1,6 @@
 import { BALANCE } from '../data/tables/balance';
 import { MOVE_RANGE } from '../data/tables/unitClasses';
-import { chance, pickWeighted, randInt } from '../core/rng';
+import { chance, draw, pickWeighted, randInt } from '../core/rng';
 import { done, fail, type OpResult } from '../core/result';
 import type { City, DomesticCmd, GameState, General, SearchEntry } from '../core/state';
 import { effForce, effIntellect, neighborsOf } from '../core/state';
@@ -101,6 +101,81 @@ export function doRecruit(
 
   log(s, 'info', `${g.name} 在 ${city.name} 征兵 ${max}（−${foodCost} 粮，−${goldCost} 金）`);
   return done(`征兵 ${max} 人`);
+}
+
+/**
+ * 【优化】§5.3 批量征兵：按带兵余量从大到小分配，一次点击填满全城。
+ * 每名武将仍受单次上限 recruitCap(民忠) 与城市钱粮约束。
+ */
+export function doRecruitAll(s: GameState, cityId: string): OpResult {
+  const bad = guard(s, cityId);
+  if (bad) return bad;
+
+  const city = s.cities[cityId]!;
+  const gens = Object.values(s.generals)
+    .filter(
+      (g) =>
+        g.status === 'active' &&
+        g.locationId === cityId &&
+        troopCapOf(s, g) > g.troops,
+    )
+    .sort(
+      (a, b) => troopCapOf(s, b) - b.troops - (troopCapOf(s, a) - a.troops),
+    );
+
+  let total = 0;
+  let spentGold = 0;
+  let spentFood = 0;
+  for (const g of gens) {
+    const gap = troopCapOf(s, g) - g.troops;
+    const amount = Math.min(
+      gap,
+      recruitCap(city.loyalty),
+      Math.floor(city.gold / BALANCE.RECRUIT.goldPerTroop),
+      city.food,
+    );
+    if (amount <= 0) break;
+    city.gold -= amount * BALANCE.RECRUIT.goldPerTroop;
+    city.food -= amount * BALANCE.RECRUIT.foodPerTroop;
+    g.troops += amount;
+    total += amount;
+    spentGold += amount * BALANCE.RECRUIT.goldPerTroop;
+    spentFood += amount * BALANCE.RECRUIT.foodPerTroop;
+  }
+
+  if (total <= 0) return fail('没有可分配的兵力余量，或钱粮不足');
+  log(
+    s,
+    'info',
+    `${city.name} 按上限分配兵力 ${total}（−${spentFood} 粮，−${spentGold} 金）`,
+  );
+  return done(`分配兵力 ${total}`);
+}
+
+/**
+ * 【优化】§5.3 道具转移：同城武将之间一键转交，供 UI 做“推荐装备”。
+ * 兵符仍是全局唯一，转移不复制实例。
+ */
+export function doTransferItem(
+  s: GameState,
+  fromGeneralId: string,
+  toGeneralId: string,
+  itemId: string,
+): OpResult {
+  const from = s.generals[fromGeneralId];
+  const to = s.generals[toGeneralId];
+  if (!from || !to) return fail('武将不存在');
+  if (from.id === to.id) return fail('不能转给自己');
+  if (from.status !== 'active' || to.status !== 'active') return fail('武将不可用');
+  if (from.locationId !== to.locationId) return fail('只能转给同城武将');
+  if (!from.items.includes(itemId)) return fail('该武将未持有此道具');
+  if (to.items.length >= BALANCE.ITEM_SLOTS) return fail('目标道具栏已满');
+
+  const name = s.items[itemId]?.name ?? itemId;
+  from.items = from.items.filter((id) => id !== itemId);
+  to.items.push(itemId);
+  log(s, 'info', `${from.name} 将「${name}」转给 ${to.name}`);
+  return done(`${name} 已转给 ${to.name}`);
 }
 
 /**
@@ -217,13 +292,15 @@ export function doSearch(s: GameState, cityId: string, generalId: string): OpRes
   );
 
   if (rare.length > 0 && rareRate > 0) {
-    const [hit, r1] = chance(s.rng, rareRate);
-    s.rng = r1;
+    const forced = pity + 1 >= BALANCE.SEARCH.pityGuarantee;
+    const hit = forced || draw(s, 'search', (rng) => chance(rng, rareRate));
     if (hit) {
       city.searchPity = 0;
-      const [entry, r2] = pickWeighted(s.rng, rare, (e) => e.weight);
-      s.rng = r2;
-      if (entry) return resolveEntry(s, city, g, entry);
+      const entry = draw(s, 'search', (rng) => pickWeighted(rng, rare, (e) => e.weight));
+      if (entry) {
+        if (forced) log(s, 'good', `${city.name} 触发搜索保底`);
+        return resolveEntry(s, city, g, entry);
+      }
     } else {
       city.searchPity = pity + 1;
     }
@@ -237,23 +314,24 @@ export function doSearch(s: GameState, cityId: string, generalId: string): OpRes
     { result: 'item', weight: common.book },
     { result: 'general', weight: common.general },
   ];
-  const [entry, r3] = pickWeighted(s.rng, kinds, (e) => e.weight);
-  s.rng = r3;
+  const entry = draw(s, 'search', (rng) => pickWeighted(rng, kinds, (e) => e.weight));
   return resolveEntry(s, city, g, entry ?? { result: 'gold', weight: 1 });
 }
 
 function resolveEntry(s: GameState, city: City, g: General, e: SearchEntry): OpResult {
   switch (e.result) {
     case 'gold': {
-      const [v, r] = randInt(s.rng, BALANCE.SEARCH.goldDrop[0], BALANCE.SEARCH.goldDrop[1]);
-      s.rng = r;
+      const v = draw(s, 'search', (rng) =>
+        randInt(rng, BALANCE.SEARCH.goldDrop[0], BALANCE.SEARCH.goldDrop[1]),
+      );
       city.gold = Math.min(BALANCE.GOLD_CAP, city.gold + v);
       log(s, 'good', `${g.name} 在 ${city.name} 搜到金钱 ${v}`);
       return done(`搜到金钱 ${v}`);
     }
     case 'food': {
-      const [v, r] = randInt(s.rng, BALANCE.SEARCH.foodDrop[0], BALANCE.SEARCH.foodDrop[1]);
-      s.rng = r;
+      const v = draw(s, 'search', (rng) =>
+        randInt(rng, BALANCE.SEARCH.foodDrop[0], BALANCE.SEARCH.foodDrop[1]),
+      );
       city.food = Math.min(BALANCE.FOOD_CAP, city.food + v);
       log(s, 'good', `${g.name} 在 ${city.name} 搜到粮草 ${v}`);
       return done(`搜到粮草 ${v}`);
