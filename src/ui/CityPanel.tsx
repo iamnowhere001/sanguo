@@ -596,7 +596,7 @@ export function CityPanel({
                       </em>
                     </span>
                     <span className="muted small">
-                      {agent ? `主持 ${agent.name} · 体力 ${agent.stamina}` : '无武将'}
+                      {agent ? `执行 ${agent.name} · 体力 ${agent.stamina}` : '无武将'}
                     </span>
                   </div>
 
@@ -608,7 +608,10 @@ export function CityPanel({
                           ((p.totalMonths - p.monthsLeft) / p.totalMonths) * 100,
                         );
                         return (
-                          <div className="project-active" key={p.kind}>
+                          <div
+                            className="project-active"
+                            key={`${p.kind}-${p.startedTurn}`}
+                          >
                             <div className="project-active-head">
                               <b>{def.name}</b>
                               <span>{p.monthsLeft} 月后完工</span>
@@ -684,7 +687,8 @@ export function CityPanel({
                   </div>
 
                   <div className="form-hint">
-                    开工占 1 点政令、{BALANCE.MODERN.PROJECT.stamina} 体力；工程按月自动推进。
+                    开工占 {BALANCE.MODERN.PROJECT.edictCost} 点政令、
+                    {BALANCE.MODERN.PROJECT.stamina} 体力；工程按月自动推进。
                   </div>
 
                   {landmarks.length > 0 ? (

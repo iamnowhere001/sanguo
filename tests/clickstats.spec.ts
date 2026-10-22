@@ -17,6 +17,14 @@ describe('月度点击统计（§5.6）', () => {
         generalId: 'guanyu',
       }).ok,
     ).toBe(true);
+    expect(
+      gameStore.dispatch({
+        t: 'START_PROJECT',
+        cityId: 'jiangxia',
+        kind: 'farm',
+        generalId: 'guanyu',
+      }).ok,
+    ).toBe(true);
     expect(gameStore.dispatch({ t: 'RECRUIT_ALL', cityId: 'jiangxia' }).ok).toBe(true);
     expect(
       gameStore.dispatch({ t: 'SEARCH', cityId: 'jiangxia', generalId: 'guanyu' }).ok,
@@ -25,11 +33,12 @@ describe('月度点击统计（§5.6）', () => {
       gameStore.dispatch({ t: 'TRADE', cityId: 'jiangxia', buyFood: false, amount: 10 }).ok,
     ).toBe(true);
 
-    expect(gameStore.clickStats.total).toBe(4);
+    expect(gameStore.clickStats.total).toBe(5);
     expect(gameStore.clickStats.byAction.DOMESTIC).toBe(1);
+    expect(gameStore.clickStats.byAction.START_PROJECT).toBe(1);
 
     expect(gameStore.dispatch({ t: 'END_TURN', confirmed: true }).ok).toBe(true);
-    expect(gameStore.lastMonthClicks?.total).toBe(4);
+    expect(gameStore.lastMonthClicks?.total).toBe(5);
     expect(gameStore.clickStats.total).toBe(0);
     expect(gameStore.clickStats.label).toContain('年');
 

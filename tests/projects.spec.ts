@@ -3,7 +3,11 @@ import { BALANCE } from '../src/data/tables/balance';
 import { PROJECTS } from '../src/data/tables/projects';
 import { createGame } from '../src/data/tables/scenarios';
 import { reduce } from '../src/core/reducer';
-import { emptyMonthFacts, type GameState } from '../src/core/state';
+import {
+  emptyMonthFacts,
+  type GameState,
+  type MonthFacts,
+} from '../src/core/state';
 import { edictCapOf } from '../src/systems/domestic';
 import {
   activeProjects,
@@ -188,7 +192,7 @@ describe('现代重制：项目制内政', () => {
       facts: emptyMonthFacts(),
     };
     // 模拟旧存档：月报事实里还没有营造数组
-    delete (s.pendingMonth.facts as unknown as { projects?: unknown }).projects;
+    delete (s.pendingMonth.facts as Partial<MonthFacts>).projects;
 
     migrateSave(s);
 
