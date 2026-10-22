@@ -316,6 +316,20 @@ export function BattleScreen() {
     store.dispatch({ t: 'BATTLE_UNDO_MOVE', unitId: selectedId });
   };
 
+  const command = (cmd: 'inspire' | 'guard' | 'march') => {
+    if (enemyTurn || battle.side !== playerSide) return;
+    store.dispatch({
+      t: 'BATTLE_COMMAND',
+      command: cmd,
+      unitId: cmd === 'march' ? (selectedId ?? undefined) : undefined,
+    });
+  };
+
+  const commandPoints = battle.commandPoints;
+  const showCommands =
+    state.settings.ruleset !== 'classic' && commandPoints !== undefined;
+  const commandBlocked = enemyTurn || battle.side !== playerSide || (commandPoints ?? 0) <= 0;
+
   const canCharge = Boolean(
     selected &&
       selected.unitClass === 'elite' &&
@@ -546,6 +560,55 @@ export function BattleScreen() {
         </div>
 
         <aside className="side-panel battle-panel">
+          {showCommands ? (
+            <section className="command-section">
+              <div className="section-title">
+                <span>军令</span>
+                <span className="muted small">
+                  {commandPoints} / {BALANCE.MODERN.COMMAND_POINTS} 点
+                </span>
+              </div>
+              <div className="command-buttons">
+                <button
+                  className={`command-btn${battle.inspireSide === playerSide ? ' on' : ''}`}
+                  disabled={commandBlocked || battle.inspireSide === playerSide}
+                  onClick={() => command('inspire')}
+                  title="消耗 1 军令：本日我方攻击伤害 ×1.2"
+                >
+                  鼓舞 <em>伤害 +20%</em>
+                </button>
+                <button
+                  className={`command-btn${battle.guardSide === playerSide ? ' on' : ''}`}
+                  disabled={commandBlocked || battle.guardSide === playerSide}
+                  onClick={() => command('guard')}
+                  title="消耗 1 军令：本日我方受到伤害 ×0.7"
+                >
+                  固守 <em>减伤 30%</em>
+                </button>
+                <button
+                  className="command-btn"
+                  disabled={
+                    commandBlocked ||
+                    !selected ||
+                    selected.hasMoved ||
+                    selected.hasActed ||
+                    selected.stunned > 0
+                  }
+                  onClick={() => command('march')}
+                  title="消耗 1 军令：选中部队本日移动 +2（需未移动）"
+                >
+                  急袭 <em>移动 +2</em>
+                </button>
+              </div>
+              <p className="muted small command-note">
+                {battle.inspireSide === playerSide
+                  ? '本日鼓舞生效：攻击 +20%'
+                  : battle.guardSide === playerSide
+                    ? '本日固守生效：受击 −30%'
+                    : '军令点整场共享，击溃敌军回 1 点。'}
+              </p>
+            </section>
+          ) : null}
           <section>
             <div className="section-title">
               <span>当前部队</span>

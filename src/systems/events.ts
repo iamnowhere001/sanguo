@@ -128,10 +128,10 @@ export function resolveEvent(state: GameState, optionId: string): OpResult {
         city.defense = Math.min(100, city.defense + 2);
         message = `强征余粮：${city.name} 民忠 −10，防灾 +2`;
       } else {
-        const cost = Math.min(300, city.gold);
-        city.gold -= cost;
+        if (city.gold < 300) return fail('金钱不足（邻州购粮需 300 金）');
+        city.gold -= 300;
         city.food = Math.min(BALANCE.FOOD_CAP, city.food + 600);
-        message = `邻州购粮：${city.name} 金 −${cost}，粮 +600`;
+        message = `邻州购粮：${city.name} 金 −300，粮 +600`;
       }
       break;
     }
@@ -175,8 +175,8 @@ export function resolveEvent(state: GameState, optionId: string): OpResult {
     }
     case 'scholar': {
       if (optionId === 'patron') {
-        const cost = Math.min(400, city.gold);
-        city.gold -= cost;
+        if (city.gold < 400) return fail('金钱不足（礼聘需 400 金）');
+        city.gold -= 400;
         city.agriculture = Math.min(999, city.agriculture + 8);
         city.commerce = Math.min(999, city.commerce + 8);
         city.loyalty = Math.min(100, city.loyalty + 2);

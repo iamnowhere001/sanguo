@@ -17,6 +17,7 @@ import {
   syncFactionCities,
 } from '../../core/state';
 import { log } from '../economy';
+import { policyTacticBonus } from '../policy';
 import { emptyGrid, moveRangeOf, SPAWN_ATTACKER, SPAWN_DEFENDER } from './grid';
 import { checkGameOver } from './resolve';
 
@@ -200,6 +201,14 @@ export function createBattle(
     ],
     tacticUses: {},
     rng: rolled.rng,
+    commandPoints:
+      state.settings.ruleset === 'classic' || !playerInvolved
+        ? undefined
+        : BALANCE.MODERN.COMMAND_POINTS,
+    tacticBonus:
+      state.settings.ruleset === 'classic' || !playerInvolved
+        ? 0
+        : policyTacticBonus(state),
   };
 
   state.battle = battle;

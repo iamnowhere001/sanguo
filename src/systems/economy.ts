@@ -11,6 +11,14 @@ import {
   safeOverflowFood,
   taxIncome,
 } from './formulas';
+import {
+  applyPolicyMonthly,
+  policyDisasterMult,
+  policyFoodMult,
+  policyTaxMult,
+  policyUpkeepMult,
+  refreshPolicyOffer,
+} from './policy';
 
 /**
  * 月度结算的各阶段。
@@ -42,7 +50,11 @@ export function advanceTime(s: GameState): void {
   s.turn += 1;
   // 【优化】E14 随机数按系统分流：每回合从 runSeed + 回合重新派生
   s.streams = createStreams(s.seed, s.turn);
-  for (const c of Object.values(s.cities)) c.tradeVolume = 0;
+  for (const c of Object.values(s.cities)) {
+    c.tradeVolume = 0;
+    c.domesticUsed = 0;
+  }
+  refreshPolicyOffer(s);
 }
 
 /** ② 体力每月恢复 */
@@ -72,7 +84,10 @@ export function runUpkeep(s: GameState, facts: MonthFacts): void {
     const eliteTroops = list
       .filter((g) => g.unitClass === 'elite')
       .reduce((sum, g) => sum + g.troops, 0);
-    const need = monthlyFoodUpkeep(troops, eliteTroops);
+    const need = Math.ceil(
+      monthlyFoodUpkeep(troops, eliteTroops) *
+        (fid === s.playerFactionId ? policyUpkeepMult(s) : 1),
+    );
     if (need <= 0) continue;
     if (fid === s.playerFactionId) facts.upkeep += need;
 
@@ -127,14 +142,17 @@ export function runDisaster(s: GameState, facts: MonthFacts): void {
 
     const roll = draw(s, 'disaster', (rng) => randRange(rng, 0, 1));
     const D = BALANCE.DISASTER;
+    const disasterScale =
+      c.ownerId === s.playerFactionId ? policyDisasterMult(s) : 1;
     const isDrought = roll < D.drought.share;
 
     if (isDrought) {
-      const foodLoss = Math.floor(c.food * D.drought.foodLoss);
-      const popLoss = Math.floor(c.population * D.drought.popLoss);
+      const foodLoss = Math.floor(c.food * D.drought.foodLoss * disasterScale);
+      const popLoss = Math.floor(c.population * D.drought.popLoss * disasterScale);
+      const agriLoss = Math.floor(D.drought.agriLoss * disasterScale);
       c.food -= foodLoss;
       c.population = Math.max(0, c.population - popLoss);
-      c.agriculture = Math.max(0, c.agriculture - D.drought.agriLoss);
+      c.agriculture = Math.max(0, c.agriculture - agriLoss);
       if (c.ownerId === s.playerFactionId) {
         facts.disasters.push({
           cityName: c.name,
@@ -142,16 +160,17 @@ export function runDisaster(s: GameState, facts: MonthFacts): void {
           chance: p,
           foodLoss,
           popLoss,
-          agriLoss: D.drought.agriLoss,
+          agriLoss,
         });
       }
-      log(s, 'warn', `${c.name} 旱灾：粮 −${foodLoss}，人口 −${popLoss}，农业 −${D.drought.agriLoss}`);
+      log(s, 'warn', `${c.name} 旱灾：粮 −${foodLoss}，人口 −${popLoss}，农业 −${agriLoss}`);
     } else {
-      const foodLoss = Math.floor(c.food * D.flood.foodLoss);
-      const popLoss = Math.floor(c.population * D.flood.popLoss);
+      const foodLoss = Math.floor(c.food * D.flood.foodLoss * disasterScale);
+      const popLoss = Math.floor(c.population * D.flood.popLoss * disasterScale);
+      const loyaltyLoss = Math.floor(D.flood.loyaltyLoss * disasterScale);
       c.food -= foodLoss;
       c.population = Math.max(0, c.population - popLoss);
-      c.loyalty = Math.max(0, c.loyalty - D.flood.loyaltyLoss);
+      c.loyalty = Math.max(0, c.loyalty - loyaltyLoss);
       if (c.ownerId === s.playerFactionId) {
         facts.disasters.push({
           cityName: c.name,
@@ -159,13 +178,13 @@ export function runDisaster(s: GameState, facts: MonthFacts): void {
           chance: p,
           foodLoss,
           popLoss,
-          loyaltyLoss: D.flood.loyaltyLoss,
+          loyaltyLoss,
         });
       }
       log(
         s,
         'warn',
-        `${c.name} 水灾：粮 −${foodLoss}，人口 −${popLoss}，民忠 −${D.flood.loyaltyLoss}`,
+        `${c.name} 水灾：粮 −${foodLoss}，人口 −${popLoss}，民忠 −${loyaltyLoss}`,
       );
     }
   }
@@ -176,7 +195,11 @@ export function runOutput(s: GameState, facts: MonthFacts): void {
   for (const c of Object.values(s.cities)) {
     if (!c.ownerId) continue;
     // 城池专属技能：粮产倍率（如渤海粮仓 / 豫章仓廪）
-    const gain = Math.floor(foodOutput(c.agriculture, c.loyalty) * (c.skill?.foodMult ?? 1));
+    const gain = Math.floor(
+      foodOutput(c.agriculture, c.loyalty) *
+        (c.skill?.foodMult ?? 1) *
+        (c.ownerId === s.playerFactionId ? policyFoodMult(s) : 1),
+    );
     c.food += gain;
     if (c.ownerId === s.playerFactionId) facts.outputs.push({ cityId: c.id, food: gain });
   }
@@ -189,7 +212,11 @@ export function runTax(s: GameState, facts: MonthFacts): void {
   for (const c of Object.values(s.cities)) {
     if (!c.ownerId) continue;
     // 城池专属技能：季税倍率（如齐商遗风）
-    const gain = Math.floor(taxIncome(c.commerce, c.loyalty) * (c.skill?.taxMult ?? 1));
+    const gain = Math.floor(
+      taxIncome(c.commerce, c.loyalty) *
+        (c.skill?.taxMult ?? 1) *
+        (c.ownerId === s.playerFactionId ? policyTaxMult(s) : 1),
+    );
     c.gold += gain;
     if (c.ownerId === s.playerFactionId) {
       mine += gain;

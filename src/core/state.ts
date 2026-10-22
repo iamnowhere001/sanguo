@@ -257,6 +257,8 @@ export interface BattleState {
   inspireSide?: BattleSide;
   /** 当日固守方：该方受到伤害 ×0.7 */
   guardSide?: BattleSide;
+  /** 国策「奇谋」等提供的计策成功率加算（百分点） */
+  tacticBonus?: number;
 }
 
 /** 月报 / 战报：把结算结果变成可读、可归因的文本 */

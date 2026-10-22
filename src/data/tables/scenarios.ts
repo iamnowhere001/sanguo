@@ -1,6 +1,7 @@
 import { createStreams } from '../../core/rng';
-import type { City, Difficulty, Faction, GameState, General, MapEdge } from '../../core/state';
+import type { City, Difficulty, Faction, GameState, General, MapEdge, Ruleset } from '../../core/state';
 import { validateTables } from '../schema';
+import { createChapter } from '../../systems/chapter';
 import { CITY_TABLE } from './cities';
 import { GENERAL_TABLE } from './generals';
 import { ITEM_TABLE } from './items';
@@ -548,6 +549,8 @@ export interface CreateGameOptions {
   overflowMode?: 'safe' | 'classic';
   /** 【优化】E11 经典点位：true 时稀有物/在野武将沿用固定城池 */
   classicSpawn?: boolean;
+  /** 现代重制规则 / 原版规则 */
+  ruleset?: Ruleset;
 }
 
 let validated = false;
@@ -586,6 +589,7 @@ export function createGame(opts: CreateGameOptions = {}): GameState {
     c.training ??= 0;
     c.tradeVolume ??= 0;
     c.searchPity ??= 0;
+    c.domesticUsed ??= 0;
   }
 
   // 【优化】E11 稀有物与在野武将候选池：按种子重排，经典模式保持原表
@@ -658,7 +662,7 @@ export function createGame(opts: CreateGameOptions = {}): GameState {
     throw new Error(`君主势力没有城池: ${playerFactionId} / ${scenarioId}`);
   }
 
-  return {
+  const state: GameState = {
     seed,
     streams: createStreams(seed, 1),
     battleSerial: 0,
@@ -673,8 +677,10 @@ export function createGame(opts: CreateGameOptions = {}): GameState {
     edges: structuredClone(scenario.edges),
     phase: 'map',
     log: [],
+    policy: { offer: [] },
     settings: {
       easterEggEnabled: opts.easterEggEnabled ?? false,
+      ruleset: opts.ruleset ?? 'modern',
       overflowConfirm: true,
       overflowMode: opts.overflowMode ?? 'safe',
       classicSpawn: opts.classicSpawn ?? false,
@@ -682,4 +688,6 @@ export function createGame(opts: CreateGameOptions = {}): GameState {
       difficulty: opts.difficulty ?? 'normal',
     },
   };
+  state.chapter = createChapter(state);
+  return state;
 }

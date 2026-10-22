@@ -17,6 +17,8 @@ export interface PolicyDef {
   cons: string[];
   /** 粮产倍率 */
   foodMult?: number;
+  /** 商业内政增益倍率 */
+  commerceMult?: number;
   /** 季税倍率 */
   taxMult?: number;
   /** 交易额度倍率 */
@@ -37,6 +39,8 @@ export interface PolicyDef {
   loyaltyMonthly?: number;
   /** 外交成功率加算（百分点） */
   diplomacyBonus?: number;
+  /** 劝降成功率加算（百分点） */
+  persuadeBonus?: number;
   /** 战斗计策成功率加算（百分点） */
   tacticBonus?: number;
 }
@@ -50,6 +54,7 @@ export const POLICIES: Record<PolicyId, PolicyDef> = {
     pros: ['粮产 +25%'],
     cons: ['商业内政收益 ×0.9'],
     foodMult: 1.25,
+    commerceMult: 0.9,
   },
   salt: {
     id: 'salt',
@@ -113,6 +118,7 @@ export const POLICIES: Record<PolicyId, PolicyDef> = {
     pros: ['外交成功率 +20 点', '劝降 +10 点'],
     cons: ['搜索费用 ×1.15'],
     diplomacyBonus: 20,
+    persuadeBonus: 10,
     searchCostMult: 1.15,
   },
   qimou: {

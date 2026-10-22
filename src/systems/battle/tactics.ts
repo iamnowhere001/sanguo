@@ -75,7 +75,14 @@ export function tacticRate(
 ): number {
   const base = tacticSuccess(caster.intellect, target.intellect, caster.level, target.level);
   const repeat = tacticUsesOf(b, tacticId, target.id) * BALANCE.TACTIC_REPEAT_PENALTY;
-  return clamp(base - (b.weather === 'fog' ? 10 : 0) - repeat, 5, 95);
+  return clamp(
+    base -
+      (b.weather === 'fog' ? 10 : 0) -
+      repeat +
+      (caster.side === b.playerSide ? (b.tacticBonus ?? 0) : 0),
+    5,
+    95,
+  );
 }
 
 export interface TacticOutcome extends OpResult {

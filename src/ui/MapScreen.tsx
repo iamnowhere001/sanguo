@@ -10,8 +10,10 @@ import { AudioSettingsButton } from './AudioSettings';
 import { CityPanel, DeployDialog } from './CityPanel';
 import { RosterDialog } from './RosterDialog';
 import { SaveDialog } from './SaveDialog';
+import { ChapterBar } from './ChapterBar';
 import { Bar } from './atoms';
 import { ConfirmDialog, cityTroops, factionColor, factionName, fmt } from './common';
+import { activePolicy } from '../systems/policy';
 
 export function MapScreen() {
   const store = useGameStore();
@@ -74,6 +76,7 @@ export function MapScreen() {
   const overflowMode = state.settings.overflowMode ?? 'safe';
   const totalTroops = generals.reduce((s, g) => s + g.troops, 0);
   const faction = state.factions[state.playerFactionId];
+  const policy = activePolicy(state);
 
   const endTurn = () => {
     const res = store.dispatch({ t: 'END_TURN' });
@@ -91,7 +94,9 @@ export function MapScreen() {
         rosterOpen ||
         quitOpen ||
         Boolean(state.report) ||
-        Boolean(state.unifyReady);
+        Boolean(state.unifyReady) ||
+        Boolean(state.pendingEvent) ||
+        (state.policy?.offer?.length ?? 0) > 0;
       if (e.key === '?') {
         if (!otherModal) {
           e.preventDefault();
@@ -110,7 +115,7 @@ export function MapScreen() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [helpOpen, deploy, saveOpen, rosterOpen, quitOpen, state.report, state.unifyReady]);
+  }, [helpOpen, deploy, saveOpen, rosterOpen, quitOpen, state.report, state.unifyReady, state.pendingEvent, state.policy?.offer]);
 
   return (
     <div className="map-screen">
@@ -157,6 +162,12 @@ export function MapScreen() {
         </div>
 
         <div className="tb-actions">
+          {policy ? (
+            <span className="policy-pill" title={`${policy.school}国策，剩余 ${Math.max(0, (state.policy?.expiresTurn ?? state.turn) - state.turn)} 回合`}>
+              <i>国策</i>
+              {policy.name}
+            </span>
+          ) : null}
           <span className="faction-pill">
             <i style={{ background: faction?.color ?? '#888' }} />
             {factionName(state, state.playerFactionId)}
@@ -187,6 +198,8 @@ export function MapScreen() {
           </button>
         </div>
       </header>
+
+      {state.settings.ruleset !== 'classic' ? <ChapterBar state={state} /> : null}
 
       <div className="game-grid">
         <aside className="side-panel left-panel">

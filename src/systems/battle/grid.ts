@@ -154,7 +154,10 @@ export function emptyGrid(terrain: Terrain): BattleTerrain[][] {
  */
 export function reachableTiles(b: BattleState, unit: BattleUnit): Map<string, number> {
   if (unit.stunned > 0) return new Map();
-  const max = moveRangeOf(unit.unitClass);
+  const max = Math.max(
+    0,
+    (unit.move ?? moveRangeOf(unit.unitClass)) + (unit.bonusMove ?? 0),
+  );
   const best = new Map<string, number>();
   best.set(unitKey(unit.x, unit.y), 0);
 

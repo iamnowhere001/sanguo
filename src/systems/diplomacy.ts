@@ -5,6 +5,7 @@ import { chance, draw } from '../core/rng';
 import { fail, type OpResult } from '../core/result';
 import { clamp } from './formulas';
 import { log } from './economy';
+import { policyDiplomacyBonus, policyPersuadeBonus } from './policy';
 
 export type DiplomacyKind = 'alienate' | 'poach' | 'defect';
 
@@ -27,7 +28,10 @@ function adjacentTarget(state: GameState, agent: General, target: General): bool
 export function alienateRate(state: GameState, agent: General, target: General): number {
   return Math.round(
     clamp(
-      40 + (effIntellect(state, agent) - effIntellect(state, target)) + (100 - target.loyalty) / 2,
+      40 +
+        (effIntellect(state, agent) - effIntellect(state, target)) +
+        (100 - target.loyalty) / 2 +
+        policyDiplomacyBonus(state),
       5,
       90,
     ),
@@ -39,7 +43,8 @@ export function poachRate(state: GameState, agent: General, target: General): nu
     clamp(
       10 +
         (effIntellect(state, agent) - effIntellect(state, target)) +
-        (70 - target.loyalty) * 1.2,
+        (70 - target.loyalty) * 1.2 +
+        policyDiplomacyBonus(state),
       5,
       85,
     ),
@@ -63,7 +68,10 @@ export function defectRate(state: GameState, agent: General, cityId: string): nu
   if (!governor) return 0;
   return Math.round(
     clamp(
-      5 + (effIntellect(state, agent) - effIntellect(state, governor)) + (60 - governor.loyalty),
+      5 +
+        (effIntellect(state, agent) - effIntellect(state, governor)) +
+        (60 - governor.loyalty) +
+        policyDiplomacyBonus(state),
       2,
       50,
     ),
@@ -214,7 +222,12 @@ export function persuadeRate(
   const persuadeBonus = state.cities[agent.locationId]?.skill?.persuadeBonus ?? 0;
   return Math.round(
     clamp(
-      85 - garrison / 20 - city.loyalty / 2 + effIntellect(state, agent) / 5 + persuadeBonus,
+      85 -
+        garrison / 20 -
+        city.loyalty / 2 +
+        effIntellect(state, agent) / 5 +
+        persuadeBonus +
+        policyPersuadeBonus(state),
       10,
       95,
     ),

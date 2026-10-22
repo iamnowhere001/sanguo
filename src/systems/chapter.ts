@@ -77,9 +77,14 @@ export function createChapter(state: GameState): ChapterState {
 function nextChapter(state: GameState, stage: number): ChapterState {
   const cities = citiesOf(state, state.playerFactionId).length;
   const troops = factionTroops(state, state.playerFactionId);
+  const gold = factionGold(state, state.playerFactionId);
   const totalCities = Math.max(TOTAL_CITIES_FALLBACK, Object.keys(state.cities).length);
   const cityStep = [1, 2, 3][Math.min(stage, 2)] ?? 3;
-  const cityTarget = Math.min(totalCities, Math.max(cities + cityStep, Math.ceil(totalCities / 2)));
+  const cityTarget = Math.min(totalCities, cities + cityStep);
+  const goldTarget = Math.max(
+    5000 + stage * 3000,
+    Math.round((gold + 2000) / 500) * 500,
+  );
   return {
     stage,
     goals: [
@@ -97,9 +102,9 @@ function nextChapter(state: GameState, stage: number): ChapterState {
       },
       {
         id: `gold-${stage}`,
-        label: `府库积累 ${5000 + stage * 3000} 金`,
+        label: `府库积累 ${goldTarget} 金`,
         kind: 'gold',
-        target: 5000 + stage * 3000,
+        target: goldTarget,
       },
     ],
   };
@@ -110,6 +115,7 @@ function nextChapter(state: GameState, stage: number): ChapterState {
  * 只在月结调用，避免每次点击都写日志 / 发钱。
  */
 export function refreshChapter(state: GameState): boolean {
+  if (state.settings.ruleset === 'classic') return false;
   if (!state.chapter) {
     state.chapter = createChapter(state);
     return false;

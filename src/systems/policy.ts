@@ -21,6 +21,10 @@ export function policyFoodMult(state: GameState): number {
   return activePolicy(state)?.foodMult ?? 1;
 }
 
+export function policyCommerceMult(state: GameState): number {
+  return activePolicy(state)?.commerceMult ?? 1;
+}
+
 export function policyTaxMult(state: GameState): number {
   return activePolicy(state)?.taxMult ?? 1;
 }
@@ -51,6 +55,10 @@ export function policyDisasterMult(state: GameState): number {
 
 export function policyDiplomacyBonus(state: GameState): number {
   return activePolicy(state)?.diplomacyBonus ?? 0;
+}
+
+export function policyPersuadeBonus(state: GameState): number {
+  return activePolicy(state)?.persuadeBonus ?? 0;
 }
 
 export function policyTacticBonus(state: GameState): number {

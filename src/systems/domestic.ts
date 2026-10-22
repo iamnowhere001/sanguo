@@ -6,6 +6,13 @@ import type { City, DomesticCmd, GameState, General, SearchEntry } from '../core
 import { effForce, effIntellect, neighborsOf } from '../core/state';
 import { log } from './economy';
 import { garrisonCapOf, recruitCap, statGain, tradeLimit, troopCap } from './formulas';
+import {
+  policyCommerceMult,
+  policyRecruitCostMult,
+  policySearchCostMult,
+  policySearchRareMult,
+  policyTradeLimit,
+} from './policy';
 
 export type { OpResult };
 
@@ -14,6 +21,25 @@ function cityTroopTotal(s: GameState, cityId: string): number {
   return Object.values(s.generals)
     .filter((g) => g.status === 'active' && g.locationId === cityId)
     .reduce((sum, g) => sum + g.troops, 0);
+}
+
+/**
+ * 本月内政政令上限：2 + 在城武将 / 3，最多 4。
+ * 只限制 DOMESTIC，不限制征兵 / 搜索 / 交易 / 宴请，避免把“军务”也塞进同一把尺子。
+ */
+export function edictCapOf(s: GameState, cityId: string): number {
+  const generals = Object.values(s.generals).filter(
+    (g) => g.status === 'active' && g.locationId === cityId,
+  ).length;
+  const { base, perGenerals, max } = BALANCE.MODERN.EDICT;
+  return Math.min(max, base + Math.floor(generals / perGenerals));
+}
+
+export function edictLeftOf(s: GameState, cityId: string): number {
+  if (s.settings.ruleset === 'classic') return Infinity;
+  const city = s.cities[cityId];
+  if (!city) return 0;
+  return Math.max(0, edictCapOf(s, cityId) - (city.domesticUsed ?? 0));
 }
 
 function guard(s: GameState, cityId: string, generalId?: string): OpResult | null {
@@ -43,18 +69,37 @@ export function doDomestic(
   const g = s.generals[generalId]!;
   const cfg = BALANCE.DOMESTIC[cmd];
 
+  if (s.settings.ruleset !== 'classic') {
+    const cap = edictCapOf(s, cityId);
+    const used = city.domesticUsed ?? 0;
+    if (used >= cap) {
+      return fail(`本月内政政令已用尽（${used}/${cap}），下月重置`);
+    }
+  }
+
   if (city.gold < cfg.gold) return fail(`金钱不足（需 ${cfg.gold}）`);
   if (g.stamina < cfg.stamina) return fail(`体力不足（需 ${cfg.stamina}）`);
 
   city.gold -= cfg.gold;
   g.stamina -= cfg.stamina;
+  city.domesticUsed = (city.domesticUsed ?? 0) + 1;
 
   // 【优化】E10 边际递减：值越高，单次增益越低
   const cap = BALANCE.STAT_CAP[cfg.field];
   const before = city[cfg.field] ?? 0;
   // 城池专属技能：演武额外训练度（如幽州骑训 / 西凉铁骑）
   const drillBonus = cmd === 'drill' ? (city.skill?.drillBonus ?? 0) : 0;
-  const delta = statGain(cfg.field, before) + drillBonus;
+  const rawDelta = statGain(cfg.field, before) + drillBonus;
+  const delta =
+    cfg.field === 'commerce'
+      ? Math.max(
+          1,
+          Math.floor(
+            rawDelta *
+              (city.ownerId === s.playerFactionId ? policyCommerceMult(s) : 1),
+          ),
+        )
+      : rawDelta;
   city[cfg.field] = Math.min(cap, before + delta);
   const actual = (city[cfg.field] ?? before) - before;
 
@@ -93,8 +138,10 @@ export function doRecruit(
   const skill = city.skill;
   const capByLoyalty = Math.floor(recruitCap(city.loyalty) * (skill?.recruitCapMult ?? 1));
   const capByGeneral = Math.max(0, troopCapOf(s, g) - g.troops);
-  const goldPerTroop = BALANCE.RECRUIT.goldPerTroop * (skill?.recruitCostMult ?? 1);
-  const foodPerTroop = BALANCE.RECRUIT.foodPerTroop * (skill?.recruitCostMult ?? 1);
+  const recruitCost =
+    city.ownerId === s.playerFactionId ? policyRecruitCostMult(s) : 1;
+  const goldPerTroop = BALANCE.RECRUIT.goldPerTroop * (skill?.recruitCostMult ?? 1) * recruitCost;
+  const foodPerTroop = BALANCE.RECRUIT.foodPerTroop * (skill?.recruitCostMult ?? 1) * recruitCost;
   const capByGold = Math.floor(city.gold / goldPerTroop);
   const capByFood = Math.floor(city.food / foodPerTroop);
   const capByGarrison = Math.max(0, garrisonCapOf(city.size) - cityTroopTotal(s, cityId));
@@ -141,8 +188,10 @@ export function doRecruitAll(s: GameState, cityId: string): OpResult {
   let spentFood = 0;
   const skill = city.skill;
   const capByLoyalty = Math.floor(recruitCap(city.loyalty) * (skill?.recruitCapMult ?? 1));
-  const goldPerTroop = BALANCE.RECRUIT.goldPerTroop * (skill?.recruitCostMult ?? 1);
-  const foodPerTroop = BALANCE.RECRUIT.foodPerTroop * (skill?.recruitCostMult ?? 1);
+  const recruitCost =
+    city.ownerId === s.playerFactionId ? policyRecruitCostMult(s) : 1;
+  const goldPerTroop = BALANCE.RECRUIT.goldPerTroop * (skill?.recruitCostMult ?? 1) * recruitCost;
+  const foodPerTroop = BALANCE.RECRUIT.foodPerTroop * (skill?.recruitCostMult ?? 1) * recruitCost;
   let garrisonRoom = Math.max(0, garrisonCapOf(city.size) - cityTroopTotal(s, cityId));
   for (const g of gens) {
     const gap = troopCapOf(s, g) - g.troops;
@@ -211,7 +260,10 @@ export function doTrade(s: GameState, cityId: string, buyFood: boolean, amount: 
   const city = s.cities[cityId]!;
   if (amount <= 0) return fail('数量必须大于 0');
 
-  const limit = tradeLimit(city.commerce, city.skill?.tradeLimitMult ?? 1);
+  const baseLimit = tradeLimit(city.commerce, city.skill?.tradeLimitMult ?? 1);
+  // 国策只服务玩家；AI 使用原版额度
+  const limit =
+    city.ownerId === s.playerFactionId ? policyTradeLimit(s, baseLimit) : baseLimit;
   const used = city.tradeVolume ?? 0;
   const left = Math.max(0, limit - used);
   if (left <= 0) {
@@ -288,11 +340,14 @@ export function doSearch(s: GameState, cityId: string, generalId: string): OpRes
 
   const city = s.cities[cityId]!;
   const g = s.generals[generalId]!;
+  const searchCostMult =
+    city.ownerId === s.playerFactionId ? policySearchCostMult(s) : 1;
+  const searchGold = Math.round(BALANCE.SEARCH.gold * searchCostMult);
 
-  if (city.gold < BALANCE.SEARCH.gold) return fail(`金钱不足（需 ${BALANCE.SEARCH.gold}）`);
+  if (city.gold < searchGold) return fail(`金钱不足（需 ${searchGold}）`);
   if (g.stamina < BALANCE.SEARCH.stamina) return fail(`体力不足（需 ${BALANCE.SEARCH.stamina}）`);
 
-  city.gold -= BALANCE.SEARCH.gold;
+  city.gold -= searchGold;
   g.stamina -= BALANCE.SEARCH.stamina;
 
   // 【裁决】② 彩蛋条目：开关关闭时连"存在"都不算
@@ -317,9 +372,14 @@ export function doSearch(s: GameState, cityId: string, generalId: string): OpRes
   );
   const rareWeight = rare.reduce((sum, e) => sum + e.weight, 0);
   // 城池专属技能：稀有命中加成（如名士之乡 / 弘农杨氏）
+  const rareMult =
+    city.ownerId === s.playerFactionId ? policySearchRareMult(s) : 1;
   const rareRate = Math.min(
     BALANCE.SEARCH.rareRateCap,
-    rareWeight * BALANCE.SEARCH.rareRatePerWeight * pityMult +
+    rareWeight *
+      BALANCE.SEARCH.rareRatePerWeight *
+      pityMult *
+      rareMult +
       (city.skill?.rareBonus ?? 0),
   );
 

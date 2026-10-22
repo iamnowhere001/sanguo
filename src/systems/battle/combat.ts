@@ -20,6 +20,25 @@ export interface AttackOutcome extends OpResult {
 }
 
 /**
+ * 夹击倍率：目标身边每多一名攻方友军，伤害提高。
+ * 用相邻友军数量近似“多面受敌”，不引入朝向状态。
+ */
+export function flankMultiplier(
+  b: BattleState,
+  attacker: BattleUnit,
+  defender: BattleUnit,
+): number {
+  const allies = activeUnits(b, attacker.side).filter(
+    (u) => u.id !== attacker.id && distanceBetween(u, defender) === 1,
+  );
+  const F = BALANCE.MODERN.FLANK;
+  if (allies.length >= 3) return F.three;
+  if (allies.length === 2) return F.two;
+  if (allies.length === 1) return F.one;
+  return 1;
+}
+
+/**
  * 战斗层包装：从 BattleState 取地形/天气/距离，交给纯函数结算。
  * 公式本体在 damage.ts，模拟器复用同一份。
  */
@@ -29,6 +48,14 @@ export function computeDamage(
   defender: BattleUnit,
   rngMult: number,
 ): number {
+  const inspire =
+    b.inspireSide === attacker.side
+      ? BALANCE.MODERN.COMMAND.inspire.damageMult
+      : 1;
+  const guard =
+    b.guardSide === defender.side
+      ? BALANCE.MODERN.COMMAND.guard.damageTakenMult
+      : 1;
   return computeDamageValue({
     attacker,
     defender,
@@ -38,6 +65,8 @@ export function computeDamage(
     distance: distanceBetween(attacker, defender),
     fortification: b.fortification ?? 0,
     rngMult,
+    flankMult: flankMultiplier(b, attacker, defender),
+    commandMult: inspire * guard,
   });
 }
 
@@ -95,6 +124,9 @@ export function performAttack(
 
   const routed = markRouted(b, d);
   if (routed && g) grantExp(g, BALANCE.EXP.kill);
+  if (routed && b.commandPoints !== undefined) {
+    b.commandPoints = Math.min(5, b.commandPoints + 1);
+  }
   b.log.push(`${a.name} → ${d.name}：${dmg} 伤害（余 ${d.troops}）`);
 
   a.hasActed = true;

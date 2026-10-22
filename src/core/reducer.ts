@@ -1,6 +1,7 @@
-import type { DomesticCmd, GameState } from './state';
+import type { BattleCommand, DomesticCmd, GameState, PolicyId } from './state';
 import { emptyMonthFacts } from './state';
 import { BALANCE } from '../data/tables/balance';
+import { POLICIES } from '../data/tables/policies';
 import type { TacticId } from '../data/tables/tactics';
 import {
   advanceTime,
@@ -37,12 +38,16 @@ import {
   resolveBattle,
   runAiTurn,
   undoMove,
+  useBattleCommand,
   waitUnit,
 } from '../systems/battle';
 import { continueAiPhase, startAiPhase } from '../systems/ai';
 import { doDiplomacy, doPersuadeCity, type DiplomacyKind } from '../systems/diplomacy';
 import { doPrisoner, type PrisonerAction } from '../systems/prisoners';
 import { playerSnapshot } from '../systems/report';
+import { applyPolicyMonthly, choosePolicy } from '../systems/policy';
+import { resolveEvent, maybeScheduleEvent } from '../systems/events';
+import { refreshChapter } from '../systems/chapter';
 
 export type Action =
   | { t: 'DOMESTIC'; cityId: string; cmd: DomesticCmd; generalId: string }
@@ -63,12 +68,15 @@ export type Action =
   | { t: 'BATTLE_ATTACK'; attackerId: string; targetId: string }
   | { t: 'BATTLE_CHARGE'; attackerId: string; targetId: string }
   | { t: 'BATTLE_TACTIC'; unitId: string; tacticId: TacticId; targetId: string }
+  | { t: 'BATTLE_COMMAND'; command: BattleCommand; unitId?: string }
   | { t: 'BATTLE_WAIT'; unitId: string }
   | { t: 'BATTLE_END_TURN' }
   | { t: 'BATTLE_RETREAT' }
   | { t: 'DISMISS_REPORT' }
   | { t: 'UNIFY' }
   | { t: 'DISMISS_UNIFY' }
+  | { t: 'CHOOSE_POLICY'; policyId: PolicyId }
+  | { t: 'RESOLVE_EVENT'; optionId: string }
   | { t: 'END_TURN'; confirmed?: boolean };
 
 export interface ActionResult extends OpResult {
@@ -95,6 +103,7 @@ export function runMonthlyPipeline(s: GameState, facts = emptyMonthFacts()): str
   runDisaster(s, facts);
   runOutput(s, facts);
   runTax(s, facts);
+  applyPolicyMonthly(s);
   checkGameOver(s);
   return clampResources(s);
 }
@@ -254,6 +263,21 @@ export function reduce(
         },
       };
     }
+    case 'BATTLE_COMMAND': {
+      if (!s.battle || s.phase !== 'battle') {
+        return { state, result: { ok: false, message: '当前无战斗' } };
+      }
+      if (s.battle.side !== s.battle.playerSide) {
+        return { state, result: { ok: false, message: '敌方回合，请稍候' } };
+      }
+      const r = useBattleCommand(
+        s.battle,
+        s.battle.playerSide,
+        action.command,
+        action.unitId,
+      );
+      return { state: r.ok ? s : state, result: r };
+    }
     case 'BATTLE_WAIT': {
       if (!s.battle || s.phase !== 'battle') {
         return { state, result: { ok: false, message: '当前无战斗' } };
@@ -332,6 +356,24 @@ export function reduce(
       s.unifyDismissedTurn = s.turn;
       return { state: s, result: { ok: true, message: '继续亲征' } };
     }
+    case 'CHOOSE_POLICY': {
+      if (s.settings.ruleset === 'classic') {
+        return { state, result: { ok: false, message: '经典模式没有国策' } };
+      }
+      if (!choosePolicy(s, action.policyId)) {
+        return { state, result: { ok: false, message: '该政策不在本次候选中' } };
+      }
+      s.log.push({
+        turn: s.turn,
+        kind: 'good',
+        text: `国策定为「${POLICIES[action.policyId]?.name ?? action.policyId}」，有效期 ${BALANCE.MODERN.POLICY_TURNS} 回合`,
+      });
+      return { state: s, result: { ok: true, message: '国策已定' } };
+    }
+    case 'RESOLVE_EVENT': {
+      const r = resolveEvent(s, action.optionId);
+      return { state: r.ok ? s : state, result: r };
+    }
     case 'END_TURN': {
       if (s.phase !== 'map') {
         return { state, result: { ok: false, message: '当前阶段无法结束回合' } };
@@ -365,6 +407,8 @@ export function reduce(
         return { state: s, result: { ok: true, message: '回合结束', warnings } };
       }
 
+      refreshChapter(s);
+      maybeScheduleEvent(s);
       s.pendingMonth = { before, logStart, warnings, facts };
       startAiPhase(s);
       return { state: s, result: { ok: true, message: '回合结束', warnings } };

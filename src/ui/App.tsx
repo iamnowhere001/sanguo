@@ -6,14 +6,26 @@ import { ScenarioSelect } from './ScenarioSelect';
 import { MapScreen } from './MapScreen';
 import { BattleScreen } from './BattleScreen';
 import { ReportModal } from './ReportModal';
+import { PolicyModal } from './PolicyModal';
+import { EventModal } from './EventModal';
 import { GameOver } from './GameOver';
 import { Toast } from './Toast';
 
 function GameScreen({ state }: { state: GameState }) {
+  const decisionReady =
+    state.phase === 'map' &&
+    !state.report &&
+    !state.aiQueue &&
+    !state.pendingMonth &&
+    !state.unifyReady;
   return (
     <div className="app-shell">
       {state.phase === 'battle' && state.battle ? <BattleScreen /> : <MapScreen />}
       {state.report && !state.gameOver ? <ReportModal report={state.report} /> : null}
+      {decisionReady ? <PolicyModal state={state} /> : null}
+      {decisionReady && (state.policy?.offer?.length ?? 0) === 0 ? (
+        <EventModal state={state} />
+      ) : null}
       {state.phase === 'gameover' && state.gameOver ? <GameOver state={state} /> : null}
     </div>
   );

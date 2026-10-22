@@ -3,7 +3,7 @@ import { CITY_TABLE } from '../data/tables/cities';
 import { DIFFICULTY_LIST, difficultyOf } from '../data/tables/difficulty';
 import { GENERAL_TABLE } from '../data/tables/generals';
 import { SCENARIOS, createGame } from '../data/tables/scenarios';
-import type { Difficulty } from '../core/state';
+import type { Difficulty, Ruleset } from '../core/state';
 import { gameStore } from '../store/gameStore';
 import { fmt } from './common';
 import { FactionTag } from './atoms';
@@ -24,6 +24,7 @@ export function ScenarioSelect() {
   const [scenarioId, setScenarioId] = useState('chibi');
   const [selected, setSelected] = useState('liubei');
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
+  const [ruleset, setRuleset] = useState<Ruleset>('modern');
   const [overflowMode, setOverflowMode] = useState<'safe' | 'classic'>('safe');
   const [classicSpawn, setClassicSpawn] = useState(false);
 
@@ -83,6 +84,7 @@ export function ScenarioSelect() {
       difficulty,
       overflowMode,
       classicSpawn,
+      ruleset,
     });
     gameStore.start(state);
   };
@@ -171,6 +173,29 @@ export function ScenarioSelect() {
                     </div>
                   </button>
                 ))}
+              </div>
+
+              <div className="difficulty-pick">
+                <span className="muted small">规则模式</span>
+                <div className="seg">
+                  <button
+                    className={ruleset === 'modern' ? 'on' : ''}
+                    onClick={() => setRuleset('modern')}
+                  >
+                    霸业模式
+                  </button>
+                  <button
+                    className={ruleset === 'classic' ? 'on' : ''}
+                    onClick={() => setRuleset('classic')}
+                  >
+                    经典模式
+                  </button>
+                </div>
+                <span className="muted small">
+                  {ruleset === 'modern'
+                    ? '国策三选一、月度事件、内政政令上限、战棋军令与章节目标'
+                    : '关闭国策/事件/政令上限/军令，保留原版内政与战斗规则'}
+                </span>
               </div>
 
               <div className="difficulty-pick">

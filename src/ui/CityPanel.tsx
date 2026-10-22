@@ -22,8 +22,16 @@ import {
   tradeLimit,
   trainingMultiplier,
 } from '../systems/formulas';
-import { troopCapOf } from '../systems/domestic';
+import { edictCapOf, edictLeftOf, troopCapOf } from '../systems/domestic';
 import { persuadePlan } from '../systems/diplomacy';
+import {
+  policyFoodMult,
+  policyRecruitCostMult,
+  policySearchCostMult,
+  policyTaxMult,
+  policyTradeLimit,
+  policyUpkeepMult,
+} from '../systems/policy';
 import { prisonerRecruitRate, prisonersIn } from '../systems/prisoners';
 import { gameStore } from '../store/gameStore';
 import { DiplomacyDialog } from './DiplomacyDialog';
@@ -196,15 +204,22 @@ export function CityPanel({
 
   const troops = cityTroops(state, city.id);
   const foodRate = Math.floor(
-    foodOutput(city.agriculture, city.loyalty) * (skill?.foodMult ?? 1),
+    foodOutput(city.agriculture, city.loyalty) *
+      (skill?.foodMult ?? 1) *
+      (isMine ? policyFoodMult(state) : 1),
   );
   const taxRate = Math.floor(
-    taxIncome(city.commerce, city.loyalty) * (skill?.taxMult ?? 1),
+    taxIncome(city.commerce, city.loyalty) *
+      (skill?.taxMult ?? 1) *
+      (isMine ? policyTaxMult(state) : 1),
   );
   const cityEliteTroops = gens
     .filter((g) => g.unitClass === 'elite')
     .reduce((sum, g) => sum + g.troops, 0);
-  const upkeep = monthlyFoodUpkeep(cityTroops(state, city.id), cityEliteTroops);
+  const upkeep = Math.ceil(
+    monthlyFoodUpkeep(cityTroops(state, city.id), cityEliteTroops) *
+      (isMine ? policyUpkeepMult(state) : 1),
+  );
   const netFood = foodRate - upkeep;
   const foodPct = (city.food / BALANCE.FOOD_CAP) * 100;
   const nearCap = foodPct >= BALANCE.FOOD_WARN_RATIO * 100;
@@ -212,8 +227,11 @@ export function CityPanel({
 
   const capByLoyalty = Math.floor(recruitCap(city.loyalty) * (skill?.recruitCapMult ?? 1));
   const capByGeneral = agent ? Math.max(0, troopCapOf(state, agent) - agent.troops) : 0;
-  const goldPerTroop = BALANCE.RECRUIT.goldPerTroop * (skill?.recruitCostMult ?? 1);
-  const foodPerTroop = BALANCE.RECRUIT.foodPerTroop * (skill?.recruitCostMult ?? 1);
+  const recruitCostMult = isMine ? policyRecruitCostMult(state) : 1;
+  const goldPerTroop =
+    BALANCE.RECRUIT.goldPerTroop * (skill?.recruitCostMult ?? 1) * recruitCostMult;
+  const foodPerTroop =
+    BALANCE.RECRUIT.foodPerTroop * (skill?.recruitCostMult ?? 1) * recruitCostMult;
   const capByGold = Math.floor(city.gold / goldPerTroop);
   const capByFood = Math.floor(city.food / foodPerTroop);
   const garrisonCap = garrisonCapOf(city.size);
@@ -230,11 +248,22 @@ export function CityPanel({
 
   const training = city.training ?? 0;
   const trainingBonus = Math.round((trainingMultiplier(training) - 1) * 100);
-  const tradeLimitValue = tradeLimit(city.commerce, skill?.tradeLimitMult ?? 1);
+  const edictCap = edictCapOf(state, city.id);
+  const edictUsed = city.domesticUsed ?? 0;
+  const edictLeft = edictLeftOf(state, city.id);
+  const edictBlock =
+    state.settings.ruleset !== 'classic' && edictLeft <= 0
+      ? `本月内政政令已用尽（${edictUsed}/${edictCap}，下月重置）`
+      : null;
+  const baseTradeLimit = tradeLimit(city.commerce, skill?.tradeLimitMult ?? 1);
+  const tradeLimitValue = isMine ? policyTradeLimit(state, baseTradeLimit) : baseTradeLimit;
   const tradeUsed = city.tradeVolume ?? 0;
   const tradeLeft = Math.max(0, tradeLimitValue - tradeUsed);
   const buyRate = BALANCE.TRADE.buyGoldPerFood;
   const sellRate = BALANCE.TRADE.sellGoldPerFood;
+  const searchCost = Math.round(
+    BALANCE.SEARCH.gold * (isMine ? policySearchCostMult(state) : 1),
+  );
   const maxBuy = Math.min(
     Math.floor(city.gold / buyRate),
     Math.max(0, BALANCE.FOOD_CAP - city.food),
@@ -480,7 +509,14 @@ export function CityPanel({
             >
               <section className="panel-section">
                 <div className="section-title">
-                  <span>内政</span>
+                  <span>
+                    内政
+                    {state.settings.ruleset !== 'classic' ? (
+                      <em className={`edict-badge${edictLeft <= 0 ? ' empty' : ''}`}>
+                        政令 {edictUsed}/{edictCap}
+                      </em>
+                    ) : null}
+                  </span>
                   {gens.length > 1 ? (
                     <select
                       className="mini-select"
@@ -507,7 +543,7 @@ export function CityPanel({
                     const gain =
                       statGain(cfg.field, city[cfg.field] ?? 0) +
                       (cmd === 'drill' ? (skill?.drillBonus ?? 0) : 0);
-                    const reason = blockReason(cfg.gold, cfg.stamina);
+                    const reason = edictBlock ?? blockReason(cfg.gold, cfg.stamina);
                     return (
                       <button
                         key={cmd}
@@ -525,17 +561,17 @@ export function CityPanel({
                   })}
                   <button
                     className="cmd"
-                    disabled={Boolean(blockReason(BALANCE.SEARCH.gold, BALANCE.SEARCH.stamina))}
+                    disabled={Boolean(blockReason(searchCost, BALANCE.SEARCH.stamina))}
                     onClick={() => agent && gameStore.dispatch({ t: 'SEARCH', cityId, generalId: agent.id })}
-                    title={`搜索：在野武将、道具、兵符、钱粮 · ${BALANCE.SEARCH.gold} 金 / ${BALANCE.SEARCH.stamina} 体力${
-                      blockReason(BALANCE.SEARCH.gold, BALANCE.SEARCH.stamina)
-                        ? ` · ${blockReason(BALANCE.SEARCH.gold, BALANCE.SEARCH.stamina)}`
+                    title={`搜索：在野武将、道具、兵符、钱粮 · ${searchCost} 金 / ${BALANCE.SEARCH.stamina} 体力${
+                      blockReason(searchCost, BALANCE.SEARCH.stamina)
+                        ? ` · ${blockReason(searchCost, BALANCE.SEARCH.stamina)}`
                         : ''
                     }`}
                   >
                     <b>搜索</b>
                     <span>
-                      {BALANCE.SEARCH.gold} 金 · 体力 {BALANCE.SEARCH.stamina}
+                      {searchCost} 金 · 体力 {BALANCE.SEARCH.stamina}
                     </span>
                   </button>
                 </div>

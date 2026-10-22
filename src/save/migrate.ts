@@ -1,9 +1,11 @@
 import type { GameState } from '../core/state';
 import { emptyMonthFacts } from '../core/state';
 import { createStreams, RANDOM_STREAMS, streamFor, type RngState } from '../core/rng';
+import { createChapter } from '../systems/chapter';
 
 const DEFAULT_SETTINGS: GameState['settings'] = {
   easterEggEnabled: false,
+  ruleset: 'modern',
   overflowConfirm: true,
   overflowMode: 'safe',
   classicSpawn: false,
@@ -43,16 +45,21 @@ export function migrateSave(state: GameState): GameState {
 
   state.settings ??= { ...DEFAULT_SETTINGS };
   state.settings.easterEggEnabled ??= DEFAULT_SETTINGS.easterEggEnabled;
+  state.settings.ruleset ??= DEFAULT_SETTINGS.ruleset;
   state.settings.overflowConfirm ??= DEFAULT_SETTINGS.overflowConfirm;
   state.settings.overflowMode ??= DEFAULT_SETTINGS.overflowMode;
   state.settings.classicSpawn ??= DEFAULT_SETTINGS.classicSpawn;
   state.settings.aiEnabled ??= DEFAULT_SETTINGS.aiEnabled;
   state.settings.difficulty ??= DEFAULT_SETTINGS.difficulty;
 
+  state.policy ??= { offer: [] };
+  state.chapter ??= createChapter(state);
+
   for (const c of Object.values(state.cities)) {
     c.training ??= 0;
     c.tradeVolume ??= 0;
     c.searchPity ??= 0;
+    c.domesticUsed ??= 0;
     // 旧档没有规模与城防：按人口与地形补一个合理默认值
     c.size ??=
       c.population >= 70000
@@ -76,9 +83,18 @@ export function migrateSave(state: GameState): GameState {
     state.battle.fortification ??=
       state.cities[state.battle.targetCityId]?.fortification ?? 0;
     state.battle.tacticUses ??= {};
+    state.battle.tacticBonus ??= 0;
+    if (
+      state.settings.ruleset === 'modern' &&
+      state.battle.playerInvolved &&
+      state.battle.commandPoints === undefined
+    ) {
+      state.battle.commandPoints = 3;
+    }
     for (const u of Object.values(state.battle.units)) {
       u.training ??= 0;
       u.chargeUsed ??= false;
+      u.bonusMove ??= 0;
     }
   }
 

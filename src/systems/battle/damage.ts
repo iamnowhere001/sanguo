@@ -35,6 +35,10 @@ export interface DamageContext {
   fortification?: number;
   /** 随机系数 0.9–1.1；模拟器与单测可传 1 */
   rngMult: number;
+  /** 夹击倍率（默认 1）：多面受敌时提高伤害 */
+  flankMult?: number;
+  /** 军令倍率（默认 1）：鼓舞 / 固守的乘积 */
+  commandMult?: number;
 }
 
 const WEATHER_MULT: Record<Weather, number> = {
@@ -116,6 +120,8 @@ export function computeDamageValue(ctx: DamageContext): number {
     trainingMult *
     classMult *
     fatigueMult *
+    (ctx.flankMult ?? 1) *
+    (ctx.commandMult ?? 1) *
     ctx.rngMult;
   const floorDmg = Math.max(1, Math.floor(attacker.troops * BALANCE.MIN_DAMAGE_RATE));
   return Math.max(floorDmg, Math.floor(raw));

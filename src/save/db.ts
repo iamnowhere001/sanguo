@@ -41,6 +41,7 @@ export function defaultPresets(state: GameState): SavePresets {
     rules: {
       safeOverflow: (state.settings?.overflowMode ?? 'safe') === 'safe',
       classicSpawn: state.settings?.classicSpawn ?? false,
+      modernRules: (state.settings?.ruleset ?? 'modern') === 'modern',
     },
   };
 }
