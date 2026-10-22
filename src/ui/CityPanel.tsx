@@ -23,6 +23,8 @@ import {
   trainingMultiplier,
 } from '../systems/formulas';
 import { edictCapOf, edictLeftOf, troopCapOf } from '../systems/domestic';
+import { PROJECTS, PROJECT_ORDER } from '../data/tables/projects';
+import { projectStartReason } from '../systems/projects';
 import { persuadePlan } from '../systems/diplomacy';
 import {
   policyFoodMult,
@@ -255,6 +257,9 @@ export function CityPanel({
     state.settings.ruleset !== 'classic' && edictLeft <= 0
       ? `本月内政政令已用尽（${edictUsed}/${edictCap}，下月重置）`
       : null;
+  const projectSlots = BALANCE.MODERN.PROJECT.slots;
+  const activeProjects = city.projects ?? [];
+  const landmarks = city.landmarks ?? [];
   const baseTradeLimit = tradeLimit(city.commerce, skill?.tradeLimitMult ?? 1);
   const tradeLimitValue = isMine ? policyTradeLimit(state, baseTradeLimit) : baseTradeLimit;
   const tradeUsed = city.tradeVolume ?? 0;
@@ -576,6 +581,122 @@ export function CityPanel({
                   </button>
                 </div>
               </section>
+
+              {state.settings.ruleset !== 'classic' ? (
+                <section className="panel-section project-section">
+                  <div className="section-title">
+                    <span>
+                      营造
+                      <em
+                        className={`edict-badge${
+                          activeProjects.length >= projectSlots ? ' empty' : ''
+                        }`}
+                      >
+                        营造位 {activeProjects.length}/{projectSlots}
+                      </em>
+                    </span>
+                    <span className="muted small">
+                      {agent ? `主持 ${agent.name} · 体力 ${agent.stamina}` : '无武将'}
+                    </span>
+                  </div>
+
+                  {activeProjects.length > 0 ? (
+                    <div className="project-active-list">
+                      {activeProjects.map((p) => {
+                        const def = PROJECTS[p.kind];
+                        const pct = Math.round(
+                          ((p.totalMonths - p.monthsLeft) / p.totalMonths) * 100,
+                        );
+                        return (
+                          <div className="project-active" key={p.kind}>
+                            <div className="project-active-head">
+                              <b>{def.name}</b>
+                              <span>{p.monthsLeft} 月后完工</span>
+                            </div>
+                            <div
+                              className="project-bar"
+                              role="progressbar"
+                              aria-label={`${def.name}进度`}
+                              aria-valuemin={0}
+                              aria-valuemax={100}
+                              aria-valuenow={pct}
+                            >
+                              <i style={{ width: `${pct}%` }} />
+                            </div>
+                            <div className="project-active-foot">
+                              <span>{def.effectLabel}</span>
+                              <span>
+                                主持 {state.generals[p.generalId]?.name ?? '已离城'}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="project-empty">
+                      选择一项长期工程，2–3 个月后永久提升城池。
+                    </p>
+                  )}
+
+                  <div className="project-grid">
+                    {PROJECT_ORDER.map((kind) => {
+                      const def = PROJECTS[kind];
+                      const reason = projectStartReason(
+                        state,
+                        cityId,
+                        kind,
+                        agent?.id,
+                      );
+                      return (
+                        <button
+                          key={kind}
+                          className="project-card"
+                          disabled={Boolean(reason)}
+                          onClick={() => {
+                            if (!agent) {
+                              gameStore.notify('请先选择主持工程的武将', 'warn');
+                              return;
+                            }
+                            gameStore.dispatch({
+                              t: 'START_PROJECT',
+                              cityId,
+                              kind,
+                              generalId: agent.id,
+                            });
+                          }}
+                          title={`${def.name}：${def.description} · ${def.months} 个月 · ${def.gold} 金${
+                            def.food > 0 ? ` / ${def.food} 粮` : ''
+                          } · ${def.effectLabel}${reason ? ` · ${reason}` : ''}`}
+                        >
+                          <b>{def.name}</b>
+                          <span className="project-cost">
+                            {def.gold} 金
+                            {def.food > 0 ? ` · ${def.food} 粮` : ''} · {def.months} 月
+                          </span>
+                          <span className="project-effect">{def.effectLabel}</span>
+                          {reason ? (
+                            <span className="project-block">{reason}</span>
+                          ) : null}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="form-hint">
+                    开工占 1 点政令、{BALANCE.MODERN.PROJECT.stamina} 体力；工程按月自动推进。
+                  </div>
+
+                  {landmarks.length > 0 ? (
+                    <div className="project-landmarks">
+                      <span>地标</span>
+                      {landmarks.map((kind) => (
+                        <em key={kind}>{PROJECTS[kind].landmark}</em>
+                      ))}
+                    </div>
+                  ) : null}
+                </section>
+              ) : null}
 
               <section className="panel-section" ref={recruitRef}>
                 <div className="section-title">

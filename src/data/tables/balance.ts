@@ -230,6 +230,8 @@ export const BALANCE = {
     POLICY_TURNS: 3,
     /** 每城内政政令上限 = min(max, base + floor(在城武将 / perGenerals)) */
     EDICT: { base: 2, perGenerals: 3, max: 4 },
+    /** 营造：每城同时施工数、开工体力与政令成本 */
+    PROJECT: { slots: 2, stamina: 10, edictCost: 1 },
     /** 每场战斗的军令点，以及击溃敌军后的上限 */
     COMMAND_POINTS: 3,
     COMMAND_MAX: 5,

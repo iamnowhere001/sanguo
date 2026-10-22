@@ -9,6 +9,8 @@ export type CitySize = 'capital' | 'large' | 'medium' | 'small';
 export type ItemType = 'weapon' | 'tally' | 'book' | 'mount';
 export type GeneralStatus = 'active' | 'captured' | 'inactive' | 'wild' | 'dead';
 export type DomesticCmd = 'reclaim' | 'commerce' | 'patrol' | 'govern' | 'drill';
+/** 现代模式营造工程：长期投资，完工后永久提升城池属性 */
+export type ProjectKind = 'farm' | 'market' | 'wall' | 'barracks';
 export type GamePhase = 'map' | 'battle' | 'gameover';
 export type Difficulty = 'easy' | 'normal' | 'hard';
 export type BattleSide = 'attacker' | 'defender';
@@ -100,6 +102,17 @@ export interface CitySkill {
   persuadeBonus?: number;
 }
 
+/** 进行中的营造工程；只存运行期数据，项目数值由配表推导 */
+export interface CityProject {
+  kind: ProjectKind;
+  /** 剩余月数：月结后 −1，归零时完工 */
+  monthsLeft: number;
+  totalMonths: number;
+  startedTurn: number;
+  /** 开工时主持工程的武将，用于展示与叙事 */
+  generalId: string;
+}
+
 export interface City {
   id: string;
   name: string;
@@ -131,6 +144,10 @@ export interface City {
   searchPity?: number;
   /** 本月已执行的内政政令数（现代规则每城每月有上限） */
   domesticUsed?: number;
+  /** 进行中的营造工程（现代模式，每城最多 BALANCE.MODERN.PROJECT.slots 个） */
+  projects?: CityProject[];
+  /** 已完工地标：用于面板展示与后续地图成长表现 */
+  landmarks?: ProjectKind[];
   gold: number;
   food: number;
   population: number;
@@ -294,6 +311,8 @@ export interface MonthSnapshot {
 export interface MonthFacts {
   outputs: Array<{ cityId: string; food: number }>;
   taxes: Array<{ cityId: string; gold: number }>;
+  /** 本月完工的营造工程，供月报单列 */
+  projects: Array<{ cityName: string; projectName: string; effectLabel: string }>;
   /** 玩家势力本月养兵耗粮 */
   upkeep: number;
   starvation: Array<{
@@ -317,6 +336,7 @@ export function emptyMonthFacts(): MonthFacts {
   return {
     outputs: [],
     taxes: [],
+    projects: [],
     upkeep: 0,
     starvation: [],
     disasters: [],

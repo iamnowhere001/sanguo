@@ -86,6 +86,16 @@ describe('UI 冒烟', () => {
   it('城池面板展示训练、交易额度、演武与全城宴请', async () => {
     globalThis.IS_REACT_ACT_ENVIRONMENT = true;
     const state = createGame({ playerFactionId: 'liubei', aiEnabled: false });
+    state.cities.jiangxia!.projects = [
+      {
+        kind: 'farm',
+        monthsLeft: 2,
+        totalMonths: 3,
+        startedTurn: state.turn,
+        generalId: 'guanyu',
+      },
+    ];
+    state.cities.jiangxia!.landmarks = ['farm'];
     el = document.createElement('div');
     document.body.appendChild(el);
     root = createRoot(el);
@@ -98,6 +108,31 @@ describe('UI 冒烟', () => {
     expect(el.textContent).toContain('全城宴请');
     expect(el.textContent).toContain('事件驱动');
     expect(el.textContent).toContain('按上限分配');
+    expect(el.textContent).toContain('营造');
+    expect(el.textContent).toContain('营造位 1/2');
+    expect(el.textContent).toContain('2 月后完工');
+    expect(el.textContent).toContain('屯田');
+    expect(el.textContent).toContain('市集');
+    expect(el.textContent).toContain('城墙');
+    expect(el.textContent).toContain('兵营');
+    expect(el.textContent).toContain('地标');
+    expect(el.textContent).toContain('农田');
+  });
+
+  it('经典模式隐藏营造区块', async () => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const state = createGame({
+      playerFactionId: 'liubei',
+      aiEnabled: false,
+      ruleset: 'classic',
+    });
+    el = document.createElement('div');
+    document.body.appendChild(el);
+    root = createRoot(el);
+    await act(async () => {
+      root!.render(<CityPanel state={state} cityId="jiangxia" onDeploy={() => {}} />);
+    });
+    expect(el.textContent).not.toContain('营造');
   });
 
   it('武将总览按城分组列出全势力将领', async () => {

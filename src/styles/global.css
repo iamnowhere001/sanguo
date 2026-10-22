@@ -1444,6 +1444,123 @@ input[type='number'] {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* ── 营造：长期工程 ─────────────────────────────────────── */
+.project-active-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.project-active {
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel2);
+}
+.project-active-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.project-active-head b {
+  font-size: 12px;
+  font-weight: 600;
+}
+.project-active-head span {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--gold);
+}
+.project-bar {
+  height: 3px;
+  margin: 5px 0;
+  overflow: hidden;
+  background: var(--line);
+  border-radius: 2px;
+}
+.project-bar i {
+  display: block;
+  height: 100%;
+  background: var(--gold);
+  transition: width 0.3s ease;
+}
+.project-active-foot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 9.5px;
+  color: var(--muted);
+}
+.project-empty {
+  margin: 0 0 8px;
+  font-size: 10.5px;
+  color: var(--dim);
+}
+.project-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+}
+.project-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  padding: 7px 8px;
+  color: var(--paper);
+  text-align: left;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.project-card:hover:not(:disabled) {
+  border-color: var(--line2);
+  background: var(--panel3);
+}
+.project-card:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.project-card b {
+  font-size: 12px;
+  font-weight: 600;
+}
+.project-cost {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--muted);
+}
+.project-effect {
+  font-size: 10px;
+  color: var(--gold);
+}
+.project-block {
+  font-size: 9px;
+  line-height: 1.35;
+  color: #e3a79c;
+}
+.project-landmarks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 7px;
+  font-size: 9.5px;
+  color: var(--dim);
+}
+.project-landmarks em {
+  padding: 1px 5px;
+  font-style: normal;
+  color: var(--gold);
+  border: 1px solid var(--line2);
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+}
 .inline-form {
   display: flex;
   gap: 5px;

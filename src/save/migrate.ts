@@ -42,6 +42,7 @@ export function migrateSave(state: GameState): GameState {
   if (state.pendingMonth && !state.pendingMonth.facts) {
     state.pendingMonth.facts = emptyMonthFacts();
   }
+  if (state.pendingMonth?.facts) state.pendingMonth.facts.projects ??= [];
 
   state.settings ??= { ...DEFAULT_SETTINGS };
   state.settings.easterEggEnabled ??= DEFAULT_SETTINGS.easterEggEnabled;
@@ -60,6 +61,8 @@ export function migrateSave(state: GameState): GameState {
     c.tradeVolume ??= 0;
     c.searchPity ??= 0;
     c.domesticUsed ??= 0;
+    c.projects ??= [];
+    c.landmarks ??= [];
     // 旧档没有规模与城防：按人口与地形补一个合理默认值
     c.size ??=
       c.population >= 70000

@@ -20,6 +20,7 @@ const TOAST_LIMIT = 3;
 /** 【优化】§5.6 月度点击埋点：只统计大地图上的决策点击，不含结束回合 */
 const COUNTED_ACTIONS = new Set([
   'DOMESTIC',
+  'START_PROJECT',
   'RECRUIT',
   'RECRUIT_ALL',
   'TRADE',

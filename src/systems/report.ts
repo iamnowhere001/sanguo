@@ -32,7 +32,7 @@ const cityName = (state: GameState, cityId: string): string =>
 const pct = (v: number): string => `${Math.round(v * 100)}%`;
 
 /** 已经在结构化行里解释过的日志，不再在“事件”里重复 */
-const SUMMARIZED_LOG = ['军粮不足', '旱灾', '水灾', '季末', '粮草超过上限'];
+const SUMMARIZED_LOG = ['军粮不足', '旱灾', '水灾', '季末', '粮草超过上限', '完工'];
 
 export function buildMonthReport(
   state: GameState,
@@ -102,6 +102,19 @@ export function buildMonthReport(
         ? '优先补粮：开垦、买粮或减少驻军。'
         : undefined,
   });
+
+  const completedProjects = facts.projects ?? [];
+  if (completedProjects.length > 0) {
+    lines.push({
+      label: '营造',
+      text: `${completedProjects.length} 项工程完工`,
+      tone: 'good',
+      reason: completedProjects
+        .map((p) => `${p.cityName}「${p.projectName}」：${p.effectLabel}`)
+        .join('；'),
+      advice: '营造位已空出，可继续投资下一项工程。',
+    });
+  }
 
   if (facts.disasters.length > 0) {
     lines.push({

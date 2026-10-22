@@ -590,6 +590,8 @@ export function createGame(opts: CreateGameOptions = {}): GameState {
     c.tradeVolume ??= 0;
     c.searchPity ??= 0;
     c.domesticUsed ??= 0;
+    c.projects ??= [];
+    c.landmarks ??= [];
   }
 
   // 【优化】E11 稀有物与在野武将候选池：按种子重排，经典模式保持原表
