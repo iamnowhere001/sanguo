@@ -1,0 +1,29 @@
+/**
+ * 战棋系统公共入口。
+ *
+ * 原先 1353 行的单文件按职责拆分：
+ * - grid      战场几何、移动与攻击范围
+ * - combat    伤害、普攻/突击、经验
+ * - tactics   计策判定与结算
+ * - ai        战术 AI
+ * - setup     开战与无守军占领
+ * - turn      回合开始与天数推进
+ * - resolve   胜负判定与战后结算
+ * - auto      AI 对 AI 自动战斗
+ */
+export * from './grid';
+export * from './combat';
+export * from './tactics';
+export * from './ai';
+export * from './setup';
+export * from './turn';
+export * from './resolve';
+export * from './auto';
+
+import type { OpResult } from '../../core/result';
+
+/** 兼容旧导出名：战斗类操作的结果与通用 OpResult 同构。 */
+export type BattleOpResult = OpResult;
+
+/** 兼容旧导入路径：`syncFactionCities` 已迁移到 core/state。 */
+export { syncFactionCities } from '../../core/state';

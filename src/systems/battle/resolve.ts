@@ -1,0 +1,248 @@
+import { BALANCE } from '../../data/tables/balance';
+import { WEATHER_LABEL } from '../../data/tables/tactics';
+import { chance } from '../../core/rng';
+import type {
+  BattleState,
+  BattleUnit,
+  GameState,
+  ReportLine,
+} from '../../core/state';
+import { syncFactionCities } from '../../core/state';
+import { log } from '../economy';
+import { clamp } from '../formulas';
+import { grantExp } from './combat';
+import { activeUnits, otherSide } from './grid';
+
+export type BattleOutcome = 'victory' | 'defeat' | 'retreat';
+
+export function battleOutcome(b: BattleState): BattleOutcome | null {
+  const attackers = activeUnits(b, 'attacker');
+  const defenders = activeUnits(b, 'defender');
+  if (defenders.length === 0) return 'victory';
+  if (attackers.length === 0) return 'defeat';
+  if (!attackers.some((u) => u.isCommander)) return 'defeat';
+  if (!defenders.some((u) => u.isCommander)) return 'victory';
+  return null;
+}
+
+/** 【优化】E09 事件化忠诚：出征 −2，战败/撤退再 −4 */
+function applyBattleLoyalty(
+  state: GameState,
+  attackers: BattleUnit[],
+  outcome: BattleOutcome,
+): { delta: number; count: number } {
+  let count = 0;
+  for (const u of attackers) {
+    const g = state.generals[u.generalId];
+    if (!g || g.status !== 'active' || g.isRuler) continue;
+    const delta =
+      BALANCE.LOYALTY.battleReturn +
+      (outcome === 'victory' ? 0 : BALANCE.LOYALTY.battleDefeat);
+    g.loyalty = Math.max(0, g.loyalty + delta);
+    count += 1;
+  }
+  const delta =
+    BALANCE.LOYALTY.battleReturn +
+    (outcome === 'victory' ? 0 : BALANCE.LOYALTY.battleDefeat);
+  return { delta, count };
+}
+
+/**
+ * 战后结算。outcome 以**进攻方**视角：victory = 进攻方胜。
+ * 玩家可能是防守方，因此战报要按玩家视角翻译。
+ */
+export function resolveBattle(
+  state: GameState,
+  b: BattleState,
+  outcome: BattleOutcome,
+): void {
+  const from = state.cities[b.fromCityId];
+  const target = state.cities[b.targetCityId];
+  const attackerUnits = Object.values(b.units).filter((u) => u.side === 'attacker');
+  const defenderUnits = Object.values(b.units).filter((u) => u.side === 'defender');
+
+  for (const u of attackerUnits) {
+    const g = state.generals[u.generalId];
+    if (!g) continue;
+    g.stamina = clamp(u.stamina, 0, BALANCE.STAMINA_MAX);
+    if (outcome === 'victory') {
+      g.troops = u.troops;
+      g.locationId = b.targetCityId;
+      if (!u.routed) {
+        grantExp(g, BALANCE.EXP.victory);
+        grantExp(g, BALANCE.EXP.captureCity);
+      }
+    } else {
+      g.troops = Math.floor(u.troops * BALANCE.RETREAT_KEEP_RATE);
+      g.locationId = b.fromCityId;
+      if (!u.routed) grantExp(g, 50);
+    }
+  }
+
+  for (const u of defenderUnits) {
+    const g = state.generals[u.generalId];
+    if (!g) continue;
+    g.stamina = clamp(u.stamina, 0, BALANCE.STAMINA_MAX);
+    if (outcome === 'victory') {
+      g.troops = u.troops;
+      let captured = u.isCommander;
+      if (!captured) {
+        const [hit, next] = chance(state.rng, BALANCE.CAPTURE_RATE_SUBORDINATE);
+        state.rng = next;
+        captured = hit;
+      }
+      if (captured) {
+        g.status = 'captured';
+        g.locationId = b.targetCityId;
+      } else {
+        g.status = 'inactive';
+        g.locationId = b.targetCityId;
+      }
+    } else {
+      g.troops = u.troops;
+      g.locationId = b.targetCityId;
+      if (!u.routed) grantExp(g, BALANCE.EXP.victory);
+    }
+  }
+
+  const loyalty = applyBattleLoyalty(state, attackerUnits, outcome);
+  if (loyalty.count > 0) {
+    log(
+      state,
+      'info',
+      `出征忠诚 ${loyalty.delta}（${loyalty.count} 人）${outcome !== 'victory' ? '，战败追加惩罚' : ''}`,
+    );
+  }
+
+  if (outcome === 'victory' && target) {
+    const oldOwner = target.ownerId;
+    target.ownerId = b.attackerFactionId;
+    syncFactionCities(state, oldOwner);
+    syncFactionCities(state, b.attackerFactionId);
+    log(
+      state,
+      'danger',
+      `${target.name} 被 ${state.factions[b.attackerFactionId]?.name ?? '敌军'} 攻占`,
+    );
+  }
+
+  const playerWon = b.playerSide === 'attacker' ? outcome === 'victory' : outcome !== 'victory';
+  const playerUnits = Object.values(b.units).filter((u) => u.side === b.playerSide);
+  const playerTroopsNow = playerUnits.reduce((sum, u) => sum + u.troops, 0);
+  const foeTroopsNow = Object.values(b.units)
+    .filter((u) => u.side === otherSide(b.playerSide))
+    .reduce((sum, u) => sum + u.troops, 0);
+
+  if (b.playerInvolved) {
+    const title =
+      b.playerSide === 'attacker'
+        ? outcome === 'victory'
+          ? '战斗胜利'
+          : outcome === 'retreat'
+            ? '撤退'
+            : '战斗失败'
+        : outcome === 'victory'
+          ? '城池失守'
+          : outcome === 'retreat'
+            ? '敌军撤退'
+            : '防守成功';
+
+    const lines: ReportLine[] = [];
+    if (b.playerSide === 'attacker') {
+      lines.push(
+        outcome === 'victory'
+          ? { label: '结果', text: `${target?.name ?? '目标城'} 已占领`, tone: 'good' }
+          : {
+              label: '结果',
+              text:
+                outcome === 'retreat'
+                  ? `主动撤退，残兵退回 ${from?.name ?? ''}（保留 ${Math.round(BALANCE.RETREAT_KEEP_RATE * 100)}% 兵力）`
+                  : `进攻失败，残兵退回 ${from?.name ?? ''}（保留 ${Math.round(BALANCE.RETREAT_KEEP_RATE * 100)}% 兵力）`,
+              tone: outcome === 'retreat' ? 'warn' : 'danger',
+            },
+      );
+    } else {
+      lines.push(
+        outcome === 'victory'
+          ? {
+              label: '结果',
+              text: `${target?.name ?? '城池'} 失守，守将被俘`,
+              tone: 'danger',
+            }
+          : {
+              label: '结果',
+              text: outcome === 'retreat'
+                ? `敌军自 ${target?.name ?? ''} 撤退，守城成功`
+                : `击退来犯之敌，守住了 ${target?.name ?? ''}`,
+              tone: 'good',
+            },
+      );
+    }
+
+    lines.push({ label: '我方', text: `剩余兵力 ${playerTroopsNow}`, tone: 'info' });
+    lines.push({ label: '敌方', text: `剩余兵力 ${foeTroopsNow}`, tone: 'info' });
+    const levels = playerUnits
+      .map((u) => {
+        const g = state.generals[u.generalId];
+        return g ? `${g.name} Lv${g.level}` : '';
+      })
+      .filter(Boolean)
+      .join(' · ');
+    const growthText = playerWon
+      ? b.playerSide === 'attacker'
+        ? '战斗 + 占城经验'
+        : '守城经验'
+      : '败退经验 +50';
+    lines.push({
+      label: '成长',
+      text: `${levels || '—'}（${growthText}）`,
+      tone: 'info',
+    });
+    if (b.playerSide === 'attacker' && loyalty.count > 0) {
+      lines.push({
+        label: '忠诚',
+        text: `出征武将 ${loyalty.delta}${outcome !== 'victory' ? '（战败追加 −4）' : ''}`,
+        tone: loyalty.delta < 0 ? 'warn' : 'info',
+      });
+    }
+
+    state.report = {
+      kind: 'battle',
+      title,
+      subtitle: `${b.day} 天 · ${from?.name} → ${target?.name} · ${WEATHER_LABEL[b.weather]}`,
+      result: playerWon ? 'victory' : outcome === 'retreat' ? 'retreat' : 'defeat',
+      lines,
+    };
+  } else if (outcome !== 'victory') {
+    log(
+      state,
+      'info',
+      `${state.factions[b.attackerFactionId]?.name ?? '敌军'} 未能攻下 ${target?.name ?? ''}`,
+    );
+  }
+
+  state.battle = undefined;
+  state.phase = 'map';
+  checkGameOver(state);
+}
+
+export function checkGameOver(state: GameState): void {
+  const mine = Object.values(state.cities).filter(
+    (c) => c.ownerId === state.playerFactionId,
+  ).length;
+  if (mine === 0) {
+    state.phase = 'gameover';
+    state.gameOver = { result: 'defeat', reason: '所有城池失守，势力覆灭' };
+    return;
+  }
+  const others = Object.values(state.factions).filter(
+    (f) => f.id !== state.playerFactionId,
+  );
+  const alive = others.filter((f) =>
+    Object.values(state.cities).some((c) => c.ownerId === f.id),
+  );
+  if (alive.length === 0) {
+    state.phase = 'gameover';
+    state.gameOver = { result: 'victory', reason: '扫平群雄，一统天下' };
+  }
+}
