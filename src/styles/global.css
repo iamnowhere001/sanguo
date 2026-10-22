@@ -18,6 +18,22 @@
   --font-body: 'PingFang SC', 'Hiragino Sans GB', 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
   --font-mono: 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
   --radius: 10px;
+
+  /* 布局尺度：4px 基准，所有间距只从这套刻度取值 */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+
+  --topbar-h: 60px;
+  --status-h: 32px;
+  --rail-l: 252px;
+  --rail-r: 356px;
+  --panel-pad: 18px;
+  --page-max: 1120px;
 }
 
 *,
@@ -86,6 +102,7 @@ h3 {
 
 p {
   margin: 0 0 0.7em;
+  text-wrap: pretty;
 }
 p:last-child {
   margin-bottom: 0;
@@ -271,7 +288,7 @@ input[type='number'] {
   overflow: hidden;
   display: flex;
   align-items: center;
-  padding-left: clamp(36px, 9vw, 150px);
+  padding-left: clamp(32px, 8vw, 132px);
 }
 .menu-art {
   position: absolute;
@@ -290,47 +307,57 @@ input[type='number'] {
 .menu-inner {
   position: relative;
   z-index: 2;
-  max-width: 480px;
+  max-width: 520px;
 }
 .menu-inner h1 {
   font-size: clamp(52px, 6.6vw, 88px);
   line-height: 1.05;
   letter-spacing: 0.06em;
-  margin: 16px 0 10px;
+  margin: var(--sp-4) 0 var(--sp-2);
   position: relative;
   display: inline-block;
 }
 .seal-mini {
-  display: inline-block;
-  vertical-align: top;
-  margin-left: 14px;
-  margin-top: 12px;
+  position: absolute;
+  left: 100%;
+  top: 10px;
+  margin-left: 18px;
   writing-mode: vertical-rl;
-  font-size: 13px;
-  letter-spacing: 0.14em;
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0.12em;
   color: var(--red);
   border: 2px solid var(--red);
-  padding: 5px 3px;
+  padding: 6px 4px;
   transform: rotate(-4deg);
   opacity: 0.9;
 }
 .menu-sub {
   color: var(--muted);
-  letter-spacing: 0.28em;
+  letter-spacing: 0.24em;
   font-size: 13px;
-  margin-bottom: 38px;
+  margin-bottom: 34px;
 }
 .menu-actions {
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: var(--sp-2);
   width: min(330px, 78vw);
 }
 .menu-actions .btn {
   justify-content: flex-start;
 }
+.menu-actions .btn.lg {
+  padding: 12px 18px;
+}
+.menu-actions .btn.ghost {
+  margin-top: var(--sp-1);
+}
 .menu-foot {
-  margin-top: 40px;
+  margin-top: 44px;
+  padding-top: var(--sp-3);
+  width: min(330px, 78vw);
+  border-top: 1px solid var(--line);
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.14em;
@@ -341,7 +368,7 @@ input[type='number'] {
 .select-screen {
   height: 100%;
   overflow-y: auto;
-  padding: 26px 40px 40px;
+  padding: clamp(20px, 3vw, 34px) clamp(20px, 4vw, 44px) 48px;
   background:
     radial-gradient(900px 500px at 80% 0%, rgba(193, 74, 58, 0.08), transparent 60%),
     var(--bg);
@@ -349,20 +376,28 @@ input[type='number'] {
 .select-head {
   display: flex;
   align-items: center;
-  gap: 20px;
-  margin-bottom: 18px;
+  gap: var(--sp-4);
+  width: 100%;
+  max-width: var(--page-max);
+  margin: 0 auto var(--sp-5);
+  padding-bottom: var(--sp-4);
+  border-bottom: 1px solid var(--line);
+}
+.select-head .btn.ghost {
+  margin-left: -14px;
 }
 .scenario-tabs {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
-  max-width: 1120px;
-  margin-bottom: 18px;
+  gap: var(--sp-2);
+  max-width: var(--page-max);
+  margin: 0 auto var(--sp-5);
 }
 .scenario-tabs button {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 48px;
   padding: 10px 12px;
   background: var(--panel);
   border: 1px solid var(--line);
@@ -391,14 +426,17 @@ input[type='number'] {
 .select-body {
   display: grid;
   grid-template-columns: 330px minmax(0, 1fr);
-  gap: 28px;
-  max-width: 1120px;
+  align-items: start;
+  gap: var(--sp-6);
+  width: 100%;
+  max-width: var(--page-max);
+  margin: 0 auto;
 }
 .scenario-card {
   background: var(--panel);
   border: 1px solid var(--line);
   border-top: 3px solid var(--red);
-  padding: 24px;
+  padding: var(--sp-6);
   position: relative;
 }
 .scenario-year {
@@ -513,7 +551,7 @@ input[type='number'] {
   margin: 0 6px;
 }
 
-/* ── Layout ────────────────────────────────────────────── */
+/* ── Layout: 顶栏 ──────────────────────────────────────── */
 .app-shell {
   height: 100%;
   min-height: 0;
@@ -529,64 +567,110 @@ input[type='number'] {
   flex-direction: column;
 }
 .topbar {
-  height: 58px;
   flex: none;
-  display: flex;
+  min-height: var(--topbar-h);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  gap: 22px;
-  padding: 0 18px;
+  gap: var(--sp-6);
+  padding: 0 var(--panel-pad);
   border-bottom: 1px solid var(--line);
-  background: rgba(20, 18, 14, 0.92);
-  backdrop-filter: blur(8px);
+  background: linear-gradient(180deg, rgba(26, 23, 18, 0.96), rgba(17, 16, 13, 0.94));
+  backdrop-filter: blur(10px);
+  z-index: 20;
 }
 .tb-left {
   display: flex;
   flex-direction: column;
-  line-height: 1.25;
-  min-width: 150px;
+  justify-content: center;
+  gap: 1px;
+  line-height: 1.2;
+  min-width: 0;
+  overflow: hidden;
 }
 .date {
   font-family: var(--font-head);
   font-size: 17px;
   font-weight: 700;
   letter-spacing: 0.04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .turn {
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--muted);
   letter-spacing: 0.08em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+
+/* KPI 簇：等距分栏 + 竖线分隔，保证数值列对齐 */
 .tb-kpis {
+  justify-self: center;
   display: flex;
-  gap: 22px;
-  margin: 0 auto;
+  align-items: stretch;
+  min-width: 0;
 }
 .kpi {
   display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  padding: 0 var(--sp-5);
+  border-left: 1px solid var(--line);
+}
+.kpi:first-child {
+  border-left: none;
+  padding-left: 0;
+}
+.kpi:last-child {
+  padding-right: 0;
+}
+.kpi-label {
+  font-style: normal;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+  opacity: 0.8;
+  white-space: nowrap;
+}
+.kpi-val {
+  display: flex;
   align-items: baseline;
   gap: 4px;
+  white-space: nowrap;
 }
-.kpi span {
-  font-size: 11px;
-  color: var(--muted);
-}
-.kpi b {
+.kpi-val b {
   font-family: var(--font-mono);
   font-size: 15px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
+  line-height: 1.3;
 }
-.kpi em {
+.kpi-val i {
   font-style: normal;
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--dim);
 }
 .tb-actions {
+  justify-self: end;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-2);
+}
+.tb-sep {
+  width: 1px;
+  height: 20px;
+  margin: 0 var(--sp-1) 0 var(--sp-2);
+  background: var(--line2);
+}
+.tb-actions .btn.primary {
+  min-width: 104px;
+  padding-inline: var(--sp-4);
 }
 .faction-pill {
   display: inline-flex;
@@ -597,6 +681,7 @@ input[type='number'] {
   background: var(--panel2);
   border: 1px solid var(--line);
   border-radius: 20px;
+  white-space: nowrap;
 }
 .faction-pill i {
   width: 8px;
@@ -604,37 +689,67 @@ input[type='number'] {
   border-radius: 50%;
 }
 
-/* ── Layout ────────────────────────────────────────────── */
+/* ── Layout: 三栏工作区 ────────────────────────────────── */
 .game-grid {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 246px minmax(0, 1fr) 348px;
+  grid-template-columns: var(--rail-l) minmax(0, 1fr) var(--rail-r);
+  background: var(--bg);
 }
 .side-panel {
   min-height: 0;
   overflow-y: auto;
   background: var(--panel);
-  padding: 16px;
+  padding: var(--panel-pad);
 }
 .left-panel {
   border-right: 1px solid var(--line);
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: var(--sp-4);
+  overflow: hidden;
+  padding: var(--panel-pad) var(--sp-4);
+}
+.left-panel > section {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.left-panel .city-list {
+  min-height: 0;
+}
+.left-panel .rail-others {
+  flex: 1;
+  min-height: 0;
+}
+.rail-others .city-list {
+  overflow-y: auto;
+  padding-right: 2px;
+}
+.rail-mine .city-list {
+  flex: none;
 }
 .city-panel {
   border-left: 1px solid var(--line);
-  padding: 18px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 .section-title {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 9px;
-  font-size: 11px;
-  letter-spacing: 0.12em;
+  gap: var(--sp-2);
+  flex: none;
+  margin-bottom: var(--sp-2);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  color: var(--dim);
+  text-transform: uppercase;
+}
+.section-title > span:first-child {
   color: var(--muted);
 }
 .city-list {
@@ -651,7 +766,7 @@ input[type='number'] {
   align-items: center;
   gap: 2px 8px;
   text-align: left;
-  padding: 8px 9px;
+  padding: 7px 9px;
   background: transparent;
   border: 1px solid transparent;
   border-radius: 7px;
@@ -695,6 +810,7 @@ input[type='number'] {
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--muted);
+  white-space: nowrap;
 }
 .cres {
   grid-area: res;
@@ -706,7 +822,7 @@ input[type='number'] {
   min-height: 0;
 }
 .log {
-  max-height: 190px;
+  max-height: 132px;
   overflow-y: auto;
   font-size: 11.5px;
   line-height: 1.55;
@@ -715,6 +831,9 @@ input[type='number'] {
   padding: 3px 0;
   border-bottom: 1px dotted #2c281e;
   color: var(--muted);
+}
+.log-line:last-child {
+  border-bottom: none;
 }
 .log-line span {
   font-family: var(--font-mono);
@@ -735,8 +854,16 @@ input[type='number'] {
   color: var(--muted);
 }
 .supply {
-  margin-top: auto;
-  padding-top: 6px;
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line);
+}
+.supply .section-title {
+  margin-bottom: 6px;
+}
+.supply p {
+  margin: 6px 0 0;
+  font-size: 10.5px;
+  line-height: 1.5;
 }
 
 /* ── Map ───────────────────────────────────────────────── */
@@ -745,6 +872,14 @@ input[type='number'] {
   min-width: 0;
   min-height: 0;
   background: #12110e;
+}
+.map-main::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  box-shadow: inset 0 0 90px rgba(0, 0, 0, 0.45);
 }
 .map-wrap,
 .map-canvas {
@@ -759,23 +894,26 @@ input[type='number'] {
 }
 .map-legend {
   position: absolute;
-  left: 16px;
-  top: 14px;
+  left: var(--sp-4);
+  top: var(--sp-4);
+  z-index: 3;
   display: grid;
   grid-template-columns: repeat(2, auto);
-  gap: 4px 10px;
-  padding: 7px 9px;
-  background: rgba(20, 18, 14, 0.72);
+  gap: 4px 12px;
+  padding: 8px 10px;
+  background: rgba(20, 18, 14, 0.78);
   border: 1px solid var(--line);
   border-radius: 6px;
   font-size: 9.5px;
   color: var(--muted);
+  backdrop-filter: blur(6px);
   pointer-events: none;
 }
 .map-legend span {
   display: flex;
   align-items: center;
   gap: 6px;
+  white-space: nowrap;
 }
 .map-legend i {
   width: 7px;
@@ -785,13 +923,17 @@ input[type='number'] {
 .map-hint {
   position: absolute;
   left: 50%;
-  bottom: 16px;
+  bottom: var(--sp-4);
+  z-index: 3;
   transform: translateX(-50%);
+  max-width: calc(100% - 32px);
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-size: 11px;
   color: var(--muted);
-  background: rgba(20, 18, 14, 0.78);
+  background: rgba(20, 18, 14, 0.82);
   border: 1px solid var(--line);
-  padding: 5px 12px;
+  padding: 5px 14px;
   border-radius: 20px;
   white-space: nowrap;
   pointer-events: none;
@@ -804,23 +946,24 @@ input[type='number'] {
 
 /* ── City panel ────────────────────────────────────────── */
 .panel-head {
+  flex: none;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 10px;
-  padding-bottom: 12px;
+  gap: var(--sp-2);
+  padding: var(--panel-pad) var(--panel-pad) var(--sp-3);
   border-bottom: 1px solid var(--line);
-  margin-bottom: 12px;
+  background: linear-gradient(180deg, #1d1a14, var(--panel));
 }
 .panel-head h2 {
   font-size: 22px;
-  line-height: 1.3;
+  line-height: 1.25;
 }
 .sub-line {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 4px;
+  margin-top: 3px;
   font-size: 11px;
 }
 .dot-sep {
@@ -838,17 +981,46 @@ input[type='number'] {
   color: var(--teal);
   border-color: rgba(93, 154, 139, 0.55);
 }
+.panel-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--sp-4) var(--panel-pad) var(--sp-5);
+}
+.panel-foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--panel-pad);
+  border-top: 1px solid var(--line2);
+  background: rgba(23, 21, 16, 0.96);
+}
+.panel-foot .btn.primary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.panel-foot .btn:not(.primary) {
+  flex: none;
+}
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--sp-2);
 }
 .stat {
+  grid-column: span 2;
   background: var(--panel2);
   border: 1px solid var(--line);
   border-radius: 7px;
   padding: 7px 8px;
   min-width: 0;
+}
+.stat.wide {
+  grid-column: span 3;
 }
 .stat > span {
   display: block;
@@ -882,8 +1054,8 @@ input[type='number'] {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 6px;
-  margin: 10px 0 12px;
-  padding: 9px 2px;
+  margin: var(--sp-3) 0;
+  padding: var(--sp-3) 2px;
   border-top: 1px dotted var(--line);
   border-bottom: 1px dotted var(--line);
 }
@@ -912,11 +1084,12 @@ input[type='number'] {
   margin-bottom: 12px;
 }
 .panel-section {
-  padding: 12px 0;
+  padding: var(--sp-4) 0;
   border-bottom: 1px solid var(--line);
 }
 .panel-section:last-child {
   border-bottom: none;
+  padding-bottom: 0;
 }
 .mini-select {
   padding: 2px 5px;
@@ -1301,15 +1474,81 @@ input[type='number'] {
   color: #e08a7c;
 }
 
-/* ── Battle ────────────────────────────────────────────── */
-.battle-top {
-  gap: 16px;
-}
-.battle-sides {
+/* ── Status bar（页脚） ────────────────────────────────── */
+.statusbar {
+  flex: none;
+  min-height: var(--status-h);
   display: flex;
   align-items: center;
-  gap: 18px;
-  margin: 0 auto;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  padding: 0 var(--panel-pad);
+  border-top: 1px solid var(--line);
+  background: #14120e;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--dim);
+}
+.sb-left,
+.sb-right {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-width: 0;
+}
+.sb-keys {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+.sb-touch {
+  display: none;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sb-hint {
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sb-key {
+  padding: 0 5px;
+  border: 1px solid var(--line2);
+  border-radius: 3px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.sb-sep {
+  flex: none;
+  width: 1px;
+  height: 12px;
+  background: var(--line2);
+}
+.sb-select {
+  color: var(--paper);
+  font-weight: 400;
+}
+.sb-flag {
+  color: var(--gold);
+}
+
+/* ── Battle ────────────────────────────────────────────── */
+.battle-top {
+  min-height: var(--topbar-h);
+  padding-block: var(--sp-1);
+}
+.battle-top .tb-left {
+  gap: 0;
+}
+.battle-sides {
+  justify-self: center;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
 }
 .side-stat {
   width: 160px;
@@ -1340,7 +1579,7 @@ input[type='number'] {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 330px;
+  grid-template-columns: minmax(0, 1fr) var(--rail-r);
 }
 .battle-main {
   position: relative;
@@ -1495,7 +1734,12 @@ input[type='number'] {
 }
 .battle-panel {
   border-left: 1px solid var(--line);
-  padding: 16px;
+  padding: var(--panel-pad) var(--sp-4);
+}
+.battle-panel > section + section {
+  margin-top: var(--sp-4);
+  padding-top: var(--sp-4);
+  border-top: 1px solid var(--line);
 }
 .unit-card {
   background: var(--panel2);
@@ -1847,63 +2091,221 @@ input[type='number'] {
 }
 
 /* ── Responsive ────────────────────────────────────────── */
-@media (max-width: 1180px) {
-  .game-grid {
-    grid-template-columns: 218px minmax(0, 1fr) 316px;
+/* ≥1440：宽屏，侧栏略放宽，内容更透气 */
+@media (min-width: 1440px) {
+  :root {
+    --rail-l: 264px;
+    --rail-r: 372px;
+    --panel-pad: 20px;
+  }
+}
+
+/* 1200–1439：标准笔记本，收紧 KPI 间距 */
+@media (max-width: 1360px) {
+  .kpi {
+    padding: 0 var(--sp-4);
+  }
+  .topbar {
+    gap: var(--sp-4);
+  }
+}
+
+/* 1081–1199：紧凑三栏，侧栏优先让位给地图 */
+@media (max-width: 1199px) {
+  :root {
+    --rail-l: 220px;
+    --rail-r: 316px;
+    --panel-pad: 16px;
+  }
+  .tb-actions .faction-pill {
+    display: none;
   }
   .battle-grid {
     grid-template-columns: minmax(0, 1fr) 300px;
   }
 }
 
-@media (max-width: 960px) {
+/* ≤1080：平板双栏，左侧栏折叠为顶部城池条，右栏保留在侧边 */
+@media (max-width: 1080px) {
   body {
-    overflow: auto;
+    overflow: hidden;
   }
+  .app-shell,
   .map-screen,
   .battle-screen {
-    height: auto;
-    min-height: 100%;
+    height: 100%;
+    min-height: 0;
   }
+
   .topbar {
-    height: auto;
-    min-height: 58px;
-    flex-wrap: wrap;
-    padding: 10px 14px;
-    gap: 10px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'meta actions'
+      'kpis kpis';
+    gap: var(--sp-2) var(--sp-3);
+    padding: var(--sp-2) var(--sp-4);
+    min-height: 0;
+  }
+  .tb-left {
+    grid-area: meta;
   }
   .tb-kpis {
-    margin: 0;
-    flex-wrap: wrap;
-    gap: 14px;
-  }
-  .game-grid,
-  .battle-grid {
-    grid-template-columns: 1fr;
-    min-height: auto;
-  }
-  .left-panel {
-    display: none;
-  }
-  .map-main {
-    min-height: 54vh;
-  }
-  .city-panel,
-  .battle-panel {
-    border-left: none;
+    grid-area: kpis;
+    justify-self: stretch;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin-top: var(--sp-2);
+    padding-top: var(--sp-2);
     border-top: 1px solid var(--line);
   }
-  .battle-main {
-    min-height: 56vh;
+  .kpi {
+    padding: 0 var(--sp-3);
+  }
+  .kpi:first-child {
+    padding-left: 0;
+  }
+  .kpi:last-child {
+    padding-right: 0;
+  }
+  .tb-actions {
+    grid-area: actions;
+  }
+
+  .game-grid {
+    flex: 1;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas:
+      'rail rail'
+      'map city';
+    min-height: 0;
+  }
+
+  /* 左侧栏 → 横向城池条：保留切换能力，不再整块隐藏 */
+  .left-panel {
+    grid-area: rail;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--sp-2);
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: var(--sp-2) var(--sp-4);
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+    scrollbar-width: none;
+  }
+  .left-panel::-webkit-scrollbar {
+    display: none;
+  }
+  .left-panel .rail-mine {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--sp-2);
+    flex: none;
+  }
+  .left-panel .rail-mine .section-title {
+    margin: 0;
+    white-space: nowrap;
+  }
+  .left-panel .rail-mine .city-list {
+    flex-direction: row;
+    flex: none;
+    gap: var(--sp-1);
+    overflow: visible;
+  }
+  .left-panel .city-row {
+    grid-template-columns: 8px auto;
+    grid-template-areas: 'dot name';
+    gap: 6px;
+    padding: 4px 9px;
+    border-color: var(--line);
+    background: var(--panel2);
+  }
+  .left-panel .city-row .cmeta,
+  .left-panel .city-row .cres,
+  .left-panel .rail-others,
+  .left-panel .log-section,
+  .left-panel .supply {
+    display: none;
+  }
+  .left-panel .fdot {
+    align-self: center;
+    margin-top: 0;
+  }
+  .map-main {
+    grid-area: map;
+    min-height: 0;
+  }
+
+  .city-panel {
+    grid-area: city;
+    border-left: 1px solid var(--line);
+    border-top: 1px solid var(--line);
+    height: auto;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .panel-scroll {
+    overflow-y: auto;
+    min-height: 0;
+  }
+  .panel-head {
+    position: static;
+  }
+  .panel-foot {
+    position: static;
+  }
+
+  .battle-top {
+    grid-template-areas:
+      'meta actions'
+      'sides sides';
   }
   .battle-sides {
-    margin: 0;
+    grid-area: sides;
+    justify-self: stretch;
+    justify-content: space-between;
+    margin-top: var(--sp-2);
+    padding-top: var(--sp-2);
+    border-top: 1px solid var(--line);
   }
+  .side-stat {
+    width: auto;
+    flex: 1;
+  }
+  .battle-grid {
+    flex: 1;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    grid-template-rows: minmax(0, 1fr);
+    min-height: 0;
+  }
+  .battle-main {
+    min-height: 0;
+  }
+  .battle-panel {
+    border-left: 1px solid var(--line);
+    border-top: none;
+    overflow-y: auto;
+    padding: var(--sp-3) var(--sp-4);
+  }
+
   .select-screen {
-    padding: 20px;
+    padding: var(--sp-5) var(--sp-5) var(--sp-8);
   }
   .select-body {
-    grid-template-columns: 1fr;
+    grid-template-columns: 300px minmax(0, 1fr);
+    gap: var(--sp-5);
+  }
+  .scenario-card {
+    padding: var(--sp-4);
+  }
+  .scenario-year {
+    font-size: 44px;
+  }
+  .scenario-card h2 {
+    font-size: 20px;
   }
   .scenario-tabs {
     grid-template-columns: 1fr 1fr;
@@ -1912,13 +2314,117 @@ input[type='number'] {
     grid-template-columns: 1fr 1fr;
   }
   .menu {
-    padding-left: 32px;
+    padding-left: var(--sp-8);
   }
 }
 
-@media (max-width: 620px) {
+/* ≤720：单列信息密度，导航收成一行 */
+@media (max-width: 720px) {
+  .select-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .tb-actions .mini,
+  .tb-sep {
+    display: none;
+  }
+  .tb-actions .btn.primary {
+    min-width: 0;
+    padding-inline: var(--sp-3);
+  }
+  .date {
+    font-size: 16px;
+  }
+  .kpi-val b {
+    font-size: 14px;
+  }
+  .kpi-val i.long {
+    display: none;
+  }
+  .kpi {
+    padding: 0 var(--sp-2);
+  }
+  .sb-hint {
+    display: none;
+  }
+  .sb-keys {
+    display: none;
+  }
+  .sb-touch {
+    display: inline;
+  }
+  .statusbar {
+    padding: 0 var(--sp-3);
+  }
+  .game-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(170px, 1fr) minmax(240px, 46vh);
+    grid-template-areas:
+      'rail'
+      'map'
+      'city';
+  }
+  .city-panel {
+    border-left: none;
+  }
+  .battle-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(170px, 1fr) minmax(220px, 44vh);
+  }
+  .battle-panel {
+    border-left: none;
+    border-top: 1px solid var(--line);
+  }
+  .panel-head {
+    padding: var(--sp-4) var(--sp-4) var(--sp-3);
+  }
+  .panel-scroll {
+    padding: var(--sp-3) var(--sp-4) var(--sp-4);
+  }
+  .panel-foot {
+    padding: var(--sp-2) var(--sp-4);
+  }
   .ruler-grid {
     grid-template-columns: 1fr;
+  }
+  .menu-inner h1 {
+    font-size: clamp(44px, 12vw, 64px);
+  }
+  .menu::after {
+    background: linear-gradient(
+      90deg,
+      rgba(17, 16, 13, 0.94) 0%,
+      rgba(17, 16, 13, 0.84) 58%,
+      rgba(17, 16, 13, 0.4) 100%
+    );
+  }
+  .menu-sub {
+    margin-bottom: 26px;
+  }
+  .menu-foot {
+    margin-top: var(--sp-6);
+  }
+}
+
+/* ≤560：手机，隐藏浮层提示与次要信息 */
+@media (max-width: 560px) {
+  /* 手机宽度下战斗顶栏分三行：战况 / 兵力 / 操作，避免文字与按钮重叠 */
+  .battle-top {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'meta'
+      'sides'
+      'actions';
+  }
+  .battle-top .tb-actions {
+    justify-self: stretch;
+    justify-content: flex-end;
+    margin-top: var(--sp-1);
+  }
+  .battle-sides {
+    margin-top: var(--sp-1);
+  }
+  .turn-budget {
+    display: none;
   }
   .gameover-card h1 {
     font-size: 32px;
@@ -1928,7 +2434,29 @@ input[type='number'] {
     display: none;
   }
   .modal-card {
-    padding: 16px;
+    padding: var(--sp-4);
+  }
+  .scenario-tabs {
+    grid-template-columns: 1fr;
+  }
+  .select-head {
+    padding-bottom: var(--sp-3);
+    margin-bottom: var(--sp-4);
+  }
+  .start-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--sp-3);
+  }
+  .sb-right {
+    display: none;
+  }
+  .stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .stat,
+  .stat.wide {
+    grid-column: span 1;
   }
 }
 

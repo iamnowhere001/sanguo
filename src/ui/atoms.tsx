@@ -26,14 +26,16 @@ export function Stat({
   value,
   hint,
   danger,
+  wide,
 }: {
   label: string;
   value: string | number;
   hint?: string;
   danger?: boolean;
+  wide?: boolean;
 }) {
   return (
-    <div className={`stat${danger ? ' danger' : ''}`}>
+    <div className={`stat${danger ? ' danger' : ''}${wide ? ' wide' : ''}`}>
       <span>{label}</span>
       <b>{value}</b>
       {hint ? <em>{hint}</em> : null}

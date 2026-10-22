@@ -422,7 +422,7 @@ export function BattleScreen() {
             {playerSide === 'defender' ? '守城战' : '出征'} · 第 {battle.day} /{' '}
             {BALANCE.BATTLE_MAX_DAYS} 天 · 天气 {WEATHER_LABEL[battle.weather]}
           </span>
-          <span className={`turn ${budgetTone}`}>
+          <span className={`turn turn-budget ${budgetTone}`}>
             {playerSide === 'defender' ? '预计失守' : '预计破城'}{' '}
             {breakDays == null ? '—' : `~${breakDays}`} 天 · 剩余 {remainingDays} 天
           </span>
@@ -742,6 +742,29 @@ export function BattleScreen() {
           </section>
         </aside>
       </div>
+
+      <footer className="statusbar" aria-label="状态栏">
+        <div className="sb-left">
+          <span className="sb-keys">
+            <span className="sb-key">Tab</span>
+            <span>切换部队</span>
+            <span className="sb-sep" />
+            <span className="sb-key">空格</span>
+            <span>结束回合</span>
+            <span className="sb-sep" />
+            <span className="sb-key">Esc</span>
+            <span>取消</span>
+          </span>
+          <span className="sb-touch">点部队 → 绿格移动 · 点敌军攻击</span>
+        </div>
+        <div className="sb-right">
+          <span className={battle.side === playerSide ? 'sb-flag' : 'sb-hint'}>
+            {battle.side === playerSide ? `我方行动 · 剩 ${readyCount} 支` : '敌方行动中'}
+          </span>
+          <span className="sb-sep" />
+          <span>第 {battle.day} 天</span>
+        </div>
+      </footer>
 
       {saveOpen ? <SaveDialog mode="save" onClose={() => setSaveOpen(false)} /> : null}
 

@@ -87,27 +87,35 @@ export function MapScreen() {
 
         <div className="tb-kpis">
           <div className="kpi">
-            <span>金钱</span>
-            <b>{fmt(totalGold)}</b>
-            <em>/ {fmt(BALANCE.GOLD_CAP)}</em>
+            <em className="kpi-label">金钱</em>
+            <span className="kpi-val">
+              <b>{fmt(totalGold)}</b>
+              <i>/ {fmt(BALANCE.GOLD_CAP)}</i>
+            </span>
           </div>
           <div className="kpi">
-            <span>粮食</span>
-            <b className={nearCapCities.length > 0 ? 'warn-text' : ''}>{fmt(totalFood)}</b>
-            <em>
-              {nearCapCities.length > 0
-                ? `${nearCapCities.length} 城近上限`
-                : `单城上限 ${fmt(BALANCE.FOOD_CAP)}`}
-            </em>
+            <em className="kpi-label">粮食</em>
+            <span className="kpi-val">
+              <b className={nearCapCities.length > 0 ? 'warn-text' : ''}>{fmt(totalFood)}</b>
+              <i className="long">
+                {nearCapCities.length > 0
+                  ? `${nearCapCities.length} 城近上限`
+                  : `单城上限 ${fmt(BALANCE.FOOD_CAP)}`}
+              </i>
+            </span>
           </div>
           <div className="kpi">
-            <span>兵力</span>
-            <b>{fmt(totalTroops)}</b>
+            <em className="kpi-label">兵力</em>
+            <span className="kpi-val">
+              <b>{fmt(totalTroops)}</b>
+            </span>
           </div>
           <div className="kpi">
-            <span>版图</span>
-            <b>{mine.length}</b>
-            <em>城</em>
+            <em className="kpi-label">版图</em>
+            <span className="kpi-val">
+              <b>{mine.length}</b>
+              <i>城</i>
+            </span>
           </div>
         </div>
 
@@ -125,6 +133,7 @@ export function MapScreen() {
           <button className="btn ghost sm" onClick={() => setQuitOpen(true)}>
             主菜单
           </button>
+          <span className="tb-sep" />
           <button className="btn primary" onClick={endTurn}>
             结束回合
           </button>
@@ -133,7 +142,7 @@ export function MapScreen() {
 
       <div className="game-grid">
         <aside className="side-panel left-panel">
-          <section>
+          <section className="rail-mine">
             <div className="section-title">
               <span>我方城池</span>
               <span className="muted small">{mine.length}</span>
@@ -158,7 +167,7 @@ export function MapScreen() {
             </div>
           </section>
 
-          <section>
+          <section className="rail-others">
             <div className="section-title">
               <span>其他势力</span>
               <span className="muted small">{others.length}</span>
@@ -182,21 +191,23 @@ export function MapScreen() {
             </div>
           </section>
 
-          <section className="log-section">
-            <div className="section-title">
-              <span>军情</span>
-            </div>
-            <div className="log">
-              {[...state.log]
-                .slice(-8)
-                .reverse()
-                .map((l, i) => (
-                  <div key={i} className={`log-line tone-${l.kind}`}>
-                    <span>[{l.turn}]</span> {l.text}
-                  </div>
-                ))}
-            </div>
-          </section>
+          {state.log.length > 0 ? (
+            <section className="log-section">
+              <div className="section-title">
+                <span>军情</span>
+              </div>
+              <div className="log">
+                {[...state.log]
+                  .slice(-8)
+                  .reverse()
+                  .map((l, i) => (
+                    <div key={i} className={`log-line tone-${l.kind}`}>
+                      <span>[{l.turn}]</span> {l.text}
+                    </div>
+                  ))}
+              </div>
+            </section>
+          ) : null}
 
           <div className="supply">
             <div className="section-title">
@@ -243,6 +254,30 @@ export function MapScreen() {
           onDeploy={(from, target) => setDeploy({ from, target })}
         />
       </div>
+
+      <footer className="statusbar" aria-label="状态栏">
+        <div className="sb-left">
+          <span>选中</span>
+          <b className="sb-select">{state.cities[selectedCityId]?.name ?? '—'}</b>
+          <span className="sb-sep" />
+          <span>
+            {state.cities[selectedCityId]
+              ? factionName(state, state.cities[selectedCityId]!.ownerId)
+              : '—'}
+          </span>
+          <span className="sb-sep" />
+          <span>{fmt(cityTroops(state, selectedCityId))} 兵</span>
+        </div>
+        <div className="sb-right">
+          {attackFromSelected.length > 0 ? (
+            <span className="sb-flag">可出征 {attackFromSelected.length} 城</span>
+          ) : (
+            <span>点击地图切换城池</span>
+          )}
+          <span className="sb-sep" />
+          <span>v0.1</span>
+        </div>
+      </footer>
 
       {deploy ? (
         <DeployDialog
