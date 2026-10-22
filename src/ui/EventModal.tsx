@@ -1,6 +1,7 @@
 import type { GameState } from '../core/state';
 import { gameStore } from '../store/gameStore';
 import { pendingEventView } from '../systems/events';
+import { fmt } from './common';
 
 /**
  * 月度事件弹窗：等月报关闭、AI 队列跑完后出现。
@@ -21,6 +22,11 @@ export function EventModal({ state }: { state: GameState }) {
           <span className="event-city">{view.city.name}</span>
         </header>
         <p className="event-desc">{view.description}</p>
+        <div className="event-stats">
+          <span>城内金钱 <b>{fmt(view.city.gold)}</b></span>
+          <span>粮草 <b>{fmt(view.city.food)}</b></span>
+          <span>民忠 <b>{view.city.loyalty}</b></span>
+        </div>
         <div className="event-options">
           {view.options.map((o) => (
             <button

@@ -7,6 +7,8 @@ import { AudioSettingsButton } from '../src/ui/AudioSettings';
 import { CityPanel } from '../src/ui/CityPanel';
 import { RosterDialog } from '../src/ui/RosterDialog';
 import { ReportModal } from '../src/ui/ReportModal';
+import { PolicyModal } from '../src/ui/PolicyModal';
+import { EventModal } from '../src/ui/EventModal';
 import { createGame } from '../src/data/tables/scenarios';
 import { createBattle } from '../src/systems/battle';
 import { gameStore } from '../src/store/gameStore';
@@ -115,6 +117,28 @@ describe('UI 冒烟', () => {
     expect(el.textContent).toContain('关羽');
     expect(el.textContent).toContain('陈到');
     expect(el.textContent).toContain('兵');
+  });
+
+  it('国策与事件弹窗展示三选一和城内资源', async () => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const state = createGame({ playerFactionId: 'liubei', aiEnabled: false });
+    state.policy = { offer: ['tuntian', 'salt', 'qiuxian'], offeredTurn: state.turn };
+    state.pendingEvent = { eventId: 'caravan', cityId: 'jiangxia', turn: state.turn };
+    el = document.createElement('div');
+    document.body.appendChild(el);
+    root = createRoot(el);
+    await act(async () => {
+      root!.render(
+        <>
+          <PolicyModal state={state} />
+          <EventModal state={state} />
+        </>,
+      );
+    });
+    expect(el.textContent).toContain('定下未来 3 回合的路线');
+    expect(el.textContent).toContain('屯田');
+    expect(el.textContent).toContain('城内金钱');
+    expect(el.textContent).toContain('商队来投');
   });
 
   it('月报渲染结论、建议与可展开的原因/明细', async () => {

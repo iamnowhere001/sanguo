@@ -230,8 +230,9 @@ export const BALANCE = {
     POLICY_TURNS: 3,
     /** 每城内政政令上限 = min(max, base + floor(在城武将 / perGenerals)) */
     EDICT: { base: 2, perGenerals: 3, max: 4 },
-    /** 每场战斗的军令点 */
+    /** 每场战斗的军令点，以及击溃敌军后的上限 */
     COMMAND_POINTS: 3,
+    COMMAND_MAX: 5,
     COMMAND: {
       inspire: { label: '鼓舞', cost: 1, damageMult: 1.2 },
       guard: { label: '固守', cost: 1, damageTakenMult: 0.7 },

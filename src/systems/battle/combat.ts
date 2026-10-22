@@ -90,10 +90,14 @@ export function damagePreview(
 }
 
 export function markRouted(b: BattleState, target: BattleUnit): boolean {
+  if (target.routed) return false;
   if (target.troops <= 0 || target.troops < target.maxTroops * BALANCE.ROUT_TROOPS_RATIO) {
     target.troops = 0;
     target.routed = true;
     b.log.push(`${target.name} 溃散`);
+    if (b.commandPoints !== undefined && target.side !== b.playerSide) {
+      b.commandPoints = Math.min(BALANCE.MODERN.COMMAND_MAX, b.commandPoints + 1);
+    }
     return true;
   }
   return false;
@@ -124,9 +128,6 @@ export function performAttack(
 
   const routed = markRouted(b, d);
   if (routed && g) grantExp(g, BALANCE.EXP.kill);
-  if (routed && b.commandPoints !== undefined) {
-    b.commandPoints = Math.min(5, b.commandPoints + 1);
-  }
   b.log.push(`${a.name} → ${d.name}：${dmg} 伤害（余 ${d.troops}）`);
 
   a.hasActed = true;

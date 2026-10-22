@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createGame } from '../src/data/tables/scenarios';
 import { reduce } from '../src/core/reducer';
 import type { GameState } from '../src/core/state';
-import { createBattle, computeDamage, advanceBattleDay, flankMultiplier } from '../src/systems/battle';
+import { createBattle, computeDamage, advanceBattleDay, flankMultiplier, performAttack, markRouted } from '../src/systems/battle';
 import {
   activePolicy,
   choosePolicy,
@@ -183,6 +183,20 @@ describe('现代重制：月度事件', () => {
     expect(after).toBeGreaterThan(before);
   });
 
+  it('月结流水线会按概率生成待处理事件', () => {
+    let s = fresh();
+    let seen = false;
+    for (let i = 0; i < 20; i++) {
+      s = endTurn(s);
+      if (s.pendingEvent) {
+        seen = true;
+        break;
+      }
+    }
+    expect(seen).toBe(true);
+    expect(pendingEventView(s)).not.toBeNull();
+  });
+
   it('经典模式不触发月度事件', () => {
     const s = fresh({ ruleset: 'classic' });
     s.turn = 5;
@@ -212,6 +226,12 @@ describe('现代重制：战棋军令与夹击', () => {
     expect(r.state.battle!.commandPoints).toBe(2);
     const after = computeDamage(r.state.battle!, a, d, 1);
     expect(after).toBeGreaterThan(before);
+
+    // 击溃敌军回 1 点，且不超过军令上限
+    const target = r.state.battle!.units['defender:lvbu']!;
+    target.troops = 1;
+    performAttack(r.state, r.state.battle!, 'attacker:guanyu', 'defender:lvbu');
+    expect(r.state.battle!.commandPoints).toBe(3);
   });
 
   it('固守降低我方受击，急袭增加移动力并在次日清除', () => {
@@ -257,6 +277,16 @@ describe('现代重制：战棋军令与夹击', () => {
     advanceBattleDay(march.state.battle!);
     expect(unit.bonusMove).toBe(0);
     expect(march.state.battle!.guardSide).toBeUndefined();
+  });
+
+  it('只有击溃敌军才返还军令点', () => {
+    const s = fresh();
+    const { battle } = createBattle(s, 'jiangxia', 'xiangyang', ['liubei', 'guanyu']);
+    battle!.commandPoints = 1;
+    const ally = battle!.units['attacker:liubei']!;
+    ally.troops = 1;
+    expect(markRouted(battle!, ally)).toBe(true);
+    expect(battle!.commandPoints).toBe(1);
   });
 
   it('夹击：目标相邻友军越多，伤害越高', () => {

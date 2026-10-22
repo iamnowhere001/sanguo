@@ -565,7 +565,7 @@ export function BattleScreen() {
               <div className="section-title">
                 <span>军令</span>
                 <span className="muted small">
-                  {commandPoints} / {BALANCE.MODERN.COMMAND_POINTS} 点
+                  {commandPoints} 点
                 </span>
               </div>
               <div className="command-buttons">
@@ -592,7 +592,8 @@ export function BattleScreen() {
                     !selected ||
                     selected.hasMoved ||
                     selected.hasActed ||
-                    selected.stunned > 0
+                    selected.stunned > 0 ||
+                    Boolean(selected.bonusMove)
                   }
                   onClick={() => command('march')}
                   title="消耗 1 军令：选中部队本日移动 +2（需未移动）"
@@ -601,11 +602,13 @@ export function BattleScreen() {
                 </button>
               </div>
               <p className="muted small command-note">
-                {battle.inspireSide === playerSide
-                  ? '本日鼓舞生效：攻击 +20%'
-                  : battle.guardSide === playerSide
-                    ? '本日固守生效：受击 −30%'
-                    : '军令点整场共享，击溃敌军回 1 点。'}
+                {battle.inspireSide === playerSide && battle.guardSide === playerSide
+                  ? '本日鼓舞生效：攻击 +20%；固守生效：受击 −30%'
+                  : battle.inspireSide === playerSide
+                    ? '本日鼓舞生效：攻击 +20%'
+                    : battle.guardSide === playerSide
+                      ? '本日固守生效：受击 −30%'
+                      : `军令点整场共享，击溃敌军回 1 点（上限 ${BALANCE.MODERN.COMMAND_MAX}）。`}
               </p>
             </section>
           ) : null}

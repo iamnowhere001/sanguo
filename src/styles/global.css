@@ -1868,7 +1868,24 @@ input[type='number'] {
   font-size: 13px !important;
   line-height: 1.8;
   color: var(--paper) !important;
-  margin: 6px 0 16px;
+  margin: 6px 0 12px;
+}
+.event-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-bottom: 14px;
+  padding: 7px 10px;
+  background: var(--panel3);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 10.5px;
+  color: var(--muted);
+}
+.event-stats b {
+  color: var(--paper);
+  font-family: var(--font-mono);
+  font-weight: 600;
 }
 .event-options {
   display: flex;
