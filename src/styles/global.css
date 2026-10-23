@@ -5424,6 +5424,297 @@ input[type='number'] {
   }
 }
 
+/* ── 幕间朝议弹窗 ───────────────────────────────────────── */
+.act-council-card {
+  width: min(920px, 100%);
+  max-height: 88vh;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.act-council-head {
+  flex: none;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  padding: 18px 24px 14px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(200, 164, 94, 0.08), transparent);
+}
+.act-council-head > div {
+  min-width: 0;
+}
+.act-council-head h3 {
+  margin: 4px 0 3px;
+  font-size: 21px;
+}
+.act-council-head p {
+  margin: 0;
+  font-size: 11.5px;
+}
+.act-council-seal {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(200, 164, 94, 0.5);
+  border-radius: 50%;
+  background: rgba(200, 164, 94, 0.08);
+  color: var(--gold);
+  font-family: var(--font-head);
+  font-size: 18px;
+}
+.act-council-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 17px;
+  padding: 16px 24px 18px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.act-council-body > section {
+  flex: none;
+}
+.act-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-bottom: 7px;
+}
+.act-section-head b {
+  font-family: var(--font-head);
+  font-size: 14px;
+}
+.act-section-head span {
+  color: var(--muted);
+  font-size: 10.5px;
+  text-align: right;
+}
+.act-report .report-lines {
+  padding: 0;
+}
+.act-choice-grid,
+.act-identity-grid {
+  display: grid;
+  gap: 10px;
+}
+.act-choice-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.act-identity-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.act-choice,
+.act-identity {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel2);
+  color: var(--paper);
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s, transform 0.12s;
+}
+.act-choice:hover,
+.act-identity:hover {
+  border-color: var(--line2);
+  background: var(--panel3);
+  transform: translateY(-1px);
+}
+.act-choice.on,
+.act-identity.on {
+  border-color: rgba(200, 164, 94, 0.62);
+  background: rgba(200, 164, 94, 0.1);
+}
+.act-choice.on b,
+.act-identity.on b {
+  color: var(--gold);
+}
+.ac-school,
+.ai-school {
+  padding: 1px 7px;
+  border: 1px solid rgba(200, 164, 94, 0.35);
+  border-radius: 10px;
+  color: var(--gold);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+}
+.act-choice b,
+.act-identity b {
+  font-family: var(--font-head);
+  font-size: 15px;
+}
+.act-choice > span:not(.ac-school),
+.act-identity > span:not(.ai-school) {
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.6;
+}
+.act-choice em,
+.act-identity em {
+  margin-top: auto;
+  padding-top: 5px;
+  color: var(--teal);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-style: normal;
+  line-height: 1.5;
+}
+.act-turning-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--red);
+  border-radius: 10px;
+  background: var(--panel2);
+}
+.act-turning-card.skipped {
+  grid-template-columns: minmax(0, 1fr);
+  border-left-color: var(--line2);
+}
+.act-turning-card b {
+  font-family: var(--font-head);
+  font-size: 15px;
+}
+.act-turning-card p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.6;
+}
+.at-kicker {
+  display: block;
+  margin-bottom: 2px;
+  color: var(--red-text);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+}
+.at-meta {
+  display: flex;
+  gap: var(--sp-4);
+}
+.at-meta > span {
+  display: grid;
+  justify-items: end;
+  gap: 1px;
+  min-width: 54px;
+}
+.at-meta em {
+  color: var(--dim);
+  font-size: 9px;
+  font-style: normal;
+  letter-spacing: 0.1em;
+}
+.at-meta b {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 500;
+}
+.at-meta i {
+  color: var(--dim);
+  font-size: 9.5px;
+  font-style: normal;
+}
+.at-note {
+  grid-column: 1 / -1;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+}
+.act-council-foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: 12px 24px;
+  border-top: 1px solid var(--line);
+  background: rgba(17, 16, 13, 0.94);
+}
+.act-council-foot > span {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+.act-council-foot > div {
+  flex: none;
+}
+
+@media (max-width: 760px) {
+  .act-council-head {
+    padding: 14px 16px 12px;
+  }
+  .act-council-body {
+    gap: var(--sp-3);
+    padding: 12px 16px;
+  }
+  .act-council-foot {
+    padding: 10px 16px;
+  }
+  .act-choice-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .act-turning-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .at-meta {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    gap: var(--sp-3);
+  }
+  .at-meta > span {
+    justify-items: start;
+  }
+}
+
+@media (max-width: 560px) {
+  .act-council-modal {
+    padding: 0;
+  }
+  .act-council-card {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    border: 0;
+    border-radius: 0;
+  }
+  .act-section-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .act-section-head span {
+    text-align: left;
+  }
+  .act-identity-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .act-council-foot {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--sp-2);
+  }
+  .act-council-foot .btn {
+    width: 100%;
+  }
+}
+
 /* ── 地图缩放 / 平移 ─────────────────────────────────────── */
 .map-canvas {
   touch-action: none;
