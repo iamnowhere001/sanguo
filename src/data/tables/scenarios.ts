@@ -7,6 +7,7 @@ import { GENERAL_TABLE } from './generals';
 import { ITEM_TABLE } from './items';
 import { applySpawnPools } from './spawn';
 import { createRumors } from '../../systems/exploration';
+import { ensureDiplomacy } from '../../systems/factionDiplomacy';
 
 export interface ScenarioDef {
   id: string;
@@ -695,5 +696,6 @@ export function createGame(opts: CreateGameOptions = {}): GameState {
   state.rumors =
     state.settings.ruleset === 'classic' ? [] : createRumors(state);
   state.chapter = createChapter(state);
+  ensureDiplomacy(state);
   return state;
 }

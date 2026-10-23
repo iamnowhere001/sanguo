@@ -9,6 +9,7 @@ import {
   neighborsOf,
 } from '../core/state';
 import { garrisonCapOf } from './formulas';
+import { canAttackFactions, isHostile } from './factionDiplomacy';
 
 /**
  * 大地图 AI 的战略评估层。
@@ -180,13 +181,17 @@ export function windowBonusFor(
   if (defTroops <= 150) raw += 0.2;
   else if (defTroops <= 400) raw += 0.1;
 
-  // 多线受敌：目标除我之外还接壤多少个不同势力
+  // 多线受敌：目标除我之外还接壤多少个敌对的第三方势力
   const otherFronts = new Set(
     neighborsOf(state, target.id)
       .map((id) => state.cities[id]?.ownerId)
       .filter(
         (owner): owner is string =>
-          Boolean(owner) && owner !== defOwner && owner !== attackerFactionId,
+          owner !== null &&
+          owner !== undefined &&
+          owner !== defOwner &&
+          owner !== attackerFactionId &&
+          (defOwner ? isHostile(state, defOwner, owner) : true),
       ),
   ).size;
   if (otherFronts >= 2) raw += 0.1;
@@ -229,6 +234,7 @@ export function planAttackCandidates(
     for (const targetId of neighborsOf(state, from.id)) {
       const target = state.cities[targetId];
       if (!target || target.ownerId === factionId) continue;
+      if (!canAttackFactions(state, factionId, target.ownerId)) continue;
       if (
         target.ownerId === state.playerFactionId &&
         state.turn <= BALANCE.AI.graceTurns
@@ -350,6 +356,7 @@ export function adjacentThreat(
   for (const id of neighborsOf(state, cityId)) {
     const city = state.cities[id];
     if (!city || !city.ownerId || city.ownerId === factionId) continue;
+    if (!isHostile(state, factionId, city.ownerId)) continue;
     max = Math.max(max, cityTroops(state, id));
   }
   return max;
@@ -412,6 +419,7 @@ export function planMassingMove(
     for (const targetId of neighborsOf(state, from.id)) {
       const target = state.cities[targetId];
       if (!target || target.ownerId === factionId) continue;
+      if (!canAttackFactions(state, factionId, target.ownerId)) continue;
       if (
         target.ownerId === state.playerFactionId &&
         state.turn <= BALANCE.AI.graceTurns

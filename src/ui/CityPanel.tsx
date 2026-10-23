@@ -26,6 +26,8 @@ import { edictCapOf, edictLeftOf, troopCapOf } from '../systems/domestic';
 import { PROJECTS, PROJECT_ORDER } from '../data/tables/projects';
 import { projectStartReason } from '../systems/projects';
 import { persuadePlan } from '../systems/diplomacy';
+import { canAttackFactions } from '../systems/factionDiplomacy';
+import { canAbandonCity } from '../systems/abandon';
 import {
   policyFoodMult,
   policyRecruitCostMult,
@@ -140,6 +142,7 @@ export function CityPanel({
   const [tradeMode, setTradeMode] = useState<'buy' | 'sell'>('buy');
   const [tradeAmount, setTradeAmount] = useState(100);
   const [dipOpen, setDipOpen] = useState(false);
+  const [abandonOpen, setAbandonOpen] = useState(false);
   const [executeId, setExecuteId] = useState<string | null>(null);
 
   /** 右栏视图分区：城务（内政/征兵/交易）与人务（忠诚/武将/俘虏） */
@@ -193,10 +196,19 @@ export function CityPanel({
       city
         ? neighborsOf(state, city.id)
             .map((id) => state.cities[id]!)
-            .filter((c) => c && c.ownerId !== state.playerFactionId)
+            .filter(
+              (c) =>
+                c &&
+                c.ownerId !== state.playerFactionId &&
+                canAttackFactions(state, state.playerFactionId, c.ownerId),
+            )
         : [],
     [state, city],
   );
+  const abandonCheck =
+    city && isMine
+      ? canAbandonCity(state, city.id, state.playerFactionId)
+      : { ok: false, reason: '非己方城池' };
   const adjacentMine = useMemo(
     () =>
       city
@@ -1148,8 +1160,25 @@ export function CityPanel({
                   .join('、')}${enemyTargets.length > 2 ? ` 等 ${enemyTargets.length} 城` : ''}`
               : '无相邻敌城'}
           </button>
-          <button className="btn" disabled={!agent} onClick={() => setDipOpen(true)}>
-            外交
+          <button
+            className="btn"
+            disabled={!agent}
+            title="离间 / 招揽 / 策反敌将"
+            onClick={() => setDipOpen(true)}
+          >
+            敌将
+          </button>
+          <button
+            className="btn ghost"
+            disabled={!abandonCheck.ok}
+            title={
+              abandonCheck.ok
+                ? `守军退往 ${state.cities[abandonCheck.toCityId!]?.name ?? '邻城'}，城池交给 ${factionName(state, abandonCheck.toFactionId ?? null)}`
+                : abandonCheck.reason
+            }
+            onClick={() => setAbandonOpen(true)}
+          >
+            弃城撤退
           </button>
         </footer>
       ) : (
@@ -1164,6 +1193,26 @@ export function CityPanel({
           cityId={city.id}
           agentId={agent?.id ?? ''}
           onClose={() => setDipOpen(false)}
+        />
+      ) : null}
+
+      {abandonOpen && abandonCheck.ok ? (
+        <ConfirmDialog
+          title={`弃守 ${city.name}？`}
+          body={`守军将整建制退往 ${state.cities[abandonCheck.toCityId!]?.name ?? '邻城'}，城池交给 ${factionName(
+            state,
+            abandonCheck.toFactionId ?? null,
+          )}；城中粮草、金钱各损失 ${Math.round(
+            BALANCE.ABANDON_SCORCH_RATE * 100,
+          )}%。最后一城不能弃守。`}
+          confirmLabel="弃城撤退"
+          cancelLabel="继续守城"
+          onCancel={() => setAbandonOpen(false)}
+          onConfirm={() => {
+            setAbandonOpen(false);
+            const r = gameStore.dispatch({ t: 'ABANDON_CITY', cityId: city.id });
+            gameStore.notify(r.message, r.ok ? 'warn' : 'danger');
+          }}
         />
       ) : null}
 
@@ -1201,7 +1250,12 @@ export function DeployDialog({
 }) {
   const targets = neighborsOf(state, fromCityId)
     .map((id) => state.cities[id]!)
-    .filter((c) => c && c.ownerId !== state.playerFactionId);
+    .filter(
+      (c) =>
+        c &&
+        c.ownerId !== state.playerFactionId &&
+        canAttackFactions(state, state.playerFactionId, c.ownerId),
+    );
   const [targetId, setTargetId] = useState(initialTargetId || targets[0]?.id || '');
   useEscape(onClose);
   const target = state.cities[targetId];

@@ -211,6 +211,31 @@ export interface Faction {
   cityIds: string[];
 }
 
+/** 势力关系：战争 / 停战 / 同盟 */
+export type RelationState = 'war' | 'truce' | 'alliance';
+
+export interface FactionRelation {
+  state: RelationState;
+  /** -100..100，越高越愿意停战 / 结盟 */
+  score: number;
+  /** 停战 / 同盟到期回合（含）；war 时为空 */
+  untilTurn?: number;
+  /** 最近一次收到求和建议的回合，避免每月骚扰 */
+  offeredAtTurn?: number;
+}
+
+export interface DiplomacyState {
+  /** key = 两个 faction id 排序后用 | 连接 */
+  relations: Record<string, FactionRelation>;
+}
+
+/** AI 主动向玩家发来的外交请求，等待玩家接受 / 拒绝 */
+export interface PendingDiplomacy {
+  fromFactionId: string;
+  kind: 'truce' | 'alliance';
+  turn: number;
+}
+
 /** 大地图道路：cost = 行军天数 【裁决】③ 节点图 */
 export interface MapEdge {
   a: string;
@@ -559,6 +584,10 @@ export interface GameState {
   policy?: PolicyState;
   /** 待处理的月度事件；报告关闭且 AI 队列跑完后弹出 */
   pendingEvent?: PendingEvent;
+  /** 势力外交关系；旧档缺省时按全员战争补齐 */
+  diplomacy?: DiplomacyState;
+  /** AI 的停战 / 结盟请求，玩家处理前不推进新请求 */
+  pendingDiplomacy?: PendingDiplomacy;
   /** 章节目标 */
   chapter?: ChapterState;
   /** 各州传闻：现代模式开局生成，每州 3 条且恰好 1 条为真 */

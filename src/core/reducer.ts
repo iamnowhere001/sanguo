@@ -54,6 +54,12 @@ import {
 } from '../systems/battle';
 import { continueAiPhase, startAiPhase } from '../systems/ai';
 import { doDiplomacy, doPersuadeCity, type DiplomacyKind } from '../systems/diplomacy';
+import {
+  doFactionDiplomacy,
+  respondPendingDiplomacy,
+  type FactionDiplomacyKind,
+} from '../systems/factionDiplomacy';
+import { abandonCity } from '../systems/abandon';
 import { doPrisoner, type PrisonerAction } from '../systems/prisoners';
 import { playerSnapshot } from '../systems/report';
 import { applyPolicyMonthly, choosePolicy } from '../systems/policy';
@@ -83,6 +89,9 @@ export type Action =
   | { t: 'CLASS_CHANGE'; generalId: string; tallyItemId: string }
   | { t: 'MOVE_GENERAL'; generalId: string; toCityId: string }
   | { t: 'DIPLOMACY'; kind: DiplomacyKind; agentId: string; targetGeneralId?: string; targetCityId?: string }
+  | { t: 'FACTION_DIPLOMACY'; kind: FactionDiplomacyKind; targetFactionId: string }
+  | { t: 'RESPOND_DIPLOMACY'; accept: boolean }
+  | { t: 'ABANDON_CITY'; cityId: string }
   | { t: 'PERSUADE_CITY'; cityId: string }
   | { t: 'PRISONER'; prisonerId: string; action: PrisonerAction; agentId?: string }
   | { t: 'DEPLOY'; fromCityId: string; targetCityId: string; generalIds: string[] }
@@ -292,6 +301,18 @@ export function reduce(
       }
       return { state: r.ok ? s : state, result: r };
     }
+    case 'FACTION_DIPLOMACY': {
+      const r = doFactionDiplomacy(s, action.kind, action.targetFactionId);
+      return { state: r.ok ? s : state, result: r };
+    }
+    case 'RESPOND_DIPLOMACY': {
+      const r = respondPendingDiplomacy(s, action.accept);
+      return { state: r.ok ? s : state, result: r };
+    }
+    case 'ABANDON_CITY': {
+      const r = abandonCity(s, action.cityId, s.playerFactionId);
+      return { state: r.ok ? s : state, result: r };
+    }
     case 'PRISONER': {
       const r = doPrisoner(s, action.prisonerId, action.action, action.agentId);
       return { state: r.ok ? s : state, result: r };
@@ -456,8 +477,13 @@ export function reduce(
       if (!s.battle || s.phase !== 'battle') {
         return { state, result: { ok: false, message: '当前无战斗' } };
       }
+      if (s.battle.side !== s.battle.playerSide) {
+        return { state, result: { ok: false, message: '敌方回合，请稍候' } };
+      }
       if (s.battle.playerSide === 'defender') {
-        return { state, result: { ok: false, message: '守城方不能撤退，请死守或放弃城池' } };
+        // 守方弃城撤退：按攻方胜利结算，未溃散守军会撤往相邻友城
+        resolveBattle(s, s.battle, 'victory');
+        return { state: s, result: { ok: true, message: '弃城撤退，守军退往邻城' } };
       }
       resolveBattle(s, s.battle, 'retreat');
       return { state: s, result: { ok: true, message: '已撤退' } };

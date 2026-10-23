@@ -5,6 +5,7 @@ import { chance, draw } from '../core/rng';
 import { fail, type OpResult } from '../core/result';
 import { clamp } from './formulas';
 import { log } from './economy';
+import { canAttackFactions } from './factionDiplomacy';
 import { policyDiplomacyBonus, policyPersuadeBonus } from './policy';
 
 export type DiplomacyKind = 'alienate' | 'poach' | 'defect';
@@ -111,6 +112,9 @@ export function doDiplomacy(
     }
     if (!neighborsOf(state, city.id).includes(targetCity.id)) {
       return fail('只能策反相邻城池');
+    }
+    if (!canAttackFactions(state, state.playerFactionId, targetCity.ownerId)) {
+      return fail('与该势力处于停战/同盟期，需先宣战');
     }
     const governor = governorOf(state, targetCity.id);
     if (!governor) return fail('该城没有可策反的守将');

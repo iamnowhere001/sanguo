@@ -13,6 +13,7 @@ import type {
 } from '../../core/state';
 import { defendersOf, factionTroops, neighborsOf, syncFactionCities } from '../../core/state';
 import { log } from '../economy';
+import { changeRelationScore } from '../factionDiplomacy';
 import { clamp, garrisonCapOf } from '../formulas';
 import { collapseEliminatedFactions } from '../elimination';
 import {
@@ -122,7 +123,7 @@ function troopsInCity(state: GameState, cityId: string): number {
  * 城破后的撤退目的地：相邻友城里空位最多的一座。
  * 全部满员时仍允许退入（败军借道），避免「有路却不能走」。
  */
-function retreatCityFor(
+export function retreatCityFor(
   state: GameState,
   fromCityId: string,
   factionId: string,
@@ -255,6 +256,9 @@ export function resolveBattle(
     }
 
     const oldOwner = target.ownerId;
+    if (oldOwner) {
+      changeRelationScore(state, b.attackerFactionId, oldOwner, -15);
+    }
     target.ownerId = b.attackerFactionId;
     syncFactionCities(state, oldOwner);
     syncFactionCities(state, b.attackerFactionId);

@@ -20,6 +20,7 @@ import {
   objectiveProgress,
   planPilotAction,
   planPilotCommand,
+  retreatCityFor,
   tacticDamageValue,
   tacticRate,
   tacticTargets,
@@ -110,6 +111,10 @@ export function BattleScreen() {
   const state = store.state as GameState;
   const battle = state.battle as BattleState;
   const playerSide = battle.playerSide;
+  const defenderRetreatCity =
+    playerSide === 'defender'
+      ? retreatCityFor(state, battle.targetCityId, battle.defenderFactionId)
+      : null;
   const foeSide = otherSide(playerSide);
   // 经典模式即使读到带题目的旧数据也不显示，避免规则泄漏
   const objectivesEnabled = state.settings.ruleset !== 'classic';
@@ -698,15 +703,13 @@ export function BattleScreen() {
           <button className="btn sm" onClick={() => setSaveOpen(true)} disabled={enemyTurn}>
             存档
           </button>
-          {playerSide === 'attacker' ? (
-            <button
-              className="btn ghost sm"
-              onClick={() => setRetreatOpen(true)}
-              disabled={enemyTurn}
-            >
-              撤退
-            </button>
-          ) : null}
+          <button
+            className="btn ghost sm"
+            onClick={() => setRetreatOpen(true)}
+            disabled={enemyTurn}
+          >
+            {playerSide === 'defender' ? '弃城撤退' : '撤退'}
+          </button>
           <button className="btn primary" onClick={endTurn} disabled={enemyTurn}>
             {readyCount > 0 ? `结束回合（剩 ${readyCount}）` : '结束回合'}
           </button>
@@ -1157,17 +1160,39 @@ export function BattleScreen() {
       {saveOpen ? <SaveDialog mode="save" onClose={() => setSaveOpen(false)} /> : null}
 
       {retreatOpen ? (
-        <ConfirmDialog
-          title="确认撤退？"
-          body={`撤退按战败处理：残兵仅保留 ${Math.round(BALANCE.RETREAT_KEEP_RATE * 100)}%，城池不会易主。`}
-          cancelLabel="继续战斗"
-          confirmLabel="撤退"
-          onCancel={() => setRetreatOpen(false)}
-          onConfirm={() => {
-            setRetreatOpen(false);
-            store.dispatch({ t: 'BATTLE_RETREAT' });
-          }}
-        />
+        playerSide === 'defender' ? (
+          <ConfirmDialog
+            title="弃城撤退？"
+            body={
+              defenderRetreatCity
+                ? `城池将归攻方；未溃散守军退往 ${defenderRetreatCity.name}，保留 ${Math.round(
+                    BALANCE.DEFENDER_RETREAT_KEEP_RATE * 100,
+                  )}% 兵力。`
+                : '城池将归攻方；没有相邻友城，守军将被俘。'
+            }
+            cancelLabel="继续守城"
+            confirmLabel="弃城撤退"
+            onCancel={() => setRetreatOpen(false)}
+            onConfirm={() => {
+              setRetreatOpen(false);
+              store.dispatch({ t: 'BATTLE_RETREAT' });
+            }}
+          />
+        ) : (
+          <ConfirmDialog
+            title="确认撤退？"
+            body={`撤退按战败处理：残兵仅保留 ${Math.round(
+              BALANCE.RETREAT_KEEP_RATE * 100,
+            )}%，城池不会易主。`}
+            cancelLabel="继续战斗"
+            confirmLabel="撤退"
+            onCancel={() => setRetreatOpen(false)}
+            onConfirm={() => {
+              setRetreatOpen(false);
+              store.dispatch({ t: 'BATTLE_RETREAT' });
+            }}
+          />
+        )
       ) : null}
     </div>
   );

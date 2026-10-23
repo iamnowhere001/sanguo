@@ -5,6 +5,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import App from '../src/ui/App';
 import { AudioSettingsButton } from '../src/ui/AudioSettings';
 import { CityPanel } from '../src/ui/CityPanel';
+import { FactionDiplomacyDialog } from '../src/ui/FactionDiplomacyDialog';
 import { RosterDialog } from '../src/ui/RosterDialog';
 import { ReportModal } from '../src/ui/ReportModal';
 import { PolicyModal } from '../src/ui/PolicyModal';
@@ -323,5 +324,78 @@ describe('UI 冒烟', () => {
     expect(el.textContent).toContain('音乐');
     expect(el.textContent).toContain('音效');
     expect(el.querySelectorAll('input[type="range"]').length).toBe(3);
+  });
+
+  it('势力外交弹窗列出国力、关系与行动', async () => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const state = createGame({ playerFactionId: 'liubei', aiEnabled: false });
+    el = document.createElement('div');
+    document.body.appendChild(el);
+    root = createRoot(el);
+    await act(async () => {
+      root!.render(<FactionDiplomacyDialog state={state} onClose={() => {}} />);
+    });
+    expect(el.textContent).toContain('势力外交');
+    expect(el.textContent).toContain('曹操');
+    expect(el.textContent).toContain('战争');
+    expect(el.textContent).toContain('送礼');
+    expect(el.textContent).toContain('停战');
+    expect(el.textContent).toContain('结盟');
+  });
+
+  it('城池面板提供弃城撤退入口', async () => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const state = createGame({ playerFactionId: 'liubei', aiEnabled: false });
+    // 给江夏腾出驻军空间，确保新野守军可以整建制撤过去
+    for (const g of Object.values(state.generals)) {
+      if (g.status === 'active' && g.locationId === 'jiangxia') g.troops = 100;
+    }
+    el = document.createElement('div');
+    document.body.appendChild(el);
+    root = createRoot(el);
+    await act(async () => {
+      root!.render(<CityPanel state={state} cityId="xinye" onDeploy={() => {}} />);
+    });
+    const btn = [...el.querySelectorAll('button')].find(
+      (b) => b.textContent?.trim() === '弃城撤退',
+    );
+    expect(btn).toBeTruthy();
+    expect(btn!.disabled).toBe(false);
+  });
+
+  it('守城战显示弃城撤退按钮', async () => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const state = createGame({ playerFactionId: 'liubei', aiEnabled: false });
+    state.turn = 3;
+    state.generals.caocao!.troops = 3000;
+    createBattle(state, 'xuchang', 'xinye', ['caocao'], 'caocao');
+    gameStore.start(state);
+    el = document.createElement('div');
+    document.body.appendChild(el);
+    root = createRoot(el);
+    await act(async () => {
+      root!.render(<App />);
+    });
+    expect(el.textContent).toContain('弃城撤退');
+  });
+
+  it('AI 求和时弹出停战请求', async () => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+    const state = createGame({ playerFactionId: 'liubei', aiEnabled: false });
+    state.pendingDiplomacy = {
+      fromFactionId: 'caocao',
+      kind: 'truce',
+      turn: state.turn,
+    };
+    gameStore.start(state);
+    el = document.createElement('div');
+    document.body.appendChild(el);
+    root = createRoot(el);
+    await act(async () => {
+      root!.render(<App />);
+    });
+    expect(el.textContent).toContain('停战请求');
+    expect(el.textContent).toContain('接受停战');
+    expect(el.textContent).toContain('拒绝');
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createGame } from '../src/data/tables/scenarios';
+import { reduce } from '../src/core/reducer';
 import type { BattleState, GameState } from '../src/core/state';
 import { activeUnits, createBattle, resolveBattle } from '../src/systems/battle';
 
@@ -112,5 +113,53 @@ describe('城破守军撤退', () => {
     for (const u of Object.values(b.units).filter((x) => x.side === 'defender')) {
       expect(['captured', 'inactive']).toContain(s.generals[u.generalId]!.status);
     }
+  });
+
+  it('无守军的城池被占领时，零兵守将也撤往友城', () => {
+    const s = fresh(307);
+    const defenders = Object.values(s.generals).filter(
+      (g) => g.status === 'active' && g.locationId === 'xiangyang',
+    );
+    expect(defenders.length).toBeGreaterThan(0);
+    for (const g of defenders) g.troops = 0;
+
+    const r = createBattle(s, 'jiangxia', 'xiangyang', ['liubei']);
+
+    expect(r.result.ok).toBe(true);
+    expect(s.cities.xiangyang!.ownerId).toBe('liubei');
+    for (const g of defenders) {
+      expect(g.status).toBe('active');
+      expect(g.locationId).toBe('jiangling');
+    }
+  });
+
+  it('守方可以在战棋内主动弃城撤退', () => {
+    const s = fresh(306);
+    s.turn = 3;
+    s.generals.caocao!.troops = 3000;
+    const { battle } = createBattle(s, 'xuchang', 'xinye', ['caocao'], 'caocao');
+    expect(battle).toBeDefined();
+    const b = battle!;
+    expect(b.playerSide).toBe('defender');
+    const defenders = activeUnits(b, 'defender');
+    for (const u of defenders) {
+      u.troops = 800;
+      u.maxTroops = 800;
+    }
+
+    const out = reduce(s, { t: 'BATTLE_RETREAT' });
+    expect(out.result.ok).toBe(true);
+    const next = out.state;
+
+    expect(next.phase).toBe('map');
+    expect(next.cities.xinye!.ownerId).toBe('caocao');
+    for (const u of defenders) {
+      const g = next.generals[u.generalId]!;
+      expect(g.status).toBe('active');
+      expect(g.locationId).toBe('jiangxia');
+      expect(g.troops).toBe(560);
+    }
+    expect(next.report?.title).toBe('城池失守');
+    expect(next.report?.lines.some((l) => l.text.includes('退往'))).toBe(true);
   });
 });

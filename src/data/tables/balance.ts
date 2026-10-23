@@ -205,6 +205,8 @@ export const BALANCE = {
    * 无相邻友城时仍按被俘 / 溃散处理，避免“永远抓不到将”。
    */
   DEFENDER_RETREAT_KEEP_RATE: 0.7,
+  /** 弃城时带不走的粮草 / 金钱损失比例 */
+  ABANDON_SCORCH_RATE: 0.5,
   ARCHER_RANGE: [2, 3] as [number, number],
   /** 【优化】§3.1 弓兵贴脸（距离 1）伤害 ×0.5 */
   ARCHER_MELEE_PENALTY: 0.5,

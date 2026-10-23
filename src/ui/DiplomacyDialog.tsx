@@ -67,7 +67,7 @@ export function DiplomacyDialog({
     <div className="modal" onClick={onClose}>
       <div className="modal-card" onClick={(e) => e.stopPropagation()}>
         <header className="modal-head">
-          <h3>外交</h3>
+          <h3>敌将外交</h3>
           <button className="btn ghost sm" onClick={onClose}>
             关闭
           </button>

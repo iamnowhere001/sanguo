@@ -8,6 +8,7 @@ import { MapCanvas } from '../render/MapCanvas';
 import { audio } from '../audio';
 import { AudioSettingsButton } from './AudioSettings';
 import { CityPanel, DeployDialog } from './CityPanel';
+import { FactionDiplomacyDialog } from './FactionDiplomacyDialog';
 import { FactionRail } from './FactionRail';
 import { RosterDialog } from './RosterDialog';
 import { SaveDialog } from './SaveDialog';
@@ -18,6 +19,7 @@ import { Bar } from './atoms';
 import { ConfirmDialog, cityTroops, factionColor, factionName, fmt } from './common';
 import { activePolicy } from '../systems/policy';
 import { buildCouncilBrief } from '../systems/council';
+import { canAttackFactions } from '../systems/factionDiplomacy';
 
 export function MapScreen() {
   const store = useGameStore();
@@ -44,6 +46,7 @@ export function MapScreen() {
   const [deploy, setDeploy] = useState<{ from: string; target: string } | null>(null);
   const [saveOpen, setSaveOpen] = useState(false);
   const [rosterOpen, setRosterOpen] = useState(false);
+  const [factionDipOpen, setFactionDipOpen] = useState(false);
   const [confirmTurn, setConfirmTurn] = useState<string | null>(null);
   const [quitOpen, setQuitOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -56,7 +59,11 @@ export function MapScreen() {
     if (!c || c.ownerId !== state.playerFactionId) return [];
     return neighborsOf(state, selectedCityId).filter((id) => {
       const n = state.cities[id];
-      return n && n.ownerId !== state.playerFactionId;
+      return (
+        n &&
+        n.ownerId !== state.playerFactionId &&
+        canAttackFactions(state, state.playerFactionId, n.ownerId)
+      );
     });
   }, [state, selectedCityId]);
 
@@ -66,7 +73,13 @@ export function MapScreen() {
     for (const c of mine) {
       for (const id of neighborsOf(state, c.id)) {
         const n = state.cities[id];
-        if (n && n.ownerId !== state.playerFactionId) set.add(id);
+        if (
+          n &&
+          n.ownerId !== state.playerFactionId &&
+          canAttackFactions(state, state.playerFactionId, n.ownerId)
+        ) {
+          set.add(id);
+        }
       }
     }
     return set;
@@ -226,6 +239,13 @@ export function MapScreen() {
               title="查看全势力武将分布"
             >
               武将 {generals.length}
+            </button>
+            <button
+              className="btn sm"
+              onClick={() => setFactionDipOpen(true)}
+              title="势力外交：送礼 / 停战 / 结盟 / 宣战"
+            >
+              外交
             </button>
             <button className="btn sm" onClick={() => setSaveOpen(true)}>
               存档
@@ -494,6 +514,33 @@ export function MapScreen() {
           fromCityId={deploy.from}
           initialTargetId={deploy.target}
           onClose={() => setDeploy(null)}
+        />
+      ) : null}
+
+      {factionDipOpen ? (
+        <FactionDiplomacyDialog
+          state={state}
+          onClose={() => setFactionDipOpen(false)}
+        />
+      ) : null}
+
+      {state.pendingDiplomacy && !state.report && !state.pendingEvent && !state.unifyReady ? (
+        <ConfirmDialog
+          title="停战请求"
+          body={`${factionName(
+            state,
+            state.pendingDiplomacy.fromFactionId,
+          )} 遣使求和。接受后停战 12 回合，双方不得出兵；拒绝会进一步恶化关系。`}
+          confirmLabel="接受停战"
+          cancelLabel="拒绝"
+          onConfirm={() => {
+            const r = store.dispatch({ t: 'RESPOND_DIPLOMACY', accept: true });
+            gameStore.notify(r.message, 'good');
+          }}
+          onCancel={() => {
+            const r = store.dispatch({ t: 'RESPOND_DIPLOMACY', accept: false });
+            gameStore.notify(r.message, 'warn');
+          }}
         />
       ) : null}
 

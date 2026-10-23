@@ -3,6 +3,7 @@ import { emptyMonthFacts } from '../core/state';
 import { createStreams, RANDOM_STREAMS, streamFor, type RngState } from '../core/rng';
 import { createChapter, ensureChapterShape } from '../systems/chapter';
 import { attachBattleObjectives } from '../systems/battle/objectives';
+import { ensureDiplomacy } from '../systems/factionDiplomacy';
 
 const DEFAULT_SETTINGS: GameState['settings'] = {
   easterEggEnabled: false,
@@ -112,6 +113,9 @@ export function migrateSave(state: GameState): GameState {
     // 旧战斗存档没有题目：按当前战役上下文补一份，保证读档续战也有一战一题。
     attachBattleObjectives(state, state.battle);
   }
+
+  // 旧存档没有势力外交关系：补齐全员战争
+  ensureDiplomacy(state);
 
   return state;
 }

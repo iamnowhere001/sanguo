@@ -20,9 +20,10 @@ import {
 import { log } from '../economy';
 import { policyTacticBonus } from '../policy';
 import { checkActProgress, recordCityCaptured } from '../chapter';
+import { canAttackFactions } from '../factionDiplomacy';
 import { emptyGrid, moveRangeOf, SPAWN_ATTACKER, SPAWN_DEFENDER } from './grid';
 import { planBattleObjectives } from './objectives';
-import { checkGameOver } from './resolve';
+import { checkGameOver, retreatCityFor } from './resolve';
 
 /** 从指定战斗流掷天气；返回新流状态，避免偷用其它系统的随机数 */
 function rollWeather(rng: RngState): { weather: Weather; rng: RngState } {
@@ -89,6 +90,23 @@ function captureUndefended(
   const city = state.cities[targetCityId]!;
   const oldOwner = city.ownerId;
   const attacker = state.factions[attackerFactionId];
+
+  // 无兵守将也随城破撤退，避免留在敌城里“原地复活”
+  const retreat = oldOwner ? retreatCityFor(state, targetCityId, oldOwner) : null;
+  for (const g of Object.values(state.generals)) {
+    if (g.status !== 'active' || g.locationId !== targetCityId) continue;
+    if (retreat) {
+      g.locationId = retreat.id;
+      g.troops = Math.max(
+        0,
+        Math.floor(g.troops * BALANCE.DEFENDER_RETREAT_KEEP_RATE),
+      );
+    } else {
+      g.status = 'inactive';
+      g.troops = 0;
+    }
+  }
+
   city.ownerId = attackerFactionId;
   for (const g of generals) g.locationId = targetCityId;
   syncFactionCities(state, oldOwner);
@@ -131,6 +149,12 @@ export function createBattle(
   if (!target) return { result: fail('目标城池不存在') };
   if (from.ownerId !== attackerFactionId) return { result: fail('只能从己方城池出征') };
   if (target.ownerId === attackerFactionId) return { result: fail('目标已是己方城池') };
+  if (!canAttackFactions(state, attackerFactionId, target.ownerId)) {
+    const name = target.ownerId
+      ? state.factions[target.ownerId]?.name ?? target.ownerId
+      : '该势力';
+    return { result: fail(`与 ${name} 处于停战/同盟期，需先宣战`) };
+  }
   if (!neighborsOf(state, fromCityId).includes(targetCityId)) {
     return { result: fail('目标城池与出发城池不相邻') };
   }

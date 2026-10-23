@@ -18,6 +18,8 @@ import {
   planReinforcement,
   type StrategicMove,
 } from './aiStrategy';
+import { aiDiplomacyTick, tickDiplomacy } from './factionDiplomacy';
+import { abandonCity, planAbandonment } from './abandon';
 import { log } from './economy';
 import { buildMonthReport } from './report';
 
@@ -130,7 +132,21 @@ export function runAiFaction(state: GameState, factionId: string): 'battle' | 'd
     tagAiLogs(state, start);
   }
 
-  // ③ 战略机动：边境增援、换防、协同集结
+  // ③ 外交：弱国互相停战 / 被压制时向玩家求和
+  aiDiplomacyTick(state, factionId);
+  // 已经向玩家递出求和信的势力，本月不再进攻玩家
+  const awaitingPlayer = state.pendingDiplomacy?.fromFactionId === factionId;
+
+  // ④ 战前弃城：守不住的边境城，先撤人再丢城
+  if (state.gameOver) return 'done';
+  const abandon = planAbandonment(state, factionId, difficulty);
+  if (abandon) {
+    const start = state.log.length;
+    abandonCity(state, abandon.cityId, factionId);
+    tagAiLogs(state, start);
+  }
+
+  // ⑤ 战略机动：边境增援、换防、协同集结
   if (state.gameOver) return 'done';
   const foodReserve =
     monthlyFoodUpkeep(factionTroops(state, factionId), factionEliteTroops(state, factionId)) *
@@ -148,11 +164,17 @@ export function runAiFaction(state: GameState, factionId: string): 'battle' | 'd
     }
   }
 
-  // ④ 出兵：一月多路，每次出兵后重新评估；玩家防守战会暂停队列
+  // ⑥ 出兵：一月多路，每次出兵后重新评估；玩家防守战会暂停队列
   const maxAttacks = Math.max(1, difficulty.maxAttacksPerMonth);
   let attacks = 0;
   while (attacks < maxAttacks && !state.gameOver) {
-    const plan = planAttackCandidates(state, factionId, difficulty)[0];
+    const plan = planAttackCandidates(state, factionId, difficulty).find(
+      (c) =>
+        !(
+          awaitingPlayer &&
+          state.cities[c.targetId]?.ownerId === state.playerFactionId
+        ),
+    );
     if (!plan) break;
     attacks += 1;
 
@@ -200,6 +222,8 @@ export function aiFactionIds(state: GameState): string[] {
 /** 月结后启动 AI 队列；若 AI 进攻玩家，会停在战棋阶段 */
 export function startAiPhase(state: GameState): void {
   if (state.gameOver) return;
+  // 停战 / 同盟到期结算：每月一次
+  tickDiplomacy(state);
   if (!state.settings.aiEnabled) {
     state.aiQueue = [];
     continueAiPhase(state);
