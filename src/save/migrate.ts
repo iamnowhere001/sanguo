@@ -1,7 +1,7 @@
 import type { GameState } from '../core/state';
 import { emptyMonthFacts } from '../core/state';
 import { createStreams, RANDOM_STREAMS, streamFor, type RngState } from '../core/rng';
-import { createChapter } from '../systems/chapter';
+import { createChapter, ensureChapterShape } from '../systems/chapter';
 import { attachBattleObjectives } from '../systems/battle/objectives';
 
 const DEFAULT_SETTINGS: GameState['settings'] = {
@@ -59,7 +59,13 @@ export function migrateSave(state: GameState): GameState {
 
   state.policy ??= { offer: [] };
   state.chapter ??= createChapter(state);
+  // E7：旧章节（三个数字目标）没有 version，迁移时按当前版图重建为三幕。
+  ensureChapterShape(state);
   state.rumors ??= [];
+  if (state.gameOver && !state.gameOver.ending) {
+    state.gameOver.ending =
+      state.gameOver.result === 'victory' ? 'unification' : 'defeat';
+  }
 
   for (const c of Object.values(state.cities)) {
     c.training ??= 0;

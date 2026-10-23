@@ -13,6 +13,7 @@ import { RosterDialog } from './RosterDialog';
 import { SaveDialog } from './SaveDialog';
 import { ChapterBar } from './ChapterBar';
 import { CouncilModal } from './CouncilModal';
+import { ActCouncilModal } from './ActCouncilModal';
 import { Bar } from './atoms';
 import { ConfirmDialog, cityTroops, factionColor, factionName, fmt } from './common';
 import { activePolicy } from '../systems/policy';
@@ -83,6 +84,13 @@ export function MapScreen() {
     () => (modern ? buildCouncilBrief(state) : null),
     [state, modern],
   );
+  const actCouncilPending = Boolean(state.chapter?.pendingCouncil);
+  const actCouncilOpen =
+    actCouncilPending &&
+    !state.report &&
+    !state.aiQueue &&
+    !state.pendingMonth &&
+    state.phase === 'map';
   const topAdvice = councilBrief
     ? (councilBrief.cards.find((c) => c.tone === 'danger') ??
       councilBrief.cards.find((c) => c.tone === 'warn') ??
@@ -105,6 +113,7 @@ export function MapScreen() {
         rosterOpen ||
         quitOpen ||
         councilOpen ||
+        actCouncilPending ||
         Boolean(state.report) ||
         Boolean(state.unifyReady) ||
         Boolean(state.pendingEvent) ||
@@ -133,7 +142,20 @@ export function MapScreen() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [helpOpen, deploy, saveOpen, rosterOpen, quitOpen, councilOpen, modern, state.report, state.unifyReady, state.pendingEvent, state.policy?.offer]);
+  }, [
+    helpOpen,
+    deploy,
+    saveOpen,
+    rosterOpen,
+    quitOpen,
+    councilOpen,
+    actCouncilPending,
+    modern,
+    state.report,
+    state.unifyReady,
+    state.pendingEvent,
+    state.policy?.offer,
+  ]);
 
   return (
     <div className="map-screen">
@@ -293,7 +315,9 @@ export function MapScreen() {
         ) : null}
       </header>
 
-      {state.settings.ruleset !== 'classic' ? <ChapterBar state={state} /> : null}
+      {state.settings.ruleset !== 'classic' ? (
+        <ChapterBar state={state} onSelectCity={setSelectedCityId} />
+      ) : null}
 
       {modern && councilBrief && topAdvice ? (
         <button
@@ -461,6 +485,8 @@ export function MapScreen() {
           onSelectCity={setSelectedCityId}
         />
       ) : null}
+
+      {actCouncilOpen ? <ActCouncilModal state={state} /> : null}
 
       {deploy ? (
         <DeployDialog

@@ -266,8 +266,65 @@ export const BALANCE = {
     FLANK: { one: 1.08, two: 1.15, three: 1.2 },
     /** 现代模式每月触发事件的概率 */
     EVENT_CHANCE: 0.45,
-    /** 章节完成奖励 */
-    CHAPTER_REWARD_GOLD: 800,
+    /**
+     * E7 一局三幕：幕目标、幕间选择、转折战与第三幕快进。
+     * 所有阈值与一次性收益集中在这里，systems/ 只推导流程。
+     */
+    ACT: {
+      /** 完成一幕时的全势力赏金 */
+      REWARD_GOLD: 800,
+      /** 第一幕：2–4 城，按开局城数向上取两城 */
+      FOUNDATION_CITY_MIN: 2,
+      FOUNDATION_CITY_MAX: 4,
+      FOUNDATION_CITY_STEP: 2,
+      /** 第二幕：控制四成城池 */
+      CONTEST_SHARE: 0.4,
+      /** 第二幕：击败一个强敌——按存活势力城池 / 兵力排名前 N */
+      STRONG_ENEMY_RANK: 3,
+      STRONG_ENEMY_MIN_CITIES: 3,
+      /** 强敌判定至少要有这么多城，避免把残破小势力当成强敌 */
+      STRONG_ENEMY_MIN_TROOPS: 2000,
+      /** 幕间选择的一次性效果（下标 0 = 一幕→二幕，1 = 二幕→三幕） */
+      CHOICES: {
+        recuperate: {
+          foodPerCity: [300, 550] as [number, number],
+          loyalty: [4, 5] as [number, number],
+        },
+        armament: {
+          troopsPerGeneral: [600, 1000] as [number, number],
+          training: [6, 8] as [number, number],
+        },
+        diplomacy: {
+          goldPerCity: [200, 350] as [number, number],
+          enemyLoyalty: [-3, -4] as [number, number],
+        },
+      },
+      /** 势力身份：持续到下一幕结束，和国策相乘而不是覆盖。 */
+      IDENTITY: {
+        farming: { foodMult: 1.12 },
+        trade: { taxMult: 1.15, tradeLimitMult: 1.25 },
+        military: { recruitCostMult: 0.9, trainingMonthly: 1 },
+        diplomacy: { diplomacyBonus: 12, persuadeBonus: 8 },
+      },
+      /** 转折战：目标奖励与有效期限（回合） */
+      TURNING_BATTLE: {
+        months: 12,
+        rewardGold: [600, 1000] as [number, number],
+        supplyFoodMin: 2200,
+      },
+      /** 第三幕：委任出征只处理 3:1 且没有预备队的普通城 */
+      DELEGATE: {
+        ratio: 3,
+        /** 都城 / 重镇 / 历史城 / 转折战 / 敌国君主所在城必须亲征 */
+        manualLargeFortification: 60,
+        manualHistoricalFortification: 60,
+      },
+      /** 第三幕：裂土分疆的割据结局 */
+      PARTITION: {
+        minShare: 0.4,
+        minTurnsInAct: 6,
+      },
+    },
     /** 战斗题目：主目标期限与达成奖励（支线另算） */
     OBJECTIVE: {
       /** 基准期限；按兵力比 / 城防 / 城池规模浮动 */

@@ -35,7 +35,13 @@ import {
   policyUpkeepMult,
 } from '../systems/policy';
 import { prisonerRecruitRate, prisonersIn } from '../systems/prisoners';
-import { objectiveRewardText, planBattleObjectives } from '../systems/battle';
+import {
+  manualBattleReason,
+  objectiveRewardText,
+  planBattleObjectives,
+  planDelegatedAttack,
+} from '../systems/battle';
+import { actThreeActive } from '../systems/chapter';
 import { gameStore } from '../store/gameStore';
 import { DiplomacyDialog } from './DiplomacyDialog';
 import { ExplorePanel } from './ExplorePanel';
@@ -1227,6 +1233,13 @@ export function DeployDialog({
   );
   const effectiveDefenders = defenderTroops * (1 + fortification / 150);
   const ratio = attackerTroops / Math.max(1, effectiveDefenders);
+  const delegateActive = actThreeActive(state);
+  const manualReason = target ? manualBattleReason(state, target.id) : null;
+  // E7 第三幕快进：在状态副本上跑完整自动战，预览即实际结算结果。
+  const delegatePreview = useMemo(() => {
+    if (!target || !delegateActive) return null;
+    return planDelegatedAttack(state, fromCityId, target.id, selected);
+  }, [state, fromCityId, target, selected, delegateActive]);
 
   // 部署预览与 createBattle 共用同一题目生成函数；经典模式不显示。
   const objectivePreview = useMemo(() => {

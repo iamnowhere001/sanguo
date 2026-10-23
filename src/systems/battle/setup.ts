@@ -7,6 +7,7 @@ import type {
   BattleUnit,
   GameState,
   General,
+  ReportLine,
   Weather,
 } from '../../core/state';
 import {
@@ -18,6 +19,7 @@ import {
 } from '../../core/state';
 import { log } from '../economy';
 import { policyTacticBonus } from '../policy';
+import { checkActProgress, recordCityCaptured } from '../chapter';
 import { emptyGrid, moveRangeOf, SPAWN_ATTACKER, SPAWN_DEFENDER } from './grid';
 import { planBattleObjectives } from './objectives';
 import { checkGameOver } from './resolve';
@@ -94,18 +96,22 @@ function captureUndefended(
   const text = `${city.name} 无守军，${attacker?.name ?? attackerFactionId} 兵不血刃入城`;
   log(state, 'good', text);
   if (attackerFactionId === state.playerFactionId) {
+    const actNote = recordCityCaptured(state, targetCityId, oldOwner);
+    const lines: ReportLine[] = [
+      { label: '结果', text: `${city.name} 已归入我方版图`, tone: 'good' },
+      { label: '守军', text: '无守军，未发生战斗' },
+    ];
+    if (actNote) lines.push({ label: '幕间', text: actNote, tone: 'good' });
     state.report = {
       kind: 'battle',
       title: `${city.name} 不战而下`,
       subtitle: `${state.year} 年 ${state.month} 月 · 自 ${state.cities[fromCityId]?.name} 出征`,
       result: 'victory',
-      lines: [
-        { label: '结果', text: `${city.name} 已归入我方版图`, tone: 'good' },
-        { label: '守军', text: '无守军，未发生战斗' },
-      ],
+      lines,
     };
   }
   checkGameOver(state);
+  checkActProgress(state);
   return done(`${city.name} 已占领`);
 }
 

@@ -17,7 +17,8 @@ function GameScreen({ state }: { state: GameState }) {
     !state.report &&
     !state.aiQueue &&
     !state.pendingMonth &&
-    !state.unifyReady;
+    !state.unifyReady &&
+    !state.chapter?.pendingCouncil;
   return (
     <div className="app-shell">
       {state.phase === 'battle' && state.battle ? <BattleScreen /> : <MapScreen />}

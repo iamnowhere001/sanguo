@@ -11,6 +11,9 @@ export function GameOver({ state }: { state: GameState }) {
   const generals = generalsOf(state, state.playerFactionId).length;
   const troops = generalsOf(state, state.playerFactionId).reduce((s, g) => s + g.troops, 0);
   const win = over.result === 'victory';
+  const partition = win && over.ending === 'partition';
+  const title = partition ? '三分天下' : win ? '天下一统' : '势力覆灭';
+  const eyebrow = partition ? 'PARTITION' : win ? 'UNIFICATION' : 'DEFEAT';
 
   // 结局乐句：与月报/战报的收束音区分开，避免同一时刻两层提示音
   useEffect(() => {
@@ -22,8 +25,8 @@ export function GameOver({ state }: { state: GameState }) {
   return (
     <div className="modal gameover">
       <div className={`modal-card gameover-card ${win ? 'win' : 'lose'}`}>
-        <span className="eyebrow">{win ? 'UNIFICATION' : 'DEFEAT'}</span>
-        <h1>{win ? '天下一统' : '势力覆灭'}</h1>
+        <span className="eyebrow">{eyebrow}</span>
+        <h1>{title}</h1>
         <p className="over-reason">{over.reason}</p>
         <div className="over-stats">
           <div>

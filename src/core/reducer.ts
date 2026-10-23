@@ -1,4 +1,13 @@
-import type { BattleCommand, DomesticCmd, ExploreDirection, GameState, PolicyId, ProjectKind } from './state';
+import type {
+  ActIdentityId,
+  BattleCommand,
+  DomesticCmd,
+  ExploreDirection,
+  GameState,
+  InterActChoiceId,
+  PolicyId,
+  ProjectKind,
+} from './state';
 import { emptyMonthFacts } from './state';
 import { BALANCE } from '../data/tables/balance';
 import { POLICIES } from '../data/tables/policies';
@@ -33,6 +42,7 @@ import {
   castTactic,
   checkGameOver,
   createBattle,
+  executeDelegatedAttack,
   moveUnit,
   performAttack,
   performCharge,
@@ -48,7 +58,13 @@ import { doPrisoner, type PrisonerAction } from '../systems/prisoners';
 import { playerSnapshot } from '../systems/report';
 import { applyPolicyMonthly, choosePolicy } from '../systems/policy';
 import { resolveEvent, maybeScheduleEvent } from '../systems/events';
-import { refreshChapter } from '../systems/chapter';
+import {
+  canPartition,
+  checkActProgress,
+  recordCityCaptured,
+  refreshChapter,
+  resolveActCouncil,
+} from '../systems/chapter';
 import { runProjects, startProject } from '../systems/projects';
 import { runExplorations, startExploration } from '../systems/exploration';
 import { COUNCIL_PROFILES, planCouncilDelegation, type CouncilProfile } from '../systems/council';
@@ -80,8 +96,11 @@ export type Action =
   | { t: 'BATTLE_END_TURN' }
   | { t: 'BATTLE_RETREAT' }
   | { t: 'DISMISS_REPORT' }
+  | { t: 'RESOLVE_ACT_COUNCIL'; choiceId: InterActChoiceId; identityId: ActIdentityId }
+  | { t: 'DELEGATE_ATTACK'; fromCityId: string; targetCityId: string; generalIds: string[] }
   | { t: 'UNIFY' }
   | { t: 'DISMISS_UNIFY' }
+  | { t: 'PARTITION' }
   | { t: 'CHOOSE_POLICY'; policyId: PolicyId }
   | { t: 'RESOLVE_EVENT'; optionId: string }
   | { t: 'END_TURN'; confirmed?: boolean };
@@ -249,6 +268,10 @@ export function reduce(
       return { state: r.ok ? s : state, result: r };
     }
     case 'DIPLOMACY': {
+      const oldOwner =
+        action.kind === 'defect' && action.targetCityId
+          ? s.cities[action.targetCityId]?.ownerId ?? null
+          : null;
       const r = doDiplomacy(
         s,
         action.kind,
@@ -256,7 +279,17 @@ export function reduce(
         action.targetGeneralId,
         action.targetCityId,
       );
-      if (r.ok && r.success) checkGameOver(s);
+      if (r.ok && r.success) {
+        if (
+          action.kind === 'defect' &&
+          action.targetCityId &&
+          oldOwner !== s.playerFactionId
+        ) {
+          recordCityCaptured(s, action.targetCityId, oldOwner);
+        }
+        checkGameOver(s);
+        checkActProgress(s);
+      }
       return { state: r.ok ? s : state, result: r };
     }
     case 'PRISONER': {
@@ -264,8 +297,15 @@ export function reduce(
       return { state: r.ok ? s : state, result: r };
     }
     case 'PERSUADE_CITY': {
+      const oldOwner = s.cities[action.cityId]?.ownerId ?? null;
       const r = doPersuadeCity(s, action.cityId);
-      if (r.ok && r.success) checkGameOver(s);
+      if (r.ok && r.success) {
+        if (oldOwner !== s.playerFactionId) {
+          recordCityCaptured(s, action.cityId, oldOwner);
+        }
+        checkGameOver(s);
+        checkActProgress(s);
+      }
       return { state: r.ok ? s : state, result: r };
     }
     case 'DEPLOY': {
@@ -427,7 +467,27 @@ export function reduce(
       if (s.aiQueue || s.pendingMonth) {
         continueAiPhase(s);
       }
+      checkActProgress(s);
       return { state: s, result: { ok: true, message: '' } };
+    }
+    case 'RESOLVE_ACT_COUNCIL': {
+      if (!resolveActCouncil(s, action.choiceId, action.identityId)) {
+        return { state, result: { ok: false, message: '幕间朝议尚未就绪' } };
+      }
+      checkGameOver(s);
+      return { state: s, result: { ok: true, message: '幕间朝议已定' } };
+    }
+    case 'DELEGATE_ATTACK': {
+      if (s.settings.ruleset === 'classic') {
+        return { state, result: { ok: false, message: '经典模式没有委任出征' } };
+      }
+      const r = executeDelegatedAttack(
+        s,
+        action.fromCityId,
+        action.targetCityId,
+        action.generalIds,
+      );
+      return { state: r.ok ? s : state, result: r };
     }
     case 'UNIFY': {
       if (!s.unifyReady) {
@@ -435,13 +495,36 @@ export function reduce(
       }
       s.unifyReady = false;
       s.phase = 'gameover';
-      s.gameOver = { result: 'victory', reason: '大势已定，天下一统' };
+      s.gameOver = {
+        result: 'victory',
+        reason: '大势已定，天下一统',
+        ending: 'unification',
+      };
       return { state: s, result: { ok: true, message: '天下一统' } };
     }
     case 'DISMISS_UNIFY': {
       s.unifyReady = false;
       s.unifyDismissedTurn = s.turn;
       return { state: s, result: { ok: true, message: '继续亲征' } };
+    }
+    case 'PARTITION': {
+      if (s.settings.ruleset === 'classic') {
+        return { state, result: { ok: false, message: '经典模式没有割据结局' } };
+      }
+      if (!canPartition(s)) {
+        return {
+          state,
+          result: { ok: false, message: '尚未满足割据条件：第三幕控制四成城池并立足六个月' },
+        };
+      }
+      s.unifyReady = false;
+      s.phase = 'gameover';
+      s.gameOver = {
+        result: 'victory',
+        reason: '裂土分疆，三分天下——以割据结局收束本局',
+        ending: 'partition',
+      };
+      return { state: s, result: { ok: true, message: '裂土分疆' } };
     }
     case 'CHOOSE_POLICY': {
       if (s.settings.ruleset === 'classic') {

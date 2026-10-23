@@ -3,6 +3,15 @@ import { POLICIES, POLICY_LIST, type PolicyDef } from '../data/tables/policies';
 import { nextFloat, streamFor } from '../core/rng';
 import type { GameState, PolicyId } from '../core/state';
 import { citiesOf } from '../core/state';
+import {
+  identityDiplomacyBonus,
+  identityFoodMult,
+  identityPersuadeBonus,
+  identityRecruitCostMult,
+  identityTaxMult,
+  identityTradeLimitMult,
+  identityTrainingMonthly,
+} from './actIdentity';
 
 /**
  * 国策系统。
@@ -18,7 +27,7 @@ export function activePolicy(state: GameState): PolicyDef | undefined {
 }
 
 export function policyFoodMult(state: GameState): number {
-  return activePolicy(state)?.foodMult ?? 1;
+  return (activePolicy(state)?.foodMult ?? 1) * identityFoodMult(state);
 }
 
 export function policyCommerceMult(state: GameState): number {
@@ -26,15 +35,15 @@ export function policyCommerceMult(state: GameState): number {
 }
 
 export function policyTaxMult(state: GameState): number {
-  return activePolicy(state)?.taxMult ?? 1;
+  return (activePolicy(state)?.taxMult ?? 1) * identityTaxMult(state);
 }
 
 export function policyTradeLimitMult(state: GameState): number {
-  return activePolicy(state)?.tradeLimitMult ?? 1;
+  return (activePolicy(state)?.tradeLimitMult ?? 1) * identityTradeLimitMult(state);
 }
 
 export function policyRecruitCostMult(state: GameState): number {
-  return activePolicy(state)?.recruitCostMult ?? 1;
+  return (activePolicy(state)?.recruitCostMult ?? 1) * identityRecruitCostMult(state);
 }
 
 export function policySearchCostMult(state: GameState): number {
@@ -54,11 +63,11 @@ export function policyDisasterMult(state: GameState): number {
 }
 
 export function policyDiplomacyBonus(state: GameState): number {
-  return activePolicy(state)?.diplomacyBonus ?? 0;
+  return (activePolicy(state)?.diplomacyBonus ?? 0) + identityDiplomacyBonus(state);
 }
 
 export function policyPersuadeBonus(state: GameState): number {
-  return activePolicy(state)?.persuadeBonus ?? 0;
+  return (activePolicy(state)?.persuadeBonus ?? 0) + identityPersuadeBonus(state);
 }
 
 export function policyTacticBonus(state: GameState): number {
@@ -115,15 +124,14 @@ export function choosePolicy(state: GameState, policyId: PolicyId): boolean {
   return true;
 }
 
-/** 月结国策效果：训练度 / 民忠的持续修正 */
+/** 月结国策 / 幕间身份效果：训练度与民忠的持续修正 */
 export function applyPolicyMonthly(state: GameState): void {
   const def = activePolicy(state);
-  if (!def) return;
   const cities = citiesOf(state, state.playerFactionId);
   if (cities.length === 0) return;
 
-  const training = def.trainingMonthly ?? 0;
-  const loyalty = def.loyaltyMonthly ?? 0;
+  const training = (def?.trainingMonthly ?? 0) + identityTrainingMonthly(state);
+  const loyalty = def?.loyaltyMonthly ?? 0;
   if (training === 0 && loyalty === 0) return;
 
   for (const c of cities) {
@@ -138,9 +146,15 @@ export function applyPolicyMonthly(state: GameState): void {
   const parts: string[] = [];
   if (training !== 0) parts.push(`训练 ${training > 0 ? '+' : ''}${training}`);
   if (loyalty !== 0) parts.push(`民忠 ${loyalty > 0 ? '+' : ''}${loyalty}`);
+  const source = [
+    def ? `国策「${def.name}」` : '',
+    identityTrainingMonthly(state) > 0 ? '军事身份' : '',
+  ]
+    .filter(Boolean)
+    .join(' / ');
   state.log.push({
     turn: state.turn,
     kind: 'info',
-    text: `国策「${def.name}」：${parts.join('，')}（${cities.length} 城）`,
+    text: `${source || '月度整训'}：${parts.join('，')}（${cities.length} 城）`,
   });
 }

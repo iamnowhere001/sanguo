@@ -13,6 +13,13 @@ import { factionTroops, syncFactionCities } from '../../core/state';
 import { log } from '../economy';
 import { clamp } from '../formulas';
 import { collapseEliminatedFactions } from '../elimination';
+import {
+  checkActProgress,
+  isStrongFaction,
+  recordBattleResult,
+  recordCityCaptured,
+  recordCityLost,
+} from '../chapter';
 import { grantExp } from './combat';
 import { activeUnits, otherSide } from './grid';
 import {
@@ -116,6 +123,10 @@ export function resolveBattle(
 ): void {
   const from = state.cities[b.fromCityId];
   const target = state.cities[b.targetCityId];
+  // 强敌判定必须在占城结算之前取快照；否则守方丢城后会立刻“变弱”。
+  const defenderWasStrong =
+    b.playerSide === 'attacker' && isStrongFaction(state, b.defenderFactionId);
+  let actCaptureNote: string | undefined;
   const attackerUnits = Object.values(b.units).filter((u) => u.side === 'attacker');
   const defenderUnits = Object.values(b.units).filter((u) => u.side === 'defender');
 
@@ -186,6 +197,13 @@ export function resolveBattle(
     target.ownerId = b.attackerFactionId;
     syncFactionCities(state, oldOwner);
     syncFactionCities(state, b.attackerFactionId);
+    if (b.playerInvolved) {
+      if (b.attackerFactionId === state.playerFactionId) {
+        actCaptureNote = recordCityCaptured(state, b.targetCityId, oldOwner);
+      } else if (oldOwner === state.playerFactionId) {
+        recordCityLost(state, b.targetCityId);
+      }
+    }
     log(
       state,
       'danger',
@@ -211,6 +229,13 @@ export function resolveBattle(
   }
 
   const playerWon = b.playerSide === 'attacker' ? outcome === 'victory' : outcome !== 'victory';
+  if (b.playerInvolved) {
+    recordBattleResult(state, {
+      side: b.playerSide,
+      won: playerWon,
+      defenderWasStrong,
+    });
+  }
   const playerUnits = Object.values(b.units).filter((u) => u.side === b.playerSide);
   const playerTroopsNow = playerUnits.reduce((sum, u) => sum + u.troops, 0);
   const foeTroopsNow = Object.values(b.units)
@@ -303,6 +328,9 @@ export function resolveBattle(
         lines.push({ label: '战利', text: r.rewardText, tone: 'good' });
       }
     }
+    if (actCaptureNote) {
+      lines.push({ label: '幕间', text: actCaptureNote, tone: 'good' });
+    }
 
     state.report = {
       kind: 'battle',
@@ -322,6 +350,7 @@ export function resolveBattle(
   state.battle = undefined;
   state.phase = 'map';
   checkGameOver(state);
+  checkActProgress(state);
 }
 
 export function checkGameOver(state: GameState): void {
@@ -354,6 +383,15 @@ export function checkGameOver(state: GameState): void {
  * 满足时给出提示，玩家可直接统一，也可继续亲征；拒绝后 3 回合内不再弹窗。
  */
 function checkUnify(state: GameState, mine: number, alive: Faction[]): void {
+  // E7：现代模式把“大势已定”放进第三幕；经典模式没有幕，保持原行为。
+  if (
+    state.settings.ruleset !== 'classic' &&
+    state.chapter &&
+    state.chapter.stage < 2
+  ) {
+    state.unifyReady = false;
+    return;
+  }
   const total = Object.keys(state.cities).length;
   if (total === 0 || mine / total < 0.7) {
     state.unifyReady = false;

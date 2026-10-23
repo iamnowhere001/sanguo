@@ -235,7 +235,16 @@ export interface PendingEvent {
   turn: number;
 }
 
-export type ChapterGoalKind = 'cities' | 'troops' | 'gold';
+export type ChapterGoalKind =
+  | 'cities'
+  | 'share'
+  | 'defense'
+  | 'strongEnemy'
+  | 'unify'
+  | 'partition'
+  /** 旧档兼容：E7 前的兵力 / 府库目标 */
+  | 'troops'
+  | 'gold';
 
 export interface ChapterGoal {
   id: string;
@@ -244,10 +253,67 @@ export interface ChapterGoal {
   target: number;
 }
 
-/** 章节目标：每完成一组目标推进到下一章，给长局提供阶段感 */
+/** 势力身份：幕间朝议确认后，为下一幕提供长期的 build 方向。 */
+export type ActIdentityId = 'farming' | 'trade' | 'military' | 'diplomacy';
+
+/** 幕间三选一；不是普通国策，只在两幕之间出现一次。 */
+export type InterActChoiceId = 'recuperate' | 'armament' | 'diplomacy';
+
+/** 转折战的三种叙事来源，决定文案与目标筛选倾向。 */
+export type TurningBattleKind = 'historical' | 'general' | 'supply';
+
+export interface ActStartSnapshot {
+  turn: number;
+  cities: number;
+  troops: number;
+  gold: number;
+  food: number;
+}
+
+/** 一幕内累计的事实，幕报与幕间朝议都从这里取数。 */
+export interface ActProgress {
+  citiesGained: number;
+  citiesLost: number;
+  battlesWon: number;
+  battlesLost: number;
+  lostCityNames: string[];
+  keyDefense: boolean;
+  strongEnemyDefeated: boolean;
+}
+
+/** 幕间给出的明确转折战：目标固定、奖励固定，不强制开战。 */
+export interface TurningBattle {
+  act: number;
+  cityId: string;
+  kind: TurningBattleKind;
+  title: string;
+  description: string;
+  rewardGold: number;
+  /** 超过这个回合仍未拿下，就记为未达成。 */
+  deadlineTurn: number;
+  status: 'open' | 'won' | 'missed';
+}
+
+/** 一幕结束、下一幕尚未开始时，等待玩家完成的幕间朝议。 */
+export interface PendingActCouncil {
+  fromAct: number;
+  toAct: number;
+  choices: InterActChoiceId[];
+  report: Report;
+  turningBattle?: TurningBattle;
+}
+
+/** 三幕章节：stage 0 = 立足，1 = 争锋，2 = 定鼎。 */
 export interface ChapterState {
+  /** E7 数据结构版本；旧档迁移时重建。 */
+  version?: number;
   stage: number;
   goals: ChapterGoal[];
+  identity?: ActIdentityId;
+  actStart?: ActStartSnapshot;
+  progress?: ActProgress;
+  turningBattle?: TurningBattle;
+  pendingCouncil?: PendingActCouncil;
 }
 
 export interface LogEntry {
@@ -385,7 +451,7 @@ export interface ReportLine {
 }
 
 export interface Report {
-  kind: 'month' | 'battle';
+  kind: 'month' | 'battle' | 'act';
   title: string;
   subtitle?: string;
   lines: ReportLine[];
@@ -477,7 +543,12 @@ export interface GameState {
   aiQueue?: string[];
   /** 月结快照：AI 队列全部跑完后统一出月报 */
   pendingMonth?: PendingMonth;
-  gameOver?: { result: 'victory' | 'defeat'; reason: string };
+  gameOver?: {
+    result: 'victory' | 'defeat';
+    reason: string;
+    /** 统一 / 割据 / 败亡；旧档没有此字段时按 result 推导。 */
+    ending?: 'unification' | 'partition' | 'defeat';
+  };
   /** 【优化】§4.4 大势已定：可主动统一，也可继续亲征 */
   unifyReady?: boolean;
   /** 上次拒绝统一的回合，避免每月重复弹窗 */
