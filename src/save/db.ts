@@ -96,6 +96,12 @@ export interface SaveSlotInfo {
   year: number;
   month: number;
   factionName: string;
+  /** 回合数：主菜单用它告诉玩家「上次玩到哪」 */
+  turn: number;
+  /** 玩家势力当前城池数 */
+  cities: number;
+  /** 玩家势力总兵力（活跃武将兵力之和） */
+  troops: number;
 }
 
 /** 复用同一个连接，避免每次读写都走一遍 open/close。 */
@@ -219,14 +225,26 @@ export async function listSaves(): Promise<SaveSlotInfo[]> {
       return version >= 1 && version <= SAVE_VERSION;
     })
     .sort((a, b) => a.slot.localeCompare(b.slot))
-    .map((r) => ({
-      slot: r.slot,
-      label: r.label,
-      createdAt: r.createdAt,
-      year: r.state.year,
-      month: r.state.month,
-      factionName: r.state.factions[r.state.playerFactionId]?.name ?? '未知势力',
-    }));
+    .map((r) => {
+      const pid = r.state.playerFactionId;
+      const mine = Object.values(r.state.cities).filter((c) => c.ownerId === pid);
+      const troops = Object.values(r.state.generals).reduce(
+        (sum, g) =>
+          sum + (g.status === 'active' && r.state.cities[g.locationId]?.ownerId === pid ? g.troops : 0),
+        0,
+      );
+      return {
+        slot: r.slot,
+        label: r.label,
+        createdAt: r.createdAt,
+        year: r.state.year,
+        month: r.state.month,
+        factionName: r.state.factions[pid]?.name ?? '未知势力',
+        turn: r.turn ?? r.state.turn,
+        cities: mine.length,
+        troops,
+      };
+    });
 }
 
 export async function deleteSave(slot: string): Promise<void> {

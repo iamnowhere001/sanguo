@@ -13,6 +13,8 @@ export interface ExploreDirectionDef {
   mark: string;
   /** 面板中的一句话说明 */
   description: string;
+  /** 方向卡上的极短说明：一行放得下，完整口径走 description */
+  short: string;
   /** 归来目标的口径，用于进度文案 */
   targetLabel: string;
 }
@@ -23,6 +25,7 @@ export const EXPLORE_DIRECTIONS: Record<ExploreDirection, ExploreDirectionDef> =
     label: '人才',
     mark: '贤',
     description: '寻访在野名将，累计 3 步线索必得人才',
+    short: '3 步线索必得名将',
     targetLabel: '寻访在野名将',
   },
   treasure: {
@@ -30,6 +33,7 @@ export const EXPLORE_DIRECTIONS: Record<ExploreDirection, ExploreDirectionDef> =
     label: '宝物',
     mark: '宝',
     description: '搜求名品兵符，累计 3 步线索必得宝物',
+    short: '3 步线索必得名器',
     targetLabel: '搜求名品宝物',
   },
   intel: {
@@ -37,6 +41,7 @@ export const EXPLORE_DIRECTIONS: Record<ExploreDirection, ExploreDirectionDef> =
     label: '情报',
     mark: '谍',
     description: '刺探本州，每月验证 1 条传闻真假',
+    short: '每月验证 1 条传闻',
     targetLabel: '刺探本州传闻',
   },
   loyalty: {
@@ -44,6 +49,7 @@ export const EXPLORE_DIRECTIONS: Record<ExploreDirection, ExploreDirectionDef> =
     label: '民心',
     mark: '民',
     description: '安抚百姓，每月民忠 +2、粮草 +80',
+    short: '每月 民忠+2 粮+80',
     targetLabel: '安抚民心',
   },
 };

@@ -78,7 +78,11 @@ export function installUiAudio(): void {
       let id: OneShotId = 'ui.click';
       if (cue === 'cancel') id = 'ui.cancel';
       else if (cue === 'confirm') id = 'ui.confirm';
-      else if (el.classList.contains('primary') || el.classList.contains('danger')) {
+      else if (
+        el.classList.contains('primary') ||
+        el.classList.contains('danger') ||
+        el.classList.contains('hero')
+      ) {
         id = 'ui.confirm';
       }
       audio.play(id);

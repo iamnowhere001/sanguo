@@ -6,6 +6,7 @@
  * - combat    伤害、普攻/突击、经验
  * - tactics   计策判定与结算
  * - ai        战术 AI
+ * - autopilot 战斗中托管（随时可接管）
  * - setup     开战与无守军占领
  * - turn      回合开始与天数推进
  * - resolve   胜负判定与战后结算
@@ -16,6 +17,7 @@ export * from './damage';
 export * from './combat';
 export * from './tactics';
 export * from './ai';
+export * from './autopilot';
 export * from './setup';
 export * from './turn';
 export * from './resolve';

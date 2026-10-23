@@ -37,6 +37,8 @@ export function ExplorePanel({
   const city = state.cities[cityId];
   const [direction, setDirection] = useState<ExploreDirection>('talent');
   const [months, setMonths] = useState(3);
+  /** 传闻默认收起：它是情报，不该和派遣操作抢同一屏 */
+  const [rumorsOpen, setRumorsOpen] = useState(false);
 
   if (!city) return null;
 
@@ -69,10 +71,7 @@ export function ExplorePanel({
           探索
           <em className="edict-badge">派遣</em>
         </span>
-        <span className="muted small">
-          {province ? `${province.name} · ` : ''}
-          {agent ? `执行 ${agent.name} · 体力 ${agent.stamina}` : '无武将'}
-        </span>
+        <span className="muted small">{province ? province.name : '—'}</span>
       </div>
 
       {active ? (
@@ -86,12 +85,9 @@ export function ExplorePanel({
           clueProgress={explorationClueProgress(state, city, active.direction)}
           rumors={rumors}
         />
-      ) : (
-        <p className="project-empty">
-          派 1 名武将探索 1–3 个月。人才 / 宝物累计 3 步线索必得目标；情报验证传闻；民心提升民忠与粮草。
-        </p>
-      )}
+      ) : null}
 
+      {/* 方向 → 时长 → 花费 → 派遣：一条横向操作流，不用上下找 */}
       <div className="explore-directions" role="group" aria-label="探索方向">
         {EXPLORE_ORDER.map((d) => {
           const def = EXPLORE_DIRECTIONS[d];
@@ -102,71 +98,88 @@ export function ExplorePanel({
               className={`explore-direction${direction === d ? ' on' : ''}`}
               aria-pressed={direction === d}
               onClick={() => setDirection(d)}
+              title={def.description}
             >
               <b>
                 <i aria-hidden="true">{def.mark}</i>
                 {def.label}
               </b>
-              <span>{def.description}</span>
+              <span>{def.short}</span>
             </button>
           );
         })}
       </div>
 
-      <div className="explore-duration" role="group" aria-label="探索时长">
-        {[1, 2, 3].map((m) => (
-          <button
-            key={m}
-            type="button"
-            className={months === m ? 'on' : ''}
-            aria-pressed={months === m}
-            onClick={() => setMonths(m)}
-          >
-            {m} 个月
-          </button>
-        ))}
-      </div>
-
-      <div className="explore-footer">
-        <span className="form-hint">
+      <div className="explore-controls">
+        <div className="explore-duration" role="group" aria-label="探索时长">
+          {[1, 2, 3].map((m) => (
+            <button
+              key={m}
+              type="button"
+              className={months === m ? 'on' : ''}
+              aria-pressed={months === m}
+              onClick={() => setMonths(m)}
+            >
+              {m} 月
+            </button>
+          ))}
+        </div>
+        <span className="form-hint explore-cost">
           {goldCost} 金 · {BALANCE.EXPLORE.stamina} 体力 · {BALANCE.EXPLORE.edictCost} 政令
         </span>
         <button
           type="button"
-          className="btn primary sm"
+          className="btn accent sm"
           disabled={Boolean(reason)}
           onClick={start}
           title={reason ?? '派遣探索'}
         >
-          派遣探索
+          派遣
         </button>
       </div>
       {reason ? <div className="form-hint explore-block">{reason}</div> : null}
 
+      {/* 传闻是情报，不是操作：默认收起，避免和上面的派遣流抢视线 */}
       <div className="explore-rumors">
-        <div className="section-title">
-          <span>本州传闻</span>
-          <span className="muted small">
-            3 条中 1 条为真 · 情报可验证
+        <button
+          type="button"
+          className="explore-rumor-toggle"
+          aria-expanded={rumorsOpen}
+          onClick={() => setRumorsOpen((v) => !v)}
+        >
+          <span className="ert-label">本州传闻</span>
+          <span className="ert-meta">
+            {rumors.length} 条 · 其中 1 条为真
+            {rumors.some((r) => r.verified !== undefined)
+              ? ` · 已验 ${rumors.filter((r) => r.verified !== undefined).length}`
+              : ''}
           </span>
-        </div>
-        {rumors.length === 0 ? (
-          <p className="project-empty">旧存档暂无传闻；新开局会按州生成。</p>
-        ) : (
-          rumors.map((r) => (
-            <RumorCard
-              key={r.id}
-              rumor={r}
-              isCurrentCity={r.claimedCityId === cityId}
-              claimedName={cityName(r.claimedCityId)}
-              actualName={cityName(r.actualCityId)}
-              onPickDirection={() => setDirection(r.direction)}
-            />
-          ))
-        )}
-        <div className="form-hint">
-          传闻指向其他城池时，先在地图上选中该城再派遣。假传闻被证伪后会揭露真线索。
-        </div>
+          <em className="ert-caret" aria-hidden>
+            {rumorsOpen ? '▾' : '▸'}
+          </em>
+        </button>
+
+        {rumorsOpen ? (
+          <>
+            {rumors.length === 0 ? (
+              <p className="project-empty">旧存档暂无传闻；新开局会按州生成。</p>
+            ) : (
+              rumors.map((r) => (
+                <RumorCard
+                  key={r.id}
+                  rumor={r}
+                  isCurrentCity={r.claimedCityId === cityId}
+                  claimedName={cityName(r.claimedCityId)}
+                  actualName={cityName(r.actualCityId)}
+                  onPickDirection={() => setDirection(r.direction)}
+                />
+              ))
+            )}
+            <div className="form-hint">
+              传闻指向其他城池时，先在地图上选中该城再派遣。假传闻被证伪后会揭露真线索。
+            </div>
+          </>
+        ) : null}
       </div>
     </section>
   );

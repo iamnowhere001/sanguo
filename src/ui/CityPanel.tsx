@@ -441,6 +441,37 @@ export function CityPanel({
         </div>
       ) : null}
 
+      {/* 执行武将 / 政令是全城共享的上下文：提到 tab 下面只写一次，
+          不再在每个小节标题里重复三遍 */}
+      {isMine ? (
+        <div className="cp-context">
+          <span className="cc-label">执行</span>
+          {gens.length > 1 ? (
+            <select
+              className="mini-select"
+              value={agent?.id ?? ''}
+              aria-label="选择执行内政的武将"
+              onChange={(e) => setAgentId(e.target.value)}
+            >
+              {gens.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}（体 {g.stamina}）
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className="cc-agent">
+              {agent ? `${agent.name} · 体力 ${agent.stamina}` : '无武将'}
+            </span>
+          )}
+          {state.settings.ruleset !== 'classic' && tab === 'manage' ? (
+            <em className={`edict-badge${edictLeft <= 0 ? ' empty' : ''}`}>
+              政令 {edictUsed}/{edictCap}
+            </em>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="panel-scroll cp-body" ref={bodyRef}>
         {alerts.length > 0 ? (
           <div className="cp-alerts">
@@ -515,32 +546,8 @@ export function CityPanel({
             >
               <section className="panel-section">
                 <div className="section-title">
-                  <span>
-                    内政
-                    {state.settings.ruleset !== 'classic' ? (
-                      <em className={`edict-badge${edictLeft <= 0 ? ' empty' : ''}`}>
-                        政令 {edictUsed}/{edictCap}
-                      </em>
-                    ) : null}
-                  </span>
-                  {gens.length > 1 ? (
-                    <select
-                      className="mini-select"
-                      value={agent?.id ?? ''}
-                      aria-label="选择执行内政的武将"
-                      onChange={(e) => setAgentId(e.target.value)}
-                    >
-                      {gens.map((g) => (
-                        <option key={g.id} value={g.id}>
-                          {g.name}（体 {g.stamina}）
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <span className="muted small">
-                      {agent ? `执行：${agent.name} · 体力 ${agent.stamina}` : '无武将'}
-                    </span>
-                  )}
+                  <span>内政</span>
+                  <span className="muted small">每项 1 政令</span>
                 </div>
 
                 <div className="cmd-grid">
@@ -601,9 +608,6 @@ export function CityPanel({
                       >
                         营造位 {activeProjects.length}/{projectSlots}
                       </em>
-                    </span>
-                    <span className="muted small">
-                      {agent ? `执行 ${agent.name} · 体力 ${agent.stamina}` : '无武将'}
                     </span>
                   </div>
 
@@ -740,7 +744,7 @@ export function CityPanel({
                     最大
                   </button>
                   <button
-                    className="btn primary sm"
+                    className="btn accent sm"
                     disabled={!agent || maxRecruit <= 0}
                     onClick={() => {
                       if (!agent) return;
@@ -803,7 +807,7 @@ export function CityPanel({
                     最大
                   </button>
                   <button
-                    className="btn primary sm"
+                    className="btn accent sm"
                     disabled={(tradeMode === 'buy' ? maxBuy : maxSell) <= 0}
                     onClick={() =>
                       gameStore.dispatch({
@@ -1053,7 +1057,7 @@ export function CityPanel({
                       {BALANCE.DIPLOMACY.gold} 金 / {BALANCE.DIPLOMACY.stamina} 体力
                     </div>
                     <button
-                      className="btn primary wide"
+                      className="btn hero wide"
                       onClick={() => {
                         const r = gameStore.dispatch({
                           t: 'PERSUADE_CITY',
@@ -1121,7 +1125,7 @@ export function CityPanel({
       {isMine ? (
         <footer className="panel-foot">
           <button
-            className="btn primary"
+            className="btn hero"
             disabled={enemyTargets.length === 0 || gens.filter((g) => g.troops > 0).length === 0}
             title={
               enemyTargets.length > 0

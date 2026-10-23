@@ -8,6 +8,7 @@ import { MapCanvas } from '../render/MapCanvas';
 import { audio } from '../audio';
 import { AudioSettingsButton } from './AudioSettings';
 import { CityPanel, DeployDialog } from './CityPanel';
+import { FactionRail } from './FactionRail';
 import { RosterDialog } from './RosterDialog';
 import { SaveDialog } from './SaveDialog';
 import { ChapterBar } from './ChapterBar';
@@ -20,10 +21,6 @@ export function MapScreen() {
   const state = store.state as GameState;
   const mine = useMemo(
     () => Object.values(state.cities).filter((c) => c.ownerId === state.playerFactionId),
-    [state],
-  );
-  const others = useMemo(
-    () => Object.values(state.cities).filter((c) => c.ownerId !== state.playerFactionId),
     [state],
   );
   const generals = useMemo(
@@ -228,29 +225,12 @@ export function MapScreen() {
             </div>
           </section>
 
-          <section className="rail-others">
-            <div className="section-title">
-              <span>其他势力</span>
-              <span className="muted small">{others.length}</span>
-            </div>
-            <div className="city-list">
-              {others.map((c) => (
-                <button
-                  key={c.id}
-                  className={`city-row${c.id === selectedCityId ? ' on' : ''}`}
-                  onClick={() => setSelectedCityId(c.id)}
-                >
-                  <i className="fdot" style={{ background: factionColor(state, c.ownerId) }} />
-                  <span className="cname">
-                    {c.name}
-                    {attackableAny.has(c.id) ? <em className="atk-mark">可攻</em> : null}
-                  </span>
-                  <span className="cmeta">{factionName(state, c.ownerId)}</span>
-                  <span className="cres">{cityTroops(state, c.id)} 兵</span>
-                </button>
-              ))}
-            </div>
-          </section>
+          <FactionRail
+            state={state}
+            selectedCityId={selectedCityId}
+            attackableIds={attackableAny}
+            onSelect={setSelectedCityId}
+          />
 
           {state.log.length > 0 ? (
             <section className="log-section">

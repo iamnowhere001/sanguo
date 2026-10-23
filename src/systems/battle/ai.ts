@@ -8,7 +8,7 @@ import {
 import { TERRAIN_MODIFIER } from '../../data/tables/unitClasses';
 import { nextFloat } from '../../core/rng';
 import type { BattleSide, BattleState, BattleTerrain, BattleUnit, GameState } from '../../core/state';
-import { computeDamage, performAttack, performCharge } from './combat';
+import { computeDamage, moveUnit, performAttack, performCharge } from './combat';
 import {
   activeUnits,
   attackRangeOf,
@@ -46,6 +46,17 @@ function terrainScore(unit: BattleUnit, terrain: BattleTerrain): number {
 }
 
 /**
+ * AI 风格参数。只影响「行军阶段是否怕被反击」这一条，
+ * 用来区分敌军（按难度保守）与玩家托管（要主动接战，否则会在威胁圈外磨蹭）。
+ */
+export interface AiProfile {
+  marchCautious: boolean;
+}
+
+export const AI_PROFILE_DEFAULT: AiProfile = { marchCautious: true };
+export const AI_PROFILE_PILOT: AiProfile = { marchCautious: false };
+
+/**
  * 估算某个落点下回合会吃到的伤害。
  * 只做"敌方移动力 + 射程"的粗判，不计算阻挡，够用于启发式评估。
  */
@@ -66,6 +77,7 @@ function bestTacticalStep(
   state: GameState,
   b: BattleState,
   unit: BattleUnit,
+  profile: AiProfile,
 ): { x: number; y: number } | null {
   const enemies = activeUnits(b, otherSide(unit.side));
   if (enemies.length === 0) return null;
@@ -85,7 +97,9 @@ function bestTacticalStep(
     const canStrike = enemies.some((e) => inAttackRange({ x, y }, e, unit.unitClass));
     const nearest = Math.min(...enemies.map((e) => distanceBetween({ x, y }, e)));
     const terr = terrainScore(unit, battleTerrainAt(b, x, y));
-    const threat = estimateThreat(b, unit, x, y);
+    // 行军阶段（还打不到人）是否评估威胁：敌军保守，玩家托管主动接敌
+    const evaluateThreat = profile.marchCautious || canStrike || nearest <= 2;
+    const threat = evaluateThreat ? estimateThreat(b, unit, x, y) : 0;
     const cityBonus = battleTerrainAt(b, x, y) === 'city' ? 8 : 0;
     let score =
       (canStrike ? 120 : 0) - nearest * 6 + (terr - 1) * 30 - threat * threatWeight + cityBonus;
@@ -150,71 +164,106 @@ function aiPickHeal(
   return { targetId: target.id };
 }
 
+/**
+ * 单步决策：只返回「下一个原子动作」，不修改战场。
+ *
+ * 拆出来是为了让同一套战术 AI 同时服务两个场景：
+ * - 敌军回合 / 战前委任：`runSideTurn` 循环调用直到没有动作，一次跑完
+ * - 战斗中托管：UI 每个节拍取一个动作并 dispatch，玩家可随时打断
+ */
+export type AiAction =
+  | { kind: 'attack'; unitId: string; targetId: string }
+  | { kind: 'charge'; unitId: string; targetId: string }
+  | { kind: 'tactic'; unitId: string; tacticId: TacticId; targetId: string }
+  | { kind: 'move'; unitId: string; x: number; y: number }
+  | { kind: 'wait'; unitId: string };
+
+/** 行动顺序：射程远的先动（先手计策/射击），同射程按武力降序 */
+function sortedActors(b: BattleState, side: BattleSide): BattleUnit[] {
+  return activeUnits(b, side)
+    .filter((u) => !u.hasActed && u.stunned === 0)
+    .sort((a, c) => {
+      const ra = attackRangeOf(a.unitClass).max;
+      const rc = attackRangeOf(c.unitClass).max;
+      return rc - ra || c.force - a.force;
+    });
+}
+
+export function planSideAction(
+  state: GameState,
+  b: BattleState,
+  side: BattleSide,
+  profile: AiProfile = AI_PROFILE_DEFAULT,
+): AiAction | null {
+  const [u] = sortedActors(b, side);
+  if (!u) return null;
+
+  // 1) 能打到人：极兵先手突击，其次计策，最后普攻
+  const targets = attackTargets(b, u);
+  if (targets.length > 0) {
+    if (u.unitClass === 'elite' && !u.chargeUsed) {
+      const target = chooseAttackTarget(state, b, u, targets);
+      return { kind: 'charge', unitId: u.id, targetId: target.id };
+    }
+    const tactic = aiPickTactic(state, b, u);
+    if (tactic) {
+      return { kind: 'tactic', unitId: u.id, tacticId: tactic.id, targetId: tactic.targetId };
+    }
+    const target = chooseAttackTarget(state, b, u, targets);
+    return { kind: 'attack', unitId: u.id, targetId: target.id };
+  }
+
+  // 2) 没有敌人可打，先看看能不能救一下队友
+  const heal = aiPickHeal(state, b, u);
+  if (heal) {
+    return { kind: 'tactic', unitId: u.id, tacticId: 'heal', targetId: heal.targetId };
+  }
+
+  // 3) 走向一个战术落点；下一步会重新评估能否攻击
+  if (!u.hasMoved) {
+    const step = bestTacticalStep(state, b, u, profile);
+    if (step) return { kind: 'move', unitId: u.id, x: step.x, y: step.y };
+  }
+
+  return { kind: 'wait', unitId: u.id };
+}
+
+/** 把单步决策落到战场上（AI 侧直接改状态，不走 dispatch） */
+export function applyAiAction(state: GameState, b: BattleState, action: AiAction): void {
+  if (action.kind === 'attack') {
+    performAttack(state, b, action.unitId, action.targetId);
+    return;
+  }
+  if (action.kind === 'charge') {
+    performCharge(state, b, action.unitId, action.targetId);
+    return;
+  }
+  if (action.kind === 'tactic') {
+    castTactic(state, b, action.unitId, action.tacticId, action.targetId);
+    return;
+  }
+  if (action.kind === 'move') {
+    const r = moveUnit(b, action.unitId, action.x, action.y);
+    // 落点被占 / 被 ZOC 截断时兜底待机，避免同一单位反复给出无效移动
+    if (!r.ok) {
+      const u = b.units[action.unitId];
+      if (u) u.hasActed = true;
+    }
+    return;
+  }
+  const u = b.units[action.unitId];
+  if (u) u.hasActed = true;
+}
+
 /** AI 行动：计策 → 攻击 → 治疗 → 战术落点 */
 export function runSideTurn(state: GameState, b: BattleState, side: BattleSide): void {
   beginSideTurn(b, side);
-  const units = activeUnits(b, side).sort((a, c) => {
-    const ra = attackRangeOf(a.unitClass).max;
-    const rc = attackRangeOf(c.unitClass).max;
-    return rc - ra || c.force - a.force;
-  });
-
-  for (const u of units) {
-    if (u.routed || u.hasActed || u.stunned > 0) continue;
+  // 单步循环：每轮重新评估，直到该侧没有可行动单位
+  for (let guard = 0; guard < 160; guard++) {
     if (activeUnits(b, otherSide(side)).length === 0) break;
-
-    // 1) 能打到人：极兵先手突击，其次计策，最后普攻
-    let targets = attackTargets(b, u);
-    if (targets.length > 0) {
-      if (u.unitClass === 'elite' && !u.chargeUsed) {
-        const target = chooseAttackTarget(state, b, u, targets);
-        performCharge(state, b, u.id, target.id);
-        continue;
-      }
-      const tactic = aiPickTactic(state, b, u);
-      if (tactic) {
-        castTactic(state, b, u.id, tactic.id, tactic.targetId);
-        continue;
-      }
-      const target = chooseAttackTarget(state, b, u, targets);
-      performAttack(state, b, u.id, target.id);
-      continue;
-    }
-
-    // 2) 没有敌人可打，先看看能不能救一下队友
-    const heal = aiPickHeal(state, b, u);
-    if (heal) {
-      castTactic(state, b, u.id, 'heal', heal.targetId);
-      continue;
-    }
-
-    // 3) 选一个战术落点
-    const step = bestTacticalStep(state, b, u);
-    if (step) {
-      u.x = step.x;
-      u.y = step.y;
-      u.hasMoved = true;
-    }
-
-    targets = attackTargets(b, u);
-    if (targets.length > 0) {
-      const tactic = aiPickTactic(state, b, u);
-      if (tactic) {
-        castTactic(state, b, u.id, tactic.id, tactic.targetId);
-        continue;
-      }
-      const target = chooseAttackTarget(state, b, u, targets);
-      performAttack(state, b, u.id, target.id);
-      continue;
-    }
-
-    const healAfter = aiPickHeal(state, b, u);
-    if (healAfter) {
-      castTactic(state, b, u.id, 'heal', healAfter.targetId);
-      continue;
-    }
-
-    u.hasActed = true;
+    const action = planSideAction(state, b, side);
+    if (!action) break;
+    applyAiAction(state, b, action);
   }
 }
 

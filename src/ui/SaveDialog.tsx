@@ -95,7 +95,7 @@ export function SaveDialog({
                     ) : null}
                     {mode === 'load' ? (
                       <button
-                        className="btn primary sm"
+                        className="btn sm"
                         disabled={!info || busy === slot}
                         onClick={() => load(slot)}
                       >
@@ -104,7 +104,7 @@ export function SaveDialog({
                     ) : null}
                     {info ? (
                       <button
-                        className="btn ghost sm"
+                        className="btn ghost sm danger-hint"
                         disabled={busy === slot}
                         onClick={() => setDeleteSlot(slot)}
                       >
