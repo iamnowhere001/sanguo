@@ -200,6 +200,11 @@ export const BALANCE = {
   /** 【优化】§3.3 守城口径统一为“守方受击 × 0.5”，不再写“防御 +50%” */
   CITY_DEFENSE_REDUCTION: 0.5,
   RETREAT_KEEP_RATE: 0.7,
+  /**
+   * 【适配】城破时守军可撤往相邻友城：未溃散守军与预备队保留该比例兵力。
+   * 无相邻友城时仍按被俘 / 溃散处理，避免“永远抓不到将”。
+   */
+  DEFENDER_RETREAT_KEEP_RATE: 0.7,
   ARCHER_RANGE: [2, 3] as [number, number],
   /** 【优化】§3.1 弓兵贴脸（距离 1）伤害 ×0.5 */
   ARCHER_MELEE_PENALTY: 0.5,
@@ -242,8 +247,10 @@ export const BALANCE = {
     foodReserveMonths: 4,
     /** 单城内政保留金 */
     developGoldReserve: 150,
-    /** 每个 AI 势力每月最多出兵次数 */
+    /** @deprecated 由 difficulty.maxAttacksPerMonth 控制；保留仅为旧配置兼容 */
     attacksPerMonth: 1,
+    /** 边境城至少留下的驻军；与 reserveRatio 取较大值 */
+    minGarrison: 300,
   },
 
   // ── 现代重制：国策 / 政令 / 军令 / 事件 / 章节 ─────────────

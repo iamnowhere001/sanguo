@@ -23,6 +23,12 @@ function setup(difficulty: Difficulty) {
   for (const g of Object.values(s.generals)) {
     if (g.status === 'active' && g.locationId === 'xinye') g.troops = 0;
   }
+  // 同时清空玩家其它城的兵力：否则 AI 会判定“玩家主力在外”，
+  // 触发窗口折扣，测到的就不是基础阈值了。
+  for (const g of Object.values(s.generals)) {
+    if (g.id === 'zhangfei') continue;
+    if (s.cities[g.locationId]?.ownerId === 'liubei') g.troops = 0;
+  }
   s.generals.zhangfei!.troops = 800;
   s.generals.caocao!.troops = 1100;
   return s;

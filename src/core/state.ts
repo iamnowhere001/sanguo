@@ -417,6 +417,8 @@ export interface BattleState {
   rng: RngState;
   /** 军令点：现代规则每场战斗 3 点，用于鼓舞 / 固守 / 急袭 */
   commandPoints?: number;
+  /** 敌方军令点：与玩家分开记账，避免 AI 花军令时偷走玩家的点 */
+  foeCommandPoints?: number;
   /** 当日鼓舞方：该方攻击伤害 ×1.2 */
   inspireSide?: BattleSide;
   /** 当日固守方：该方受到伤害 ×0.7 */

@@ -3,15 +3,17 @@ import { WEATHER_LABEL } from '../../data/tables/tactics';
 import { chance } from '../../core/rng';
 import type {
   BattleObjective,
+  BattleSide,
   BattleState,
   BattleUnit,
+  City,
   Faction,
   GameState,
   ReportLine,
 } from '../../core/state';
-import { factionTroops, syncFactionCities } from '../../core/state';
+import { defendersOf, factionTroops, neighborsOf, syncFactionCities } from '../../core/state';
 import { log } from '../economy';
-import { clamp } from '../formulas';
+import { clamp, garrisonCapOf } from '../formulas';
 import { collapseEliminatedFactions } from '../elimination';
 import {
   checkActProgress,
@@ -112,6 +114,30 @@ function grantObjectiveReward(
   return objectiveRewardText(objective);
 }
 
+function troopsInCity(state: GameState, cityId: string): number {
+  return defendersOf(state, cityId).reduce((sum, g) => sum + g.troops, 0);
+}
+
+/**
+ * 城破后的撤退目的地：相邻友城里空位最多的一座。
+ * 全部满员时仍允许退入（败军借道），避免「有路却不能走」。
+ */
+function retreatCityFor(
+  state: GameState,
+  fromCityId: string,
+  factionId: string,
+): City | null {
+  const options = neighborsOf(state, fromCityId)
+    .map((id) => state.cities[id])
+    .filter((c): c is City => Boolean(c) && c.ownerId === factionId)
+    .sort((a, b) => {
+      const roomA = garrisonCapOf(a.size) - troopsInCity(state, a.id);
+      const roomB = garrisonCapOf(b.size) - troopsInCity(state, b.id);
+      return roomB - roomA || a.id.localeCompare(b.id);
+    });
+  return options[0] ?? null;
+}
+
 /**
  * 战后结算。outcome 以**进攻方**视角：victory = 进攻方胜。
  * 玩家可能是防守方，因此战报要按玩家视角翻译。
@@ -129,6 +155,15 @@ export function resolveBattle(
   let actCaptureNote: string | undefined;
   const attackerUnits = Object.values(b.units).filter((u) => u.side === 'attacker');
   const defenderUnits = Object.values(b.units).filter((u) => u.side === 'defender');
+
+  // 【适配】城破撤退：在改归属之前找好相邻友城
+  const defenderFactionId = target?.ownerId ?? b.defenderFactionId;
+  const retreatCity =
+    outcome === 'victory'
+      ? retreatCityFor(state, b.targetCityId, defenderFactionId)
+      : null;
+  let retreated = 0;
+  let retreatedTroops = 0;
 
   for (const u of attackerUnits) {
     const g = state.generals[u.generalId];
@@ -153,19 +188,35 @@ export function resolveBattle(
     if (!g) continue;
     g.stamina = clamp(u.stamina, 0, BALANCE.STAMINA_MAX);
     if (outcome === 'victory') {
-      g.troops = u.troops;
-      let captured = u.isCommander;
-      if (!captured) {
-        const [hit, next] = chance(b.rng, BALANCE.CAPTURE_RATE_SUBORDINATE);
-        b.rng = next;
-        captured = hit;
-      }
-      if (captured) {
-        g.status = 'captured';
-        g.locationId = b.targetCityId;
+      // 主将只有在保住一定兵力时才能突围；残兵主将仍可能被俘
+      const commanderCanEscape = !u.isCommander || u.troops >= u.maxTroops * 0.25;
+      const canRetreat =
+        retreatCity !== null && !u.routed && u.troops > 0 && commanderCanEscape;
+
+      if (canRetreat) {
+        g.status = 'active';
+        g.locationId = retreatCity.id;
+        g.troops = Math.max(
+          1,
+          Math.floor(u.troops * BALANCE.DEFENDER_RETREAT_KEEP_RATE),
+        );
+        retreated += 1;
+        retreatedTroops += g.troops;
       } else {
-        g.status = 'inactive';
-        g.locationId = b.targetCityId;
+        g.troops = u.troops;
+        let captured = u.isCommander;
+        if (!captured) {
+          const [hit, next] = chance(b.rng, BALANCE.CAPTURE_RATE_SUBORDINATE);
+          b.rng = next;
+          captured = hit;
+        }
+        if (captured) {
+          g.status = 'captured';
+          g.locationId = b.targetCityId;
+        } else {
+          g.status = 'inactive';
+          g.locationId = b.targetCityId;
+        }
       }
     } else {
       g.troops = u.troops;
@@ -184,13 +235,23 @@ export function resolveBattle(
   }
 
   if (outcome === 'victory' && target) {
-    // 【适配】预备队：超出上场上限的守将没进战场，城破后随之溃散，
-    // 否则他们会以"守将"身份留在我方新占的城里。
+    // 【适配】预备队：超出上场上限的守将没进战场。
+    // 城破时有相邻友城则随败军撤退，否则才溃散。
     for (const g of Object.values(state.generals)) {
       if (g.status !== 'active' || g.locationId !== b.targetCityId) continue;
       if (b.units[`defender:${g.id}`] || b.units[`attacker:${g.id}`]) continue;
-      g.status = 'inactive';
-      g.troops = 0;
+      if (retreatCity && g.troops > 0) {
+        g.locationId = retreatCity.id;
+        g.troops = Math.max(
+          1,
+          Math.floor(g.troops * BALANCE.DEFENDER_RETREAT_KEEP_RATE),
+        );
+        retreated += 1;
+        retreatedTroops += g.troops;
+      } else {
+        g.status = 'inactive';
+        g.troops = 0;
+      }
     }
 
     const oldOwner = target.ownerId;
@@ -209,6 +270,13 @@ export function resolveBattle(
       'danger',
       `${target.name} 被 ${state.factions[b.attackerFactionId]?.name ?? '敌军'} 攻占`,
     );
+    if (retreated > 0 && retreatCity) {
+      log(
+        state,
+        'warn',
+        `${target.name} 守军 ${retreated} 将退往 ${retreatCity.name}，保存 ${retreatedTroops} 兵`,
+      );
+    }
   }
 
   const objectiveResults: ObjectiveResult[] = [];
@@ -237,10 +305,16 @@ export function resolveBattle(
     });
   }
   const playerUnits = Object.values(b.units).filter((u) => u.side === b.playerSide);
-  const playerTroopsNow = playerUnits.reduce((sum, u) => sum + u.troops, 0);
-  const foeTroopsNow = Object.values(b.units)
-    .filter((u) => u.side === otherSide(b.playerSide))
-    .reduce((sum, u) => sum + u.troops, 0);
+  // 撤退会把兵力折到 70%，按武将当前状态统计，避免战报把折损前的数字算进去
+  const survivingTroops = (side: BattleSide): number =>
+    Object.values(b.units)
+      .filter((u) => u.side === side)
+      .reduce((sum, u) => {
+        const g = state.generals[u.generalId];
+        return sum + (g?.status === 'active' ? g.troops : 0);
+      }, 0);
+  const playerTroopsNow = survivingTroops(b.playerSide);
+  const foeTroopsNow = survivingTroops(otherSide(b.playerSide));
 
   if (b.playerInvolved) {
     const title =
@@ -275,7 +349,10 @@ export function resolveBattle(
         outcome === 'victory'
           ? {
               label: '结果',
-              text: `${target?.name ?? '城池'} 失守，守将被俘`,
+              text:
+                retreated > 0 && retreatCity
+                  ? `${target?.name ?? '城池'} 失守，${retreated} 将退往 ${retreatCity.name}（保存 ${retreatedTroops} 兵）`
+                  : `${target?.name ?? '城池'} 失守，守将被俘`,
               tone: 'danger',
             }
           : {
@@ -290,6 +367,13 @@ export function resolveBattle(
 
     lines.push({ label: '我方', text: `剩余兵力 ${playerTroopsNow}`, tone: 'info' });
     lines.push({ label: '敌方', text: `剩余兵力 ${foeTroopsNow}`, tone: 'info' });
+    if (retreated > 0 && retreatCity && b.playerSide === 'attacker') {
+      lines.push({
+        label: '敌将',
+        text: `${retreated} 将退往 ${retreatCity.name}，保存 ${retreatedTroops} 兵`,
+        tone: 'warn',
+      });
+    }
     const levels = playerUnits
       .map((u) => {
         const g = state.generals[u.generalId];

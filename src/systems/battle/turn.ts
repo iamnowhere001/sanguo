@@ -16,6 +16,24 @@ export function beginSideTurn(b: BattleState, side: BattleSide): void {
 }
 
 /**
+ * 军令点按阵营分开记账：
+ * - 玩家用 `commandPoints`，UI 与战报只展示这一池；
+ * - 敌方 AI 用 `foeCommandPoints`，避免 AI 花军令时把玩家的点数偷走。
+ * 老存档 / AI 互殴没有对应池时返回 0，等同于“没有军令”。
+ */
+export function commandPointsOf(b: BattleState, side: BattleSide): number {
+  return (side === b.playerSide ? b.commandPoints : b.foeCommandPoints) ?? 0;
+}
+
+function spendCommandPoint(b: BattleState, side: BattleSide): void {
+  if (side === b.playerSide) {
+    b.commandPoints = Math.max(0, (b.commandPoints ?? 0) - 1);
+  } else {
+    b.foeCommandPoints = Math.max(0, (b.foeCommandPoints ?? 0) - 1);
+  }
+}
+
+/**
  * 消耗 1 点军令，执行战场指令。
  * 效果只持续当天；军令点整场战斗共享，击溃敌军可回 1 点。
  */
@@ -26,7 +44,7 @@ export function useBattleCommand(
   unitId?: string,
 ): OpResult {
   if (b.status !== 'ongoing') return fail('战斗已结束');
-  const cp = b.commandPoints ?? 0;
+  const cp = commandPointsOf(b, side);
   if (cp <= 0) return fail('军令点已用尽');
 
   if (command === 'march') {
@@ -36,7 +54,7 @@ export function useBattleCommand(
     if (u.hasMoved) return fail('该部队本日已移动，无法急袭');
     if ((u.bonusMove ?? 0) > 0) return fail('该部队本日已急袭');
     const bonus = BALANCE.MODERN.COMMAND.march.moveBonus;
-    b.commandPoints = cp - 1;
+    spendCommandPoint(b, side);
     u.bonusMove = (u.bonusMove ?? 0) + bonus;
     b.log.push(`${u.name} 急袭：本日移动 +${bonus}`);
     return done(`急袭：${u.name} 移动 +${bonus}`);
@@ -44,14 +62,14 @@ export function useBattleCommand(
 
   if (command === 'inspire') {
     if (b.inspireSide === side) return fail('本日已鼓舞');
-    b.commandPoints = cp - 1;
+    spendCommandPoint(b, side);
     b.inspireSide = side;
     b.log.push(`${side === b.playerSide ? '我军' : '敌军'}鼓舞，本日伤害 +20%`);
     return done('全军鼓舞：本日伤害 +20%');
   }
 
   if (b.guardSide === side) return fail('本日已固守');
-  b.commandPoints = cp - 1;
+  spendCommandPoint(b, side);
   b.guardSide = side;
   b.log.push(`${side === b.playerSide ? '我军' : '敌军'}固守，本日受到伤害 −30%`);
   return done('全军固守：本日受到伤害 −30%');

@@ -3,7 +3,6 @@ import { difficultyOf } from '../data/tables/difficulty';
 import type { GameState } from '../core/state';
 import {
   citiesOf,
-  defendersOf,
   factionFood,
   factionTroops,
   generalsOf,
@@ -12,6 +11,13 @@ import {
 import { garrisonCapOf, monthlyFoodUpkeep, recruitCap } from './formulas';
 import { doDomestic, doRecruit, troopCapOf } from './domestic';
 import { autoResolveBattle, createBattle } from './battle';
+import {
+  cityTroops,
+  planAttackCandidates,
+  planMassingMove,
+  planReinforcement,
+  type StrategicMove,
+} from './aiStrategy';
 import { log } from './economy';
 import { buildMonthReport } from './report';
 
@@ -26,6 +32,26 @@ function tagAiLogs(state: GameState, from: number): void {
   for (let i = from; i < state.log.length; i++) {
     state.log[i]!.source = 'ai';
   }
+}
+
+/** 战略调动：只在己方相邻城之间，受驻军上限约束 */
+function applyStrategicMove(
+  state: GameState,
+  factionId: string,
+  move: StrategicMove,
+): boolean {
+  const g = state.generals[move.generalId];
+  const from = state.cities[move.fromId];
+  const to = state.cities[move.toId];
+  if (!g || !from || !to) return false;
+  if (g.status !== 'active' || g.locationId !== from.id) return false;
+  if (from.ownerId !== factionId || to.ownerId !== factionId) return false;
+  if (!neighborsOf(state, from.id).includes(to.id)) return false;
+  if (cityTroops(state, to.id) + g.troops > garrisonCapOf(to.size)) return false;
+
+  g.locationId = to.id;
+  log(state, 'info', `${g.name} 自 ${from.name} 调往 ${to.name}`, 'ai');
+  return true;
 }
 
 /**
@@ -104,89 +130,63 @@ export function runAiFaction(state: GameState, factionId: string): 'battle' | 'd
     tagAiLogs(state, start);
   }
 
-  // ③ 出兵：全势力每月最多一次
+  // ③ 战略机动：边境增援、换防、协同集结
   if (state.gameOver) return 'done';
   const foodReserve =
     monthlyFoodUpkeep(factionTroops(state, factionId), factionEliteTroops(state, factionId)) *
     BALANCE.AI.foodReserveMonths;
   if (factionFood(state, factionId) <= foodReserve) return 'done';
 
-  let best: {
-    fromId: string;
-    targetId: string;
-    generalIds: string[];
-    score: number;
-  } | null = null;
-
-  for (const city of cities) {
-    // 将领变多后 AI 不再固定只带 3 人：按带兵上限取最强的一批，上限与玩家一致
-    const attackers = defendersOf(state, city.id)
-      .sort((a, b) => b.troops - a.troops)
-      .slice(0, BALANCE.BATTLE_MAX_ATTACKERS);
-    if (attackers.length === 0) continue;
-    const myTroops = attackers.reduce((sum, g) => sum + g.troops, 0);
-
-    for (const nid of neighborsOf(state, city.id)) {
-      const target = state.cities[nid];
-      if (!target) continue;
-      if (target.ownerId === factionId) continue;
-      // 开局保护：前 N 回合不打玩家
-      if (
-        target.ownerId === state.playerFactionId &&
-        state.turn <= BALANCE.AI.graceTurns
-      ) {
-        continue;
-      }
-      const defenders = defendersOf(state, nid);
-      const defTroops = defenders.reduce((sum, g) => sum + g.troops, 0);
-      const ratio = myTroops / (defTroops + 100);
-      if (ratio < difficulty.attackRatio) continue;
-      // 城防越高越难啃：同等兵力比下，AI 更愿意先打薄城
-      const score = ratio + (target.gold + target.food) / 4000 - target.fortification / 60;
-      if (!best || score > best.score) {
-        best = {
-          fromId: city.id,
-          targetId: nid,
-          generalIds: attackers.map((g) => g.id),
-          score,
-        };
-      }
+  if (difficulty.coordinate) {
+    const maxMoves = difficulty.id === 'hard' ? 2 : 1;
+    for (let i = 0; i < maxMoves; i++) {
+      const reinforce = planReinforcement(state, factionId, difficulty);
+      if (reinforce && applyStrategicMove(state, factionId, reinforce)) continue;
+      const massing = planMassingMove(state, factionId, difficulty);
+      if (massing && applyStrategicMove(state, factionId, massing)) continue;
+      break;
     }
   }
 
-  if (!best) return 'done';
+  // ④ 出兵：一月多路，每次出兵后重新评估；玩家防守战会暂停队列
+  const maxAttacks = Math.max(1, difficulty.maxAttacksPerMonth);
+  let attacks = 0;
+  while (attacks < maxAttacks && !state.gameOver) {
+    const plan = planAttackCandidates(state, factionId, difficulty)[0];
+    if (!plan) break;
+    attacks += 1;
 
-  const target = state.cities[best.targetId]!;
-  const attackerName = state.factions[factionId]?.name ?? factionId;
-  log(
-    state,
-    'warn',
-    `${attackerName} 自 ${state.cities[best.fromId]?.name} 出兵 ${target.name}`,
-    'ai',
-  );
+    const from = state.cities[plan.fromId];
+    const target = state.cities[plan.targetId];
+    if (!from || !target) break;
 
-  // 玩家防守：进入战棋，暂停 AI 队列
-  if (target.ownerId === state.playerFactionId) {
-    const { result } = createBattle(
+    const attackerName = state.factions[factionId]?.name ?? factionId;
+    log(state, 'warn', `${attackerName} 自 ${from.name} 出兵 ${target.name}`, 'ai');
+
+    // 玩家防守：进入战棋，暂停 AI 队列
+    if (target.ownerId === state.playerFactionId) {
+      const { result } = createBattle(
+        state,
+        plan.fromId,
+        plan.targetId,
+        plan.generalIds,
+        factionId,
+      );
+      if (result.ok && state.battle) return 'battle';
+      break;
+    }
+
+    const startLog = state.log.length;
+    autoResolveBattle(
       state,
-      best.fromId,
-      best.targetId,
-      best.generalIds,
+      plan.fromId,
+      plan.targetId,
+      plan.generalIds,
       factionId,
     );
-    if (result.ok && state.battle) return 'battle';
-    return 'done';
+    tagAiLogs(state, startLog);
   }
 
-  const startLog = state.log.length;
-  autoResolveBattle(
-    state,
-    best.fromId,
-    best.targetId,
-    best.generalIds,
-    factionId,
-  );
-  tagAiLogs(state, startLog);
   return 'done';
 }
 

@@ -2,7 +2,7 @@
 
 一款以《三国演义》为背景的回合制策略 Web 游戏：大地图经营、武将养成、外交策反，以及 12×8 方格战棋。
 
-当前处于**可玩垂直切片**阶段：开局 → 经营 → 出征 → 战棋 → 占城 → 月报 → 存档全链路已打通，295 项单元测试全绿。
+当前处于**可玩垂直切片**阶段：开局 → 经营 → 出征 → 战棋 → 占城 → 月报 → 存档全链路已打通，313 项单元测试（5 项既有失败，集中在章节 / 存档迁移）。
 
 ## 设计主线
 
@@ -47,6 +47,7 @@ npm run dev
 | `npm run build` | 类型检查 + 生产构建 |
 | `npm run sim:battle` | 战斗蒙特卡洛，输出 `reports/sim-battle.csv` |
 | `npm run sim:economy` | 三路线 20 回合经济推演，输出 `reports/sim-economy.csv` |
+| `npm run audit:ai` | 战斗 AI 行为审计，输出 `reports/ai-audit.csv` |
 | `npm run perf:check` | 建局 / AI 月结 / 存档序列化性能冒烟 |
 | `npm run contrast:check` | 设计 token 的 WCAG 对比度检查 |
 | `npm run verify` | 完整校验（类型 + 测试 + 对比度 + 构建） |

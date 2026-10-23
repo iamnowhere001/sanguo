@@ -95,8 +95,13 @@ export function markRouted(b: BattleState, target: BattleUnit): boolean {
     target.troops = 0;
     target.routed = true;
     b.log.push(`${target.name} 溃散`);
-    if (b.commandPoints !== undefined && target.side !== b.playerSide) {
-      b.commandPoints = Math.min(BALANCE.MODERN.COMMAND_MAX, b.commandPoints + 1);
+    // 击溃敌军返还 1 点军令：双方各自记在自己的池子里
+    if (target.side !== b.playerSide) {
+      if (b.commandPoints !== undefined) {
+        b.commandPoints = Math.min(BALANCE.MODERN.COMMAND_MAX, b.commandPoints + 1);
+      }
+    } else if (b.foeCommandPoints !== undefined) {
+      b.foeCommandPoints = Math.min(BALANCE.MODERN.COMMAND_MAX, b.foeCommandPoints + 1);
     }
     return true;
   }

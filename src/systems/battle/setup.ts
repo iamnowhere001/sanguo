@@ -228,6 +228,11 @@ export function createBattle(
       state.settings.ruleset === 'classic' || !playerInvolved
         ? undefined
         : BALANCE.MODERN.COMMAND_POINTS,
+    // 敌方军令独立记账：AI 花自己的点，不动玩家那一池
+    foeCommandPoints:
+      state.settings.ruleset === 'classic' || !playerInvolved
+        ? undefined
+        : BALANCE.MODERN.COMMAND_POINTS,
     tacticBonus:
       state.settings.ruleset === 'classic' || !playerInvolved
         ? 0

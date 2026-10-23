@@ -17,6 +17,7 @@ export * from './damage';
 export * from './combat';
 export * from './tactics';
 export * from './ai';
+export * from './focus';
 export * from './autopilot';
 export * from './setup';
 export * from './objectives';

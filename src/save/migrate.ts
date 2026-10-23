@@ -99,12 +99,10 @@ export function migrateSave(state: GameState): GameState {
       state.cities[state.battle.targetCityId]?.fortification ?? 0;
     state.battle.tacticUses ??= {};
     state.battle.tacticBonus ??= 0;
-    if (
-      state.settings.ruleset === 'modern' &&
-      state.battle.playerInvolved &&
-      state.battle.commandPoints === undefined
-    ) {
-      state.battle.commandPoints = 3;
+    if (state.settings.ruleset === 'modern' && state.battle.playerInvolved) {
+      state.battle.commandPoints ??= 3;
+      // 旧存档没有敌方军令池：补一份，读档后 AI 也能用军令
+      state.battle.foeCommandPoints ??= 3;
     }
     for (const u of Object.values(state.battle.units)) {
       u.training ??= 0;

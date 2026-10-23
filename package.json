@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "sim:battle": "vite-node scripts/sim-battle.ts",
     "sim:economy": "vite-node scripts/sim-economy.ts",
+    "audit:ai": "vite-node scripts/ai-audit.ts",
     "perf:check": "vite-node scripts/perf-check.ts",
     "contrast:check": "vite-node scripts/contrast-check.ts",
     "verify": "npm run typecheck && npm test && npm run contrast:check && npm run build"
