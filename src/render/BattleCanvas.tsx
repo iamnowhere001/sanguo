@@ -112,6 +112,17 @@ function hoverInfo(
     return { title, lines: [base, '射程外，无法攻击'], tone: 'info' };
   }
 
+  if (b.supplyPoint?.x === x && b.supplyPoint.y === y) {
+    return {
+      title: '粮仓',
+      lines: [
+        b.supplyTaken ? '已被攻方夺取' : '尚未失守',
+        b.supplyTaken ? '截粮目标已达成' : '攻方踏上此格即算截粮',
+      ],
+      tone: b.supplyTaken ? 'danger' : 'good',
+    };
+  }
+
   const cost = reachCost.get(`${x},${y}`);
   if (cost !== undefined && selected) {
     const adjacentEnemy = Object.values(b.units).some(
@@ -327,6 +338,23 @@ export function BattleCanvas({
             );
           }
           ctx.strokeRect(px + cell * 0.1, py + cell * 0.26, cell * 0.8, cell * 0.62);
+        }
+
+        // 截粮 / 护粮目标点：粮仓
+        if (battle.supplyPoint?.x === x && battle.supplyPoint.y === y) {
+          const taken = Boolean(battle.supplyTaken);
+          ctx.fillStyle = taken ? 'rgba(193,74,58,0.28)' : 'rgba(200,164,94,0.22)';
+          ctx.fillRect(px, py, cell, cell);
+          ctx.strokeStyle = taken ? 'rgba(224,122,102,0.9)' : 'rgba(230,211,161,0.85)';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([4, 3]);
+          ctx.strokeRect(px + 2, py + 2, cell - 4, cell - 4);
+          ctx.setLineDash([]);
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillStyle = taken ? '#e07a66' : '#e6d3a1';
+          ctx.font = `700 ${Math.floor(cell * 0.3)}px "PingFang SC", sans-serif`;
+          ctx.fillText(taken ? '劫' : '粮', px + cell / 2, py + cell / 2);
         }
 
         // 敌方威胁范围：红色斜纹

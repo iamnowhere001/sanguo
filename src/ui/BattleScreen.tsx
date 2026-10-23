@@ -17,6 +17,7 @@ import {
   detectPilotHandoff,
   estimateBreakDays,
   otherSide,
+  objectiveProgress,
   planPilotAction,
   planPilotCommand,
   tacticDamageValue,
@@ -110,6 +111,16 @@ export function BattleScreen() {
   const battle = state.battle as BattleState;
   const playerSide = battle.playerSide;
   const foeSide = otherSide(playerSide);
+  // 经典模式即使读到带题目的旧数据也不显示，避免规则泄漏
+  const objectivesEnabled = state.settings.ruleset !== 'classic';
+  const mainObjective = objectivesEnabled ? battle.objective : undefined;
+  const mainObjectiveProgress = mainObjective
+    ? objectiveProgress(battle, mainObjective)
+    : null;
+  const sideObjective = objectivesEnabled ? battle.sideObjective : undefined;
+  const sideObjectiveProgress = sideObjective
+    ? objectiveProgress(battle, sideObjective)
+    : null;
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pendingTactic, setPendingTactic] = useState<TacticId | null>(null);
@@ -701,6 +712,34 @@ export function BattleScreen() {
           </button>
         </div>
       </header>
+
+      {mainObjective && mainObjectiveProgress ? (
+        <section className="battle-objectives" aria-label="本战目标">
+          <div className={`bo-main tone-${mainObjectiveProgress.status}`}>
+            <span className="bo-kicker">主目标</span>
+            <b>{mainObjective.title}</b>
+            <span className="bo-desc">{mainObjective.description}</span>
+            <span className="bo-detail">{mainObjectiveProgress.detail}</span>
+            <em className={`bo-state ${mainObjectiveProgress.status}`}>
+              {mainObjectiveProgress.label}
+            </em>
+            <span className="bo-progress" aria-hidden="true">
+              <i style={{ width: `${Math.round(mainObjectiveProgress.progress * 100)}%` }} />
+            </span>
+          </div>
+          {sideObjective && sideObjectiveProgress ? (
+            <div className={`bo-side tone-${sideObjectiveProgress.status}`}>
+              <span className="bo-kicker">支线</span>
+              <b>{sideObjective.title}</b>
+              <span className="bo-desc">{sideObjective.description}</span>
+              <span className="bo-detail">{sideObjectiveProgress.detail}</span>
+              <em className={`bo-state ${sideObjectiveProgress.status}`}>
+                {sideObjectiveProgress.label}
+              </em>
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       <div className="battle-grid">
         <div className="battle-main">

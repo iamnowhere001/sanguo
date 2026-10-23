@@ -259,6 +259,39 @@ export interface LogEntry {
 }
 
 // ── 战棋 ──────────────────────────────────────────────────
+/** 现代模式战斗题目：破城 / 守城 / 斩将 / 截粮（守点） */
+export type BattleObjectiveKind = 'capture' | 'hold' | 'decapitate' | 'supply';
+
+export interface BattleObjectivePoint {
+  x: number;
+  y: number;
+  label: string;
+}
+
+/** 一场战斗只给玩家一个主目标、最多一个支线；奖励在战后结算。 */
+export interface BattleObjective {
+  kind: BattleObjectiveKind;
+  /** 目标归属方（攻方 / 守方） */
+  side: BattleSide;
+  title: string;
+  description: string;
+  /** 主目标截止天数；支线不设截止 */
+  deadlineDay?: number;
+  /** 斩将目标单位 id（side:generalId） */
+  targetUnitId?: string;
+  targetName?: string;
+  /** 截粮 / 护粮的粮仓坐标 */
+  point?: BattleObjectivePoint;
+  /** 达成后的金 / 粮 / 经验 */
+  reward: {
+    gold?: number;
+    food?: number;
+    exp?: number;
+  };
+  /** 支线目标永远可选 */
+  optional?: boolean;
+}
+
 export interface BattleUnit {
   id: string;
   generalId: string;
@@ -324,6 +357,18 @@ export interface BattleState {
   guardSide?: BattleSide;
   /** 国策「奇谋」等提供的计策成功率加算（百分点） */
   tacticBonus?: number;
+  /** 玩家主目标：现代模式且玩家参战时生成 */
+  objective?: BattleObjective;
+  /** 玩家支线目标：最多一个 */
+  sideObjective?: BattleObjective;
+  /** 敌方主目标，供 AI 评分；不展示给玩家 */
+  foeObjective?: BattleObjective;
+  /** 敌方支线目标，供 AI 评分 */
+  foeSideObjective?: BattleObjective;
+  /** 本场存在的粮仓点位；截粮 / 护粮目标共享 */
+  supplyPoint?: BattleObjectivePoint;
+  /** 粮仓是否已被攻方占领（截粮 / 护粮判定） */
+  supplyTaken?: boolean;
 }
 
 /** 月报 / 战报：把结算结果变成可读、可归因的文本 */

@@ -20,6 +20,7 @@ import {
   otherSide,
   reachableTiles,
 } from './grid';
+import { objectiveMoveScore, objectiveTargetPriority } from './objectives';
 import { castTactic, tacticBlockReason, tacticRate, tacticTargets } from './tactics';
 import { beginSideTurn } from './turn';
 
@@ -102,7 +103,12 @@ function bestTacticalStep(
     const threat = evaluateThreat ? estimateThreat(b, unit, x, y) : 0;
     const cityBonus = battleTerrainAt(b, x, y) === 'city' ? 8 : 0;
     let score =
-      (canStrike ? 120 : 0) - nearest * 6 + (terr - 1) * 30 - threat * threatWeight + cityBonus;
+      (canStrike ? 120 : 0) -
+      nearest * 6 +
+      (terr - 1) * 30 -
+      threat * threatWeight +
+      cityBonus +
+      objectiveMoveScore(b, unit.side, x, y);
     if (lowHp) score -= threat * 0.4;
     if (!best || score > best.score) best = { x, y, score };
   }
@@ -136,6 +142,7 @@ function chooseAttackTarget(
     if (t.isCommander) score += diff.focusCommander ? 160 : 35;
     if (t.unitClass === 'archer' || t.unitClass === 'mystic') score += 18;
     score += (1 - t.troops / Math.max(1, t.maxTroops)) * 40;
+    score += objectiveTargetPriority(b, unit.side, t.id);
     if (battleTerrainAt(b, t.x, t.y) === 'city') score -= 10;
     if (score > bestScore) {
       bestScore = score;

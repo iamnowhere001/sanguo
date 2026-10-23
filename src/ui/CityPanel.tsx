@@ -35,6 +35,7 @@ import {
   policyUpkeepMult,
 } from '../systems/policy';
 import { prisonerRecruitRate, prisonersIn } from '../systems/prisoners';
+import { objectiveRewardText, planBattleObjectives } from '../systems/battle';
 import { gameStore } from '../store/gameStore';
 import { DiplomacyDialog } from './DiplomacyDialog';
 import { ExplorePanel } from './ExplorePanel';
@@ -1227,6 +1228,25 @@ export function DeployDialog({
   const effectiveDefenders = defenderTroops * (1 + fortification / 150);
   const ratio = attackerTroops / Math.max(1, effectiveDefenders);
 
+  // 部署预览与 createBattle 共用同一题目生成函数；经典模式不显示。
+  const objectivePreview = useMemo(() => {
+    if (!target || defenders.length === 0 || state.settings.ruleset === 'classic') {
+      return null;
+    }
+    const attackers = selected
+      .map((id) => state.generals[id])
+      .filter((g): g is General => Boolean(g));
+    if (attackers.length === 0) return null;
+    return planBattleObjectives(
+      state,
+      target.id,
+      attackers,
+      defenders,
+      state.playerFactionId,
+    );
+  }, [state, target, defenders, selected]);
+  const previewObjectives = objectivePreview?.attacker;
+
   const assessment =
     defenders.length === 0
       ? { text: '无守军，可直接占领', tone: 'good' as const }
@@ -1261,6 +1281,26 @@ export function DeployDialog({
             取消
           </button>
         </header>
+
+        {previewObjectives ? (
+          <div className="deploy-objectives">
+            <div className="deploy-objective-main">
+              <span className="bo-kicker">本战主目标</span>
+              <b>{previewObjectives.main.title}</b>
+              <span>{previewObjectives.main.description}</span>
+              <em>达成：{objectiveRewardText(previewObjectives.main)}</em>
+            </div>
+            {previewObjectives.side ? (
+              <div className="deploy-objective-side">
+                <span className="bo-kicker">支线</span>
+                <b>{previewObjectives.side.title}</b>
+                <span>{previewObjectives.side.description}</span>
+                <em>达成：{objectiveRewardText(previewObjectives.side)}</em>
+              </div>
+            ) : null}
+            <p>目标只影响战利与战报，不改变胜负条件；未达成不会额外扣兵。</p>
+          </div>
+        ) : null}
 
         <div className="deploy-block">
           <span className="label">目标城池</span>

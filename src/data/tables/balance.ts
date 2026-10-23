@@ -268,6 +268,22 @@ export const BALANCE = {
     EVENT_CHANCE: 0.45,
     /** 章节完成奖励 */
     CHAPTER_REWARD_GOLD: 800,
+    /** 战斗题目：主目标期限与达成奖励（支线另算） */
+    OBJECTIVE: {
+      /** 基准期限；按兵力比 / 城防 / 城池规模浮动 */
+      DEADLINE_BASE: 12,
+      DEADLINE_MIN: 8,
+      DEADLINE_MAX: 18,
+      MAIN_GOLD: 150,
+      MAIN_EXP: 40,
+      /** 斩将支线 */
+      DECAPITATE_GOLD: 100,
+      DECAPITATE_EXP: 30,
+      /** 截粮 / 护粮支线 */
+      SUPPLY_GOLD: 80,
+      SUPPLY_FOOD: 300,
+      SUPPLY_EXP: 20,
+    },
   },
 } as const;
 

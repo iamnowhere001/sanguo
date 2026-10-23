@@ -19,6 +19,7 @@ import {
 import { log } from '../economy';
 import { policyTacticBonus } from '../policy';
 import { emptyGrid, moveRangeOf, SPAWN_ATTACKER, SPAWN_DEFENDER } from './grid';
+import { planBattleObjectives } from './objectives';
 import { checkGameOver } from './resolve';
 
 /** 从指定战斗流掷天气；返回新流状态，避免偷用其它系统的随机数 */
@@ -173,6 +174,22 @@ export function createBattle(
   const playerSide: BattleSide =
     attackerFactionId === state.playerFactionId ? 'attacker' : 'defender';
 
+  // E6 战斗题目：经典模式不启用；预览与实战共用同一纯函数和种子。
+  const objectivePlan =
+    state.settings.ruleset !== 'classic' && playerInvolved
+      ? planBattleObjectives(
+          state,
+          targetCityId,
+          attackers,
+          fielded,
+          attackerFactionId,
+          state.battleSerial,
+        )
+      : null;
+  const myObjectives = objectivePlan?.[playerSide];
+  const foeObjectives =
+    objectivePlan?.[playerSide === 'attacker' ? 'defender' : 'attacker'];
+
   // 【优化】E14 战斗随机流独立派生；同回合多场战斗用 battleSerial 加盐
   const battleRng = streamFor(state.seed, 'battle', state.turn, state.battleSerial);
   state.battleSerial += 1;
@@ -209,6 +226,12 @@ export function createBattle(
       state.settings.ruleset === 'classic' || !playerInvolved
         ? 0
         : policyTacticBonus(state),
+    objective: myObjectives?.main,
+    sideObjective: myObjectives?.side,
+    foeObjective: foeObjectives?.main,
+    foeSideObjective: foeObjectives?.side,
+    supplyPoint: objectivePlan?.supplyPoint,
+    supplyTaken: objectivePlan?.supplyPoint ? false : undefined,
   };
 
   state.battle = battle;

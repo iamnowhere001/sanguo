@@ -19,6 +19,7 @@ export * from './tactics';
 export * from './ai';
 export * from './autopilot';
 export * from './setup';
+export * from './objectives';
 export * from './turn';
 export * from './resolve';
 export * from './auto';

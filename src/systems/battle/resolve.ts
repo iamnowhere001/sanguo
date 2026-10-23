@@ -2,6 +2,7 @@ import { BALANCE } from '../../data/tables/balance';
 import { WEATHER_LABEL } from '../../data/tables/tactics';
 import { chance } from '../../core/rng';
 import type {
+  BattleObjective,
   BattleState,
   BattleUnit,
   Faction,
@@ -14,6 +15,12 @@ import { clamp } from '../formulas';
 import { collapseEliminatedFactions } from '../elimination';
 import { grantExp } from './combat';
 import { activeUnits, otherSide } from './grid';
+import {
+  objectiveFailureText,
+  objectiveRewardText,
+  objectiveStatusAtEnd,
+  type BattleObjectiveStatus,
+} from './objectives';
 
 export type BattleOutcome = 'victory' | 'defeat' | 'retreat';
 
@@ -47,6 +54,55 @@ function applyBattleLoyalty(
     BALANCE.LOYALTY.battleReturn +
     (outcome === 'victory' ? 0 : BALANCE.LOYALTY.battleDefeat);
   return { delta, count };
+}
+
+interface ObjectiveResult {
+  objective: BattleObjective;
+  status: BattleObjectiveStatus;
+  rewardText?: string;
+}
+
+/**
+ * 发放玩家目标奖励。奖励落在玩家自己一侧的城：
+ * - 攻方胜：新占的目标城；
+ * - 攻方败 / 撤退：出发城；
+ * - 守方：目标城。
+ */
+function grantObjectiveReward(
+  state: GameState,
+  b: BattleState,
+  outcome: BattleOutcome,
+  objective: BattleObjective,
+  status: BattleObjectiveStatus,
+): string | undefined {
+  if (status !== 'success') return undefined;
+  const preferredId =
+    b.playerSide === 'defender'
+      ? b.targetCityId
+      : outcome === 'victory'
+        ? b.targetCityId
+        : b.fromCityId;
+  const preferred = state.cities[preferredId];
+  const city =
+    preferred?.ownerId === state.playerFactionId
+      ? preferred
+      : Object.values(state.cities).find((c) => c.ownerId === state.playerFactionId);
+  if (!city) return undefined;
+
+  if (objective.reward.gold) {
+    city.gold = Math.min(BALANCE.GOLD_CAP, city.gold + objective.reward.gold);
+  }
+  if (objective.reward.food) {
+    city.food = Math.min(BALANCE.FOOD_CAP, city.food + objective.reward.food);
+  }
+  if (objective.reward.exp) {
+    for (const u of Object.values(b.units)) {
+      if (u.side !== b.playerSide || u.routed || u.troops <= 0) continue;
+      const g = state.generals[u.generalId];
+      if (g?.status === 'active') grantExp(g, objective.reward.exp);
+    }
+  }
+  return objectiveRewardText(objective);
 }
 
 /**
@@ -137,6 +193,23 @@ export function resolveBattle(
     );
   }
 
+  const objectiveResults: ObjectiveResult[] = [];
+  if (b.playerInvolved && state.settings.ruleset !== 'classic') {
+    for (const objective of [b.objective, b.sideObjective]) {
+      if (!objective) continue;
+      const status = objectiveStatusAtEnd(b, objective, outcome);
+      const rewardText = grantObjectiveReward(state, b, outcome, objective, status);
+      objectiveResults.push({ objective, status, rewardText });
+      log(
+        state,
+        status === 'success' ? 'good' : 'warn',
+        `${objective.optional ? '支线' : '战令'}「${objective.title}」${
+          status === 'success' ? '达成' : '未达成'
+        }`,
+      );
+    }
+  }
+
   const playerWon = b.playerSide === 'attacker' ? outcome === 'victory' : outcome !== 'victory';
   const playerUnits = Object.values(b.units).filter((u) => u.side === b.playerSide);
   const playerTroopsNow = playerUnits.reduce((sum, u) => sum + u.troops, 0);
@@ -215,6 +288,20 @@ export function resolveBattle(
         text: `出征武将 ${loyalty.delta}${outcome !== 'victory' ? '（战败追加 −4）' : ''}`,
         tone: loyalty.delta < 0 ? 'warn' : 'info',
       });
+    }
+    for (const r of objectiveResults) {
+      const ok = r.status === 'success';
+      lines.push({
+        label: r.objective.optional ? '支线' : '战令',
+        text: ok
+          ? `${r.objective.title}达成：${r.objective.description}`
+          : `${r.objective.title}未达成：${objectiveFailureText(r.objective)}`,
+        tone: ok ? 'good' : 'warn',
+        reason: ok ? undefined : '目标失败不改变本场胜负，但没有额外战利。',
+      });
+      if (r.rewardText) {
+        lines.push({ label: '战利', text: r.rewardText, tone: 'good' });
+      }
     }
 
     state.report = {

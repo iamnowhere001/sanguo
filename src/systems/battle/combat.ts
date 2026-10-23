@@ -203,6 +203,14 @@ export function moveUnit(b: BattleState, unitId: string, x: number, y: number): 
   u.x = x;
   u.y = y;
   u.hasMoved = true;
+  if (
+    b.supplyPoint &&
+    u.side === 'attacker' &&
+    x === b.supplyPoint.x &&
+    y === b.supplyPoint.y
+  ) {
+    b.supplyTaken = true;
+  }
   return done('移动完成');
 }
 
@@ -214,11 +222,24 @@ export function undoMove(b: BattleState, unitId: string): OpResult {
   if (!u.hasMoved) return fail('该单位本日尚未移动');
   if (u.hasActed) return fail('已行动，无法撤销移动');
   if (u.prevX === undefined || u.prevY === undefined) return fail('没有可撤销的移动');
+  const wasOnSupply =
+    b.supplyPoint && u.x === b.supplyPoint.x && u.y === b.supplyPoint.y;
   u.x = u.prevX;
   u.y = u.prevY;
   u.prevX = undefined;
   u.prevY = undefined;
   u.hasMoved = false;
+  if (wasOnSupply && b.supplyPoint) {
+    // 撤销误点：只有仍有攻方部队站在粮仓上时才保留“已夺”状态
+    b.supplyTaken = Object.values(b.units).some(
+      (v) =>
+        v.side === 'attacker' &&
+        !v.routed &&
+        v.troops > 0 &&
+        v.x === b.supplyPoint!.x &&
+        v.y === b.supplyPoint!.y,
+    );
+  }
   return done('已撤销移动');
 }
 

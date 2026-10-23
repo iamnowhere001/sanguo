@@ -3237,6 +3237,145 @@ input[type='number'] {
 .battle-top .tb-left {
   gap: 0;
 }
+.battle-objectives {
+  flex: none;
+  display: flex;
+  align-items: stretch;
+  gap: var(--sp-3);
+  padding: 6px var(--panel-pad);
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(33, 30, 23, 0.96), rgba(22, 20, 15, 0.96));
+  overflow-x: auto;
+}
+.bo-main,
+.bo-side {
+  flex: 1 1 0;
+  min-width: 300px;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 3px 10px;
+  border-left: 2px solid var(--gold);
+  background: rgba(200, 164, 94, 0.06);
+  white-space: nowrap;
+}
+.bo-side {
+  flex: 0 1 330px;
+  border-left-color: var(--teal);
+  background: rgba(93, 154, 139, 0.06);
+}
+.bo-kicker {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+.bo-main b,
+.bo-side b {
+  flex: none;
+  font-family: var(--font-head);
+  font-size: 13px;
+  color: var(--gold);
+}
+.bo-side b {
+  color: var(--teal);
+}
+.bo-desc {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  color: var(--paper);
+}
+.bo-detail {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted);
+}
+.bo-state {
+  flex: none;
+  font-style: normal;
+  font-size: 10px;
+  color: var(--gold);
+}
+.bo-state.success {
+  color: var(--teal);
+}
+.bo-state.failed {
+  color: var(--red-text);
+}
+.bo-progress {
+  flex: 0 0 72px;
+  height: 3px;
+  background: var(--line);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.bo-progress i {
+  display: block;
+  height: 100%;
+  background: var(--gold);
+}
+.bo-main.tone-success,
+.bo-side.tone-success {
+  border-left-color: var(--teal);
+}
+.bo-main.tone-failed,
+.bo-side.tone-failed {
+  border-left-color: var(--red);
+}
+.bo-main.tone-success .bo-progress i {
+  background: var(--teal);
+}
+.bo-main.tone-failed .bo-progress i {
+  background: var(--red);
+}
+.deploy-objectives {
+  display: grid;
+  gap: var(--sp-2);
+  margin-top: var(--sp-3);
+  padding: var(--sp-3);
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--gold);
+  border-radius: 8px;
+  background: rgba(200, 164, 94, 0.05);
+}
+.deploy-objective-main,
+.deploy-objective-side {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: baseline;
+  gap: 4px var(--sp-2);
+}
+.deploy-objective-main b,
+.deploy-objective-side b {
+  font-family: var(--font-head);
+  font-size: 14px;
+  color: var(--gold);
+}
+.deploy-objective-side b {
+  color: var(--teal);
+}
+.deploy-objective-main span:not(.bo-kicker),
+.deploy-objective-side span:not(.bo-kicker) {
+  font-size: 11px;
+  color: var(--paper);
+}
+.deploy-objective-main em,
+.deploy-objective-side em {
+  grid-column: 2 / -1;
+  font-style: normal;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--muted);
+}
+.deploy-objectives p {
+  margin: 0;
+  font-size: 10px;
+  color: var(--muted);
+}
 .battle-sides {
   justify-self: center;
   display: flex;
@@ -4248,6 +4387,34 @@ input[type='number'] {
     justify-self: stretch;
     justify-content: flex-end;
     margin-top: var(--sp-1);
+  }
+  .battle-objectives {
+    padding: 4px 10px;
+    gap: var(--sp-2);
+  }
+  .bo-main,
+  .bo-side {
+    flex: 1 1 0;
+    min-width: 0;
+    gap: 5px;
+    padding: 2px 6px;
+  }
+  .bo-progress {
+    flex-basis: 34px;
+  }
+  .bo-kicker {
+    font-size: 8px;
+    letter-spacing: 0.06em;
+  }
+  .bo-main b,
+  .bo-side b {
+    font-size: 12px;
+  }
+  .bo-detail {
+    font-size: 9px;
+  }
+  .bo-desc {
+    display: none;
   }
   .battle-sides {
     margin-top: var(--sp-1);

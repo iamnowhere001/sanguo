@@ -2,6 +2,7 @@ import type { GameState } from '../core/state';
 import { emptyMonthFacts } from '../core/state';
 import { createStreams, RANDOM_STREAMS, streamFor, type RngState } from '../core/rng';
 import { createChapter } from '../systems/chapter';
+import { attachBattleObjectives } from '../systems/battle/objectives';
 
 const DEFAULT_SETTINGS: GameState['settings'] = {
   easterEggEnabled: false,
@@ -104,6 +105,8 @@ export function migrateSave(state: GameState): GameState {
       u.chargeUsed ??= false;
       u.bonusMove ??= 0;
     }
+    // 旧战斗存档没有题目：按当前战役上下文补一份，保证读档续战也有一战一题。
+    attachBattleObjectives(state, state.battle);
   }
 
   return state;
