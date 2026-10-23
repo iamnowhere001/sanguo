@@ -133,6 +133,7 @@ export function cuesForAction(c: CueContext): AudioCue[] {
       return [];
 
     case 'DOMESTIC':
+    case 'AUTO_GOVERN':
     case 'START_PROJECT':
     case 'START_EXPLORATION':
     case 'RECRUIT':

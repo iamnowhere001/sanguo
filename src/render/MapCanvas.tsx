@@ -12,6 +12,28 @@ interface ProjectedCity {
   y: number;
 }
 
+interface MapView {
+  zoom: number;
+  x: number;
+  y: number;
+}
+
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 3.2;
+
+const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
+
+/** 限制平移范围：地图边缘不会被拖出视野 */
+function clampPan(view: MapView, w: number, h: number): MapView {
+  const maxX = w * 0.5 * Math.max(0, view.zoom - 1);
+  const maxY = h * 0.5 * Math.max(0, view.zoom - 1);
+  return {
+    zoom: view.zoom,
+    x: clamp(view.x, -maxX, maxX),
+    y: clamp(view.y, -maxY, maxY),
+  };
+}
+
 /** 规模直接映射到节点半径：都城最大、小城最小，一眼能分出主次 */
 const NODE_RADIUS: Record<CitySize, number> = {
   capital: 10,
@@ -26,7 +48,12 @@ const SIZE_RANK: Record<CitySize, number> = {
   small: 3,
 };
 
-function project(state: GameState, w: number, h: number): ProjectedCity[] {
+function project(
+  state: GameState,
+  w: number,
+  h: number,
+  view: MapView = { zoom: 1, x: 0, y: 0 },
+): ProjectedCity[] {
   const cities = Object.values(state.cities);
   const xs = cities.map((c) => c.x);
   const ys = cities.map((c) => c.y);
@@ -34,19 +61,26 @@ function project(state: GameState, w: number, h: number): ProjectedCity[] {
   const maxX = Math.max(...xs);
   const minY = Math.min(...ys);
   const maxY = Math.max(...ys);
-  const padX = 70;
-  const padY = 56;
+  // 手机地图只有 200px 高：收窄留白，把纵向空间还给城池与道路
+  const padX = w < 560 ? 28 : 70;
+  const padY = h < 300 ? 16 : 56;
   const scale = Math.min(
     (w - padX * 2) / Math.max(1, maxX - minX),
     (h - padY * 2) / Math.max(1, maxY - minY),
   );
   const ox = (w - (maxX - minX) * scale) / 2;
   const oy = (h - (maxY - minY) * scale) / 2;
-  return cities.map((c) => ({
-    city: c,
-    x: ox + (c.x - minX) * scale,
-    y: oy + (c.y - minY) * scale,
-  }));
+  const cx = w / 2;
+  const cy = h / 2;
+  return cities.map((c) => {
+    const bx = ox + (c.x - minX) * scale;
+    const by = oy + (c.y - minY) * scale;
+    return {
+      city: c,
+      x: cx + (bx - cx) * view.zoom + view.x,
+      y: cy + (by - cy) * view.zoom + view.y,
+    };
+  });
 }
 
 export function MapCanvas({
@@ -66,6 +100,16 @@ export function MapCanvas({
   const pointsRef = useRef<ProjectedCity[]>([]);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [hover, setHover] = useState<string | null>(null);
+  const [view, setView] = useState<MapView>({ zoom: 1, x: 0, y: 0 });
+  const [dragging, setDragging] = useState(false);
+  const dragRef = useRef<{
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+    moved: boolean;
+  } | null>(null);
+  const mobileInit = useRef(false);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -77,6 +121,66 @@ export function MapCanvas({
     setSize({ w: el.clientWidth, h: el.clientHeight });
     return () => ro.disconnect();
   }, []);
+
+  /** 以某座城为中心缩放：手机点城池列表时，地图会跟过去 */
+  const centerView = (nextZoom: number, cityId = selectedCityId) => {
+    if (size.w < 10 || size.h < 10) return;
+    const zoom = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM);
+    if (zoom <= 1.001) {
+      setView({ zoom: 1, x: 0, y: 0 });
+      return;
+    }
+    const base = project(state, size.w, size.h);
+    const target = base.find((p) => p.city.id === cityId);
+    if (!target) {
+      setView((v) => clampPan({ ...v, zoom }, size.w, size.h));
+      return;
+    }
+    const cx = size.w / 2;
+    const cy = size.h / 2;
+    setView(
+      clampPan(
+        {
+          zoom,
+          x: -(target.x - cx) * zoom,
+          y: -(target.y - cy) * zoom,
+        },
+        size.w,
+        size.h,
+      ),
+    );
+  };
+
+  // 首次进入手机尺寸时默认放大到 2.1×，否则 61 城会挤成一张网
+  useEffect(() => {
+    if (!size.w || !size.h || mobileInit.current) return;
+    mobileInit.current = true;
+    if (size.w < 560) centerView(2.1);
+    // 只在首次拿到尺寸时决定初始视野
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [size.w, size.h]);
+
+  // 从城池列表切换选中城时，保持地图跟随（只在放大状态）
+  useEffect(() => {
+    if (view.zoom <= 1.01 || !size.w || !size.h) return;
+    const base = project(state, size.w, size.h);
+    const target = base.find((p) => p.city.id === selectedCityId);
+    if (!target) return;
+    const cx = size.w / 2;
+    const cy = size.h / 2;
+    const next = clampPan(
+      { zoom: view.zoom, x: -(target.x - cx) * view.zoom, y: -(target.y - cy) * view.zoom },
+      size.w,
+      size.h,
+    );
+    setView((v) =>
+      Math.abs(v.x - next.x) < 1 && Math.abs(v.y - next.y) < 1
+        ? v
+        : { ...v, x: next.x, y: next.y },
+    );
+    // 选择变化 / 尺寸变化时跟随；缩放由按钮与滚轮单独处理
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCityId, size.w, size.h]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -122,7 +226,11 @@ export function MapCanvas({
       ctx.stroke();
     }
 
-    // 河流
+    // 河流：跟随缩放 / 平移，线宽保持屏幕像素稳定
+    ctx.save();
+    ctx.translate(size.w / 2 + view.x, size.h / 2 + view.y);
+    ctx.scale(view.zoom, view.zoom);
+    ctx.translate(-size.w / 2, -size.h / 2);
     ctx.beginPath();
     ctx.moveTo(size.w * 0.08, size.h * 0.88);
     ctx.bezierCurveTo(
@@ -142,11 +250,12 @@ export function MapCanvas({
       size.h * 0.28,
     );
     ctx.strokeStyle = 'rgba(61,95,90,0.32)';
-    ctx.lineWidth = 9;
+    ctx.lineWidth = 9 / view.zoom;
     ctx.lineCap = 'round';
     ctx.stroke();
+    ctx.restore();
 
-    const pts = project(state, size.w, size.h);
+    const pts = project(state, size.w, size.h, view);
     pointsRef.current = pts;
     const byId = new Map(pts.map((p) => [p.city.id, p]));
 
@@ -492,7 +601,7 @@ export function MapCanvas({
         ctx.fillText('! 粮草已达上限 95%：征兵 / 卖粮 / 分城', x + 12, y + (hasSkill ? 136 : 120));
       }
     }
-  }, [state, selectedCityId, attackTargetIds, hover, size]);
+  }, [state, selectedCityId, attackTargetIds, hover, size, view]);
 
   const hit = (clientX: number, clientY: number): string | null => {
     const canvas = canvasRef.current;
@@ -513,17 +622,87 @@ export function MapCanvas({
       <canvas
         ref={canvasRef}
         className="map-canvas"
-        style={{ cursor: hover ? 'pointer' : 'default' }}
-        onMouseMove={(e) => {
+        style={{
+          cursor: dragging
+            ? 'grabbing'
+            : view.zoom > 1.01
+              ? 'grab'
+              : hover
+                ? 'pointer'
+                : 'default',
+        }}
+        onWheel={(e) => {
+          centerView(view.zoom + (e.deltaY < 0 ? 0.28 : -0.28));
+        }}
+        onPointerDown={(e) => {
+          if (e.button !== 0 || size.w < 10 || view.zoom <= 1.01) return;
+          dragRef.current = {
+            startX: e.clientX,
+            startY: e.clientY,
+            originX: view.x,
+            originY: view.y,
+            moved: false,
+          };
+          setDragging(true);
+          e.currentTarget.setPointerCapture(e.pointerId);
+        }}
+        onPointerMove={(e) => {
+          const drag = dragRef.current;
+          if (drag) {
+            const dx = e.clientX - drag.startX;
+            const dy = e.clientY - drag.startY;
+            if (Math.hypot(dx, dy) > 4) drag.moved = true;
+            if (drag.moved) {
+              setView(
+                clampPan(
+                  { zoom: view.zoom, x: drag.originX + dx, y: drag.originY + dy },
+                  size.w,
+                  size.h,
+                ),
+              );
+              setHover(null);
+            }
+            return;
+          }
           const id = hit(e.clientX, e.clientY);
           if (id !== hover) setHover(id);
         }}
-        onMouseLeave={() => setHover(null)}
-        onClick={(e) => {
+        onPointerUp={(e) => {
+          const drag = dragRef.current;
+          dragRef.current = null;
+          setDragging(false);
+          if (drag?.moved) return;
           const id = hit(e.clientX, e.clientY);
           if (id) onSelect(id);
+          if (e.pointerType !== 'mouse') setHover(null);
+        }}
+        onPointerCancel={() => {
+          dragRef.current = null;
+          setDragging(false);
+        }}
+        onPointerLeave={() => {
+          if (!dragRef.current) setHover(null);
         }}
       />
+
+      <div className="map-zoom" aria-label="地图缩放">
+        <button type="button" onClick={() => centerView(view.zoom - 0.35)} title="缩小">
+          −
+        </button>
+        <span className="map-zoom-pct">{Math.round(view.zoom * 100)}%</span>
+        <button type="button" onClick={() => centerView(view.zoom + 0.35)} title="放大">
+          ＋
+        </button>
+        <button
+          type="button"
+          className="map-zoom-reset"
+          onClick={() => setView({ zoom: 1, x: 0, y: 0 })}
+          title="显示全图"
+        >
+          全图
+        </button>
+      </div>
+
       <div className="map-legend">
         {Object.values(state.factions)
           .filter((f) => f.cityIds.length > 0)

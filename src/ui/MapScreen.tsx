@@ -12,9 +12,11 @@ import { FactionRail } from './FactionRail';
 import { RosterDialog } from './RosterDialog';
 import { SaveDialog } from './SaveDialog';
 import { ChapterBar } from './ChapterBar';
+import { CouncilModal } from './CouncilModal';
 import { Bar } from './atoms';
 import { ConfirmDialog, cityTroops, factionColor, factionName, fmt } from './common';
 import { activePolicy } from '../systems/policy';
+import { buildCouncilBrief } from '../systems/council';
 
 export function MapScreen() {
   const store = useGameStore();
@@ -44,6 +46,8 @@ export function MapScreen() {
   const [confirmTurn, setConfirmTurn] = useState<string | null>(null);
   const [quitOpen, setQuitOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [councilOpen, setCouncilOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   /** 能从选中城池出征的相邻敌城 */
   const attackFromSelected = useMemo(() => {
@@ -74,6 +78,16 @@ export function MapScreen() {
   const totalTroops = generals.reduce((s, g) => s + g.troops, 0);
   const faction = state.factions[state.playerFactionId];
   const policy = activePolicy(state);
+  const modern = state.settings.ruleset !== 'classic';
+  const councilBrief = useMemo(
+    () => (modern ? buildCouncilBrief(state) : null),
+    [state, modern],
+  );
+  const topAdvice = councilBrief
+    ? (councilBrief.cards.find((c) => c.tone === 'danger') ??
+      councilBrief.cards.find((c) => c.tone === 'warn') ??
+      councilBrief.cards[0])
+    : null;
 
   const endTurn = () => {
     const res = store.dispatch({ t: 'END_TURN' });
@@ -90,6 +104,7 @@ export function MapScreen() {
         saveOpen ||
         rosterOpen ||
         quitOpen ||
+        councilOpen ||
         Boolean(state.report) ||
         Boolean(state.unifyReady) ||
         Boolean(state.pendingEvent) ||
@@ -105,6 +120,12 @@ export function MapScreen() {
         setHelpOpen(false);
         return;
       }
+      if ((e.key === 'g' || e.key === 'G') && modern && !helpOpen && !otherModal) {
+        e.preventDefault();
+        setMoreOpen(false);
+        setCouncilOpen(true);
+        return;
+      }
       if ((e.key === 'e' || e.key === 'E') && !helpOpen && !otherModal) {
         e.preventDefault();
         endTurn();
@@ -112,7 +133,7 @@ export function MapScreen() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [helpOpen, deploy, saveOpen, rosterOpen, quitOpen, state.report, state.unifyReady, state.pendingEvent, state.policy?.offer]);
+  }, [helpOpen, deploy, saveOpen, rosterOpen, quitOpen, councilOpen, modern, state.report, state.unifyReady, state.pendingEvent, state.policy?.offer]);
 
   return (
     <div className="map-screen">
@@ -159,44 +180,148 @@ export function MapScreen() {
         </div>
 
         <div className="tb-actions">
-          {policy ? (
-            <span className="policy-pill" title={`${policy.school}国策，剩余 ${Math.max(0, (state.policy?.expiresTurn ?? state.turn) - state.turn)} 回合`}>
-              <i>国策</i>
-              {policy.name}
+          <div className="tb-secondary">
+            {policy ? (
+              <span className="policy-pill" title={`${policy.school}国策，剩余 ${Math.max(0, (state.policy?.expiresTurn ?? state.turn) - state.turn)} 回合`}>
+                <i>国策</i>
+                {policy.name}
+              </span>
+            ) : null}
+            <span className="faction-pill">
+              <i style={{ background: faction?.color ?? '#888' }} />
+              {factionName(state, state.playerFactionId)}
             </span>
-          ) : null}
-          <span className="faction-pill">
-            <i style={{ background: faction?.color ?? '#888' }} />
-            {factionName(state, state.playerFactionId)}
-          </span>
-          <span className="mini" title={difficultyOf(state.settings.difficulty).note}>
-            AI {difficultyOf(state.settings.difficulty).label}
-          </span>
-          <button className="btn ghost sm" onClick={() => setHelpOpen(true)} title="快捷键（?）">
-            快捷键
-          </button>
-          <AudioSettingsButton />
-          <button
-            className="btn sm"
-            onClick={() => setRosterOpen(true)}
-            title="查看全势力武将分布"
-          >
-            武将 {generals.length}
-          </button>
-          <button className="btn sm" onClick={() => setSaveOpen(true)}>
-            存档
-          </button>
-          <button className="btn ghost sm" onClick={() => setQuitOpen(true)}>
-            主菜单
-          </button>
+            <span className="mini" title={difficultyOf(state.settings.difficulty).note}>
+              AI {difficultyOf(state.settings.difficulty).label}
+            </span>
+            <button className="btn ghost sm" onClick={() => setHelpOpen(true)} title="快捷键（?）">
+              快捷键
+            </button>
+            <AudioSettingsButton />
+            <button
+              className="btn sm"
+              onClick={() => setRosterOpen(true)}
+              title="查看全势力武将分布"
+            >
+              武将 {generals.length}
+            </button>
+            <button className="btn sm" onClick={() => setSaveOpen(true)}>
+              存档
+            </button>
+            <button className="btn ghost sm" onClick={() => setQuitOpen(true)}>
+              主菜单
+            </button>
+          </div>
           <span className="tb-sep" />
+          {modern && councilBrief ? (
+            <button
+              className="btn accent sm tb-council"
+              onClick={() => setCouncilOpen(true)}
+              title="军师奏折与月度委任（G）"
+            >
+              朝议
+              <b className="tb-council-count">{councilBrief.stats.edictLeft}</b>
+              <kbd>G</kbd>
+            </button>
+          ) : null}
           <button className="btn primary" onClick={endTurn}>
             结束回合
           </button>
+          <button
+            className="btn ghost sm tb-more"
+            aria-expanded={moreOpen}
+            onClick={() => setMoreOpen((v) => !v)}
+          >
+            更多
+          </button>
         </div>
+
+        {moreOpen ? (
+          <>
+            <div className="tb-more-scrim" onClick={() => setMoreOpen(false)} />
+            <div className="tb-more-pop" role="menu" aria-label="更多操作">
+              <div className="tb-more-meta">
+                <span>
+                  <i style={{ background: faction?.color ?? '#888' }} />
+                  {factionName(state, state.playerFactionId)}
+                </span>
+                <em>AI {difficultyOf(state.settings.difficulty).label}</em>
+                {policy ? <em>国策 · {policy.name}</em> : null}
+              </div>
+              <button
+                role="menuitem"
+                onClick={() => {
+                  setMoreOpen(false);
+                  setRosterOpen(true);
+                }}
+              >
+                武将总览 <b>{generals.length}</b>
+              </button>
+              <button
+                role="menuitem"
+                onClick={() => {
+                  setMoreOpen(false);
+                  setSaveOpen(true);
+                }}
+              >
+                存档
+              </button>
+              <button
+                role="menuitem"
+                onClick={() => {
+                  setMoreOpen(false);
+                  setHelpOpen(true);
+                }}
+              >
+                快捷键
+              </button>
+              <div className="tb-more-audio">
+                <AudioSettingsButton />
+              </div>
+              <button
+                role="menuitem"
+                className="danger-hint"
+                onClick={() => {
+                  setMoreOpen(false);
+                  setQuitOpen(true);
+                }}
+              >
+                返回主菜单
+              </button>
+            </div>
+          </>
+        ) : null}
       </header>
 
       {state.settings.ruleset !== 'classic' ? <ChapterBar state={state} /> : null}
+
+      {modern && councilBrief && topAdvice ? (
+        <button
+          className="advisor-strip"
+          onClick={() => setCouncilOpen(true)}
+          title={`${topAdvice.title}：${topAdvice.text}（G）`}
+        >
+          <span className="advisor-badge">军师</span>
+          <span className={`advisor-lead tone-${topAdvice.tone}`}>
+            <b>{topAdvice.title}</b>
+            <em>{topAdvice.text}</em>
+          </span>
+          <span className="advisor-meta">
+            <span>
+              政令 <b>{councilBrief.stats.edictLeft}</b>
+            </span>
+            <span>
+              可出征 <b>{councilBrief.stats.attackable}</b>
+            </span>
+            <span>
+              府库 <b>{fmt(councilBrief.stats.gold)}</b>
+            </span>
+          </span>
+          <span className="advisor-cta">
+            朝议 <kbd>G</kbd>
+          </span>
+        </button>
+      ) : null}
 
       <div className="game-grid">
         <aside className="side-panel left-panel">
@@ -329,6 +454,14 @@ export function MapScreen() {
         </div>
       </footer>
 
+      {councilOpen && modern ? (
+        <CouncilModal
+          state={state}
+          onClose={() => setCouncilOpen(false)}
+          onSelectCity={setSelectedCityId}
+        />
+      ) : null}
+
       {deploy ? (
         <DeployDialog
           state={state}
@@ -372,6 +505,7 @@ export function MapScreen() {
               {[
                 ['Tab', '切换焦点（城池列表 / 操作按钮）'],
                 ['Enter / Space', '触发当前按钮'],
+                ['G', '打开朝议 / 军师奏折'],
                 ['E', '结束回合'],
                 ['?', '打开 / 关闭快捷键'],
                 ['Esc', '关闭弹窗 / 取消战棋指令'],

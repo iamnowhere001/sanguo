@@ -55,12 +55,44 @@ function guard(s: GameState, cityId: string, generalId?: string): OpResult | nul
   return null;
 }
 
+/**
+ * 单条内政命令的实际属性增益。
+ * 预览与执行共用同一套计算，避免“预览 +12、执行 +4”的上限截断差异。
+ * beforeOverride 供朝议按模拟后的属性连续排令。
+ */
+export function domesticGain(
+  s: GameState,
+  city: City,
+  cmd: DomesticCmd,
+  beforeOverride?: number,
+): number {
+  const cfg = BALANCE.DOMESTIC[cmd];
+  const cap = BALANCE.STAT_CAP[cfg.field];
+  const before = beforeOverride ?? city[cfg.field] ?? 0;
+  // 城池专属技能：演武额外训练度（如幽州骑训 / 西凉铁骑）
+  const drillBonus = cmd === 'drill' ? (city.skill?.drillBonus ?? 0) : 0;
+  const rawDelta = statGain(cfg.field, before) + drillBonus;
+  const delta =
+    cfg.field === 'commerce'
+      ? Math.max(
+          1,
+          Math.floor(
+            rawDelta *
+              (city.ownerId === s.playerFactionId ? policyCommerceMult(s) : 1),
+          ),
+        )
+      : rawDelta;
+  return Math.max(0, Math.min(cap, before + delta) - before);
+}
+
 /** 内政：开垦 / 招商 / 出巡 / 治理 */
 export function doDomestic(
   s: GameState,
   cityId: string,
   cmd: DomesticCmd,
   generalId: string,
+  /** 朝议委任会一次下达多道政令，只写一条汇总日志，避免刷屏 */
+  silent = false,
 ): OpResult {
   const bad = guard(s, cityId, generalId);
   if (bad) return bad;
@@ -84,30 +116,17 @@ export function doDomestic(
   g.stamina -= cfg.stamina;
   city.domesticUsed = (city.domesticUsed ?? 0) + 1;
 
-  // 【优化】E10 边际递减：值越高，单次增益越低
-  const cap = BALANCE.STAT_CAP[cfg.field];
   const before = city[cfg.field] ?? 0;
-  // 城池专属技能：演武额外训练度（如幽州骑训 / 西凉铁骑）
-  const drillBonus = cmd === 'drill' ? (city.skill?.drillBonus ?? 0) : 0;
-  const rawDelta = statGain(cfg.field, before) + drillBonus;
-  const delta =
-    cfg.field === 'commerce'
-      ? Math.max(
-          1,
-          Math.floor(
-            rawDelta *
-              (city.ownerId === s.playerFactionId ? policyCommerceMult(s) : 1),
-          ),
-        )
-      : rawDelta;
-  city[cfg.field] = Math.min(cap, before + delta);
-  const actual = (city[cfg.field] ?? before) - before;
+  const actual = domesticGain(s, city, cmd, before);
+  city[cfg.field] = Math.min(BALANCE.STAT_CAP[cfg.field], before + actual);
 
-  log(
-    s,
-    'info',
-    `${g.name} 在 ${city.name} ${cfg.label}：${fieldLabel(cfg.field)} +${actual}（−${cfg.gold} 金，体力 −${cfg.stamina}）`,
-  );
+  if (!silent) {
+    log(
+      s,
+      'info',
+      `${g.name} 在 ${city.name} ${cfg.label}：${fieldLabel(cfg.field)} +${actual}（−${cfg.gold} 金，体力 −${cfg.stamina}）`,
+    );
+  }
   return done(`${cfg.label}完成：${fieldLabel(cfg.field)} +${actual}`);
 }
 

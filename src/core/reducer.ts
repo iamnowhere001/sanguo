@@ -7,6 +7,7 @@ import {
   advanceTime,
   citiesNearFoodCap,
   clampResources,
+  log,
   runDisaster,
   runOutput,
   runStaminaRecovery,
@@ -50,9 +51,11 @@ import { resolveEvent, maybeScheduleEvent } from '../systems/events';
 import { refreshChapter } from '../systems/chapter';
 import { runProjects, startProject } from '../systems/projects';
 import { runExplorations, startExploration } from '../systems/exploration';
+import { COUNCIL_PROFILES, planCouncilDelegation, type CouncilProfile } from '../systems/council';
 
 export type Action =
   | { t: 'DOMESTIC'; cityId: string; cmd: DomesticCmd; generalId: string }
+  | { t: 'AUTO_GOVERN'; profile: CouncilProfile }
   | { t: 'START_PROJECT'; cityId: string; kind: ProjectKind; generalId: string }
   | { t: 'START_EXPLORATION'; cityId: string; direction: ExploreDirection; generalId: string; months: number }
   | { t: 'RECRUIT'; cityId: string; generalId: string; amount: number }
@@ -129,6 +132,70 @@ export function reduce(
     case 'DOMESTIC': {
       const r = doDomestic(s, action.cityId, action.cmd, action.generalId);
       return { state: r.ok ? s : state, result: r };
+    }
+    case 'AUTO_GOVERN': {
+      if (s.settings.ruleset === 'classic') {
+        return { state, result: { ok: false, message: '经典模式没有朝议委任' } };
+      }
+      if (s.phase !== 'map') {
+        return { state, result: { ok: false, message: '当前阶段无法朝议' } };
+      }
+
+      // 预览与执行共用同一份纯函数结果：玩家看到的清单就是实际下达的政令
+      const orders = planCouncilDelegation(s, action.profile);
+      if (orders.length === 0) {
+        return {
+          state,
+          result: {
+            ok: false,
+            message: '本月没有可委任的政令：请检查政令余量、金钱储备与武将体力',
+          },
+        };
+      }
+
+      let doneCount = 0;
+      let spentGold = 0;
+      const failed: string[] = [];
+      for (const order of orders) {
+        const r = doDomestic(s, order.cityId, order.cmd, order.generalId, true);
+        if (!r.ok) {
+          failed.push(`${order.cityName}·${order.cmdLabel}`);
+          continue;
+        }
+        doneCount += 1;
+        spentGold += order.gold;
+      }
+
+      if (doneCount === 0) {
+        return {
+          state,
+          result: {
+            ok: false,
+            message: `朝议未能执行：${failed.slice(0, 3).join('、')}`,
+          },
+        };
+      }
+
+      const profileLabel =
+        COUNCIL_PROFILES.find((p) => p.id === action.profile)?.label ?? '朝议';
+      const cityCount = new Set(orders.map((o) => o.cityId)).size;
+      log(
+        s,
+        'good',
+        `朝议（${profileLabel}）：${cityCount} 城 ${doneCount} 道政令已下达，耗 ${spentGold} 金`,
+      );
+
+      return {
+        state: s,
+        result: {
+          ok: true,
+          message: `朝议：${cityCount} 城 ${doneCount} 道政令已下达（−${spentGold} 金）`,
+          warnings:
+            failed.length > 0
+              ? [`${failed.length} 道政令未执行：${failed.slice(0, 3).join('、')}`]
+              : undefined,
+        },
+      };
     }
     case 'START_PROJECT': {
       const r = startProject(s, action.cityId, action.kind, action.generalId);
