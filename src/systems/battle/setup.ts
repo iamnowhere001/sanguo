@@ -21,7 +21,8 @@ import { log } from '../economy';
 import { policyTacticBonus } from '../policy';
 import { checkActProgress, recordCityCaptured } from '../chapter';
 import { canAttackFactions } from '../factionDiplomacy';
-import { emptyGrid, moveRangeOf, SPAWN_ATTACKER, SPAWN_DEFENDER } from './grid';
+import { buildBattlefield } from './battlefield';
+import { moveRangeOf, SPAWN_ATTACKER, SPAWN_DEFENDER } from './grid';
 import { planBattleObjectives } from './objectives';
 import { checkGameOver, retreatCityFor } from './resolve';
 
@@ -183,7 +184,19 @@ export function createBattle(
     .sort((a, b) => b.troops - a.troops)
     .slice(0, BALANCE.BATTLE_MAX_DEFENDERS);
 
-  const grid = emptyGrid(target.terrain);
+  const battlefield = buildBattlefield({
+    seed: state.seed,
+    turn: state.turn,
+    battleSerial: state.battleSerial,
+    attackerCityId: fromCityId,
+    defenderCityId: targetCityId,
+    targetCityId,
+    targetCityName: target.name,
+    targetTerrain: target.terrain,
+    isWaterCity: target.isWaterCity,
+    citySize: target.size,
+  });
+  const grid = battlefield.grid;
   const units: Record<string, BattleUnit> = {};
   const atkCommander = attackers.find((g) => g.isRuler)?.id ?? attackers[0]!.id;
   const defCommander = fielded[0]!.id;
@@ -238,6 +251,7 @@ export function createBattle(
       target.fortification + (target.skill?.fortificationBonus ?? 0),
     ),
     grid,
+    battlefield: battlefield.battlefield,
     units,
     side: playerSide,
     day: 1,

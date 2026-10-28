@@ -1,13 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
-import type { BattleState, BattleTerrain, BattleUnit } from '../core/state';
+import type {
+  BattleState,
+  BattleTerrain,
+  BattleUnit,
+  BattlefieldFeature,
+  BattlefieldThemeId,
+} from '../core/state';
 import { UNIT_CLASS_LABEL } from '../data/tables/unitClasses';
 import {
   BATTLE_H,
   BATTLE_W,
   attackRangeOf,
   damagePreview,
+  inferBattlefieldTheme,
   moveRangeOf,
 } from '../systems/battle';
+import { BATTLEFIELD_PALETTE, type BattlefieldPalette } from './battlefieldTheme';
 
 const TERRAIN_FILL: Record<BattleTerrain, string> = {
   plain: '#3a352a',
@@ -62,6 +70,17 @@ function geometry(w: number, h: number): Geo {
 
 function unitAt(b: BattleState, x: number, y: number): BattleUnit | undefined {
   return Object.values(b.units).find((u) => !u.routed && u.x === x && u.y === y);
+}
+
+function featureAt(
+  b: BattleState,
+  x: number,
+  y: number,
+  includeRoad = false,
+): BattlefieldFeature | undefined {
+  return b.battlefield?.features?.find(
+    (f) => f.x === x && f.y === y && (includeRoad || f.kind !== 'road'),
+  );
 }
 
 interface HoverInfo {
@@ -123,6 +142,7 @@ function hoverInfo(
     };
   }
 
+  const feature = featureAt(b, x, y);
   const cost = reachCost.get(`${x},${y}`);
   if (cost !== undefined && selected) {
     const adjacentEnemy = Object.values(b.units).some(
@@ -132,9 +152,18 @@ function hoverInfo(
       title: `移动至此 · 消耗 ${cost}`,
       lines: [
         TERRAIN_SWATCH[b.grid[y]?.[x] ?? 'plain'],
+        ...(feature ? [feature.label] : []),
         adjacentEnemy ? '邻接敌军：进入后停止移动' : '点击移动',
       ],
       tone: adjacentEnemy ? 'danger' : 'info',
+    };
+  }
+
+  if (feature) {
+    return {
+      title: feature.label,
+      lines: [feature.description ?? '战场地标'],
+      tone: 'info',
     };
   }
 
@@ -197,6 +226,1030 @@ function drawTooltip(
   });
 }
 
+// ── 主题绘制工具 ──────────────────────────────────────────
+
+function rgba(hex: string, alpha: number): string {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+
+/** 按格子坐标生成稳定的微纹理随机数，避免每帧闪烁 */
+function noise(x: number, y: number, salt = 0): number {
+  let h = Math.imul(x + 1, 374761393) ^ Math.imul(y + 1, 668265263) ^ Math.imul(salt + 1, 1442695041);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+
+function themeOf(battle: BattleState): BattlefieldThemeId {
+  return battle.battlefield?.theme ?? inferBattlefieldTheme(battle.grid);
+}
+
+// ── 地形纹理 ──────────────────────────────────────────────
+
+function drawPlainCell(
+  ctx: CanvasRenderingContext2D,
+  px: number,
+  py: number,
+  cell: number,
+  palette: BattlefieldPalette,
+  theme: BattlefieldThemeId,
+  x: number,
+  y: number,
+): void {
+  const n = noise(x, y, 1);
+  const detail = cell >= 22;
+
+  if (theme === 'farmland' || theme === 'city') {
+    // 田垄：横向浅色条带 + 细垄线，让平原不再是一块纯色
+    ctx.fillStyle = rgba(palette.plainAlt, 0.5);
+    ctx.fillRect(px, py + cell * (0.16 + n * 0.22), cell, cell * (0.28 + n * 0.16));
+    ctx.strokeStyle = rgba(palette.grass, 0.17);
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 3; i++) {
+      const yy = py + cell * (0.2 + i * 0.27 + n * 0.04);
+      ctx.beginPath();
+      ctx.moveTo(px + cell * 0.08, yy);
+      ctx.lineTo(px + cell * 0.92, yy + cell * 0.025);
+      ctx.stroke();
+    }
+  } else if (theme === 'ruins') {
+    // 焦土与碎屑
+    ctx.fillStyle = rgba('#14110c', 0.32);
+    for (let i = 0; i < 4; i++) {
+      const nx = noise(x, y, 10 + i);
+      const ny = noise(x, y, 20 + i);
+      ctx.fillRect(px + cell * (0.15 + nx * 0.7), py + cell * (0.15 + ny * 0.7), cell * 0.045, cell * 0.035);
+    }
+    ctx.strokeStyle = rgba(palette.roadAlt, 0.28);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(px + cell * 0.18, py + cell * 0.78);
+    ctx.lineTo(px + cell * 0.42, py + cell * 0.56);
+    ctx.lineTo(px + cell * 0.5, py + cell * 0.62);
+    ctx.lineTo(px + cell * 0.78, py + cell * 0.3);
+    ctx.stroke();
+  } else if (theme === 'highland') {
+    // 黄土塬上的碎石与矮草
+    ctx.fillStyle = rgba(palette.mountainAlt, 0.28);
+    for (let i = 0; i < 3; i++) {
+      const nx = noise(x, y, 30 + i);
+      const ny = noise(x, y, 40 + i);
+      ctx.beginPath();
+      ctx.ellipse(px + cell * (0.2 + nx * 0.6), py + cell * (0.25 + ny * 0.55), cell * 0.055, cell * 0.03, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else {
+    // 普通草原：用柔和的草色斑块打散纯色
+    ctx.fillStyle = rgba(palette.grass, 0.07);
+    ctx.beginPath();
+    ctx.ellipse(
+      px + cell * (0.3 + noise(x, y, 5) * 0.4),
+      py + cell * (0.35 + noise(x, y, 6) * 0.35),
+      cell * 0.38,
+      cell * 0.24,
+      0,
+      0,
+      Math.PI * 2,
+    );
+    ctx.fill();
+  }
+
+  if (!detail) return;
+
+  // 草叶：稀疏、短，避免每格都长得一样
+  ctx.strokeStyle = rgba(palette.grass, 0.45);
+  ctx.lineWidth = Math.max(1, cell * 0.014);
+  const tufts = 2 + Math.floor(noise(x, y, 7) * 2);
+  for (let i = 0; i < tufts; i++) {
+    const gx = px + cell * (0.18 + noise(x, y, 50 + i) * 0.68);
+    const gy = py + cell * (0.55 + noise(x, y, 60 + i) * 0.3);
+    ctx.beginPath();
+    ctx.moveTo(gx, gy);
+    ctx.lineTo(gx - cell * 0.035, gy - cell * 0.1);
+    ctx.moveTo(gx, gy);
+    ctx.lineTo(gx + cell * 0.045, gy - cell * 0.08);
+    ctx.stroke();
+  }
+}
+
+function drawForestCell(
+  ctx: CanvasRenderingContext2D,
+  px: number,
+  py: number,
+  cell: number,
+  palette: BattlefieldPalette,
+  theme: BattlefieldThemeId,
+  x: number,
+  y: number,
+): void {
+  ctx.fillStyle = palette.forest;
+  ctx.fillRect(px, py, cell, cell);
+  ctx.fillStyle = rgba(palette.forestAlt, 0.35);
+  ctx.fillRect(px + cell * 0.08, py + cell * 0.12, cell * 0.84, cell * 0.76);
+
+  const count = theme === 'forest' ? (cell >= 26 ? 4 : 3) : cell >= 26 ? 3 : 2;
+  for (let i = 0; i < count; i++) {
+    const nx = noise(x, y, 100 + i);
+    const ny = noise(x, y, 120 + i);
+    const cx = px + cell * (0.2 + nx * 0.6);
+    const cy = py + cell * (0.25 + ny * 0.5);
+    const r = cell * (0.14 + noise(x, y, 140 + i) * 0.09);
+
+    // 树冠阴影
+    ctx.beginPath();
+    ctx.ellipse(cx + cell * 0.035, cy + cell * 0.045, r * 1.05, r * 0.72, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.24)';
+    ctx.fill();
+
+    // 树冠
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, r, r * 0.86, 0, 0, Math.PI * 2);
+    ctx.fillStyle = i % 2 === 0 ? palette.forestAlt : rgba(palette.forestAlt, 0.82);
+    ctx.fill();
+
+    // 左上受光
+    ctx.beginPath();
+    ctx.ellipse(cx - r * 0.24, cy - r * 0.24, r * 0.48, r * 0.34, 0, 0, Math.PI * 2);
+    ctx.fillStyle = rgba(palette.grass, 0.18);
+    ctx.fill();
+
+    if (cell >= 34) {
+      ctx.strokeStyle = rgba('#1a130d', 0.5);
+      ctx.lineWidth = Math.max(1, cell * 0.018);
+      ctx.beginPath();
+      ctx.moveTo(cx, cy + r * 0.55);
+      ctx.lineTo(cx, cy + r * 1.2);
+      ctx.stroke();
+    }
+  }
+}
+
+function drawMountainCell(
+  ctx: CanvasRenderingContext2D,
+  px: number,
+  py: number,
+  cell: number,
+  palette: BattlefieldPalette,
+  x: number,
+  y: number,
+): void {
+  ctx.fillStyle = palette.mountain;
+  ctx.fillRect(px, py, cell, cell);
+
+  const n = noise(x, y, 200);
+  const baseY = py + cell * 0.9;
+
+  const peak = (
+    cx: number,
+    halfW: number,
+    height: number,
+    fill: string,
+    light: string,
+  ) => {
+    ctx.beginPath();
+    ctx.moveTo(cx - halfW, baseY);
+    ctx.lineTo(cx, baseY - height);
+    ctx.lineTo(cx + halfW, baseY);
+    ctx.closePath();
+    ctx.fillStyle = fill;
+    ctx.fill();
+
+    // 受光面
+    ctx.beginPath();
+    ctx.moveTo(cx, baseY - height);
+    ctx.lineTo(cx - halfW, baseY);
+    ctx.lineTo(cx - halfW * 0.15, baseY);
+    ctx.closePath();
+    ctx.fillStyle = light;
+    ctx.fill();
+  };
+
+  // 次峰
+  peak(
+    px + cell * (0.3 + n * 0.16),
+    cell * 0.26,
+    cell * 0.34,
+    rgba(palette.mountainAlt, 0.68),
+    rgba(palette.mountainAlt, 0.92),
+  );
+  // 主峰
+  peak(
+    px + cell * 0.55,
+    cell * 0.42,
+    cell * 0.54,
+    palette.mountain,
+    palette.mountainAlt,
+  );
+
+  // 山脊亮线
+  ctx.strokeStyle = rgba(palette.grass, 0.22);
+  ctx.lineWidth = Math.max(1, cell * 0.014);
+  ctx.beginPath();
+  ctx.moveTo(px + cell * 0.55, py + cell * 0.36);
+  ctx.lineTo(px + cell * 0.42, py + cell * 0.64);
+  ctx.lineTo(px + cell * 0.55, py + cell * 0.56);
+  ctx.stroke();
+
+  // 山脚碎石
+  if (cell >= 30) {
+    ctx.fillStyle = rgba('#17140f', 0.3);
+    for (let i = 0; i < 3; i++) {
+      const nx = noise(x, y, 220 + i);
+      ctx.beginPath();
+      ctx.ellipse(px + cell * (0.14 + nx * 0.7), py + cell * (0.78 + noise(x, y, 240 + i) * 0.12), cell * 0.045, cell * 0.026, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+function drawWaterCell(
+  ctx: CanvasRenderingContext2D,
+  battle: BattleState,
+  px: number,
+  py: number,
+  cell: number,
+  palette: BattlefieldPalette,
+  x: number,
+  y: number,
+): void {
+  const grad = ctx.createLinearGradient(px, py, px, py + cell);
+  grad.addColorStop(0, palette.water);
+  grad.addColorStop(1, palette.waterDeep);
+  ctx.fillStyle = grad;
+  ctx.fillRect(px, py, cell, cell);
+
+  const n = noise(x, y, 300);
+  ctx.strokeStyle = rgba(palette.waterLight, 0.32);
+  ctx.lineWidth = Math.max(1, cell * 0.014);
+  for (let i = 0; i < 3; i++) {
+    const yy = py + cell * (0.26 + i * 0.24 + n * 0.04);
+    ctx.beginPath();
+    ctx.moveTo(px + cell * 0.08, yy);
+    ctx.bezierCurveTo(
+      px + cell * 0.34,
+      yy - cell * 0.06,
+      px + cell * 0.64,
+      yy + cell * 0.06,
+      px + cell * 0.92,
+      yy,
+    );
+    ctx.stroke();
+  }
+
+  // 细碎反光
+  ctx.fillStyle = rgba(palette.waterLight, 0.42);
+  for (let i = 0; i < 2; i++) {
+    const nx = noise(x, y, 320 + i);
+    const ny = noise(x, y, 340 + i);
+    ctx.fillRect(px + cell * (0.18 + nx * 0.62), py + cell * (0.2 + ny * 0.58), Math.max(1, cell * 0.03), Math.max(1, cell * 0.012));
+  }
+
+  // 岸线：只朝陆地一侧描边，水面因此有“岸”的轮廓
+  const sides: Array<[number, number, 'top' | 'bottom' | 'left' | 'right']> = [
+    [0, -1, 'top'],
+    [0, 1, 'bottom'],
+    [-1, 0, 'left'],
+    [1, 0, 'right'],
+  ];
+  ctx.strokeStyle = rgba(palette.waterLight, 0.5);
+  ctx.lineWidth = Math.max(1, cell * 0.035);
+  for (const [dx, dy, side] of sides) {
+    const nt = battle.grid[y + dy]?.[x + dx] ?? 'plain';
+    if (nt === 'water') continue;
+    ctx.beginPath();
+    if (side === 'top') {
+      ctx.moveTo(px, py + 1);
+      ctx.lineTo(px + cell, py + 1);
+    } else if (side === 'bottom') {
+      ctx.moveTo(px, py + cell - 1);
+      ctx.lineTo(px + cell, py + cell - 1);
+    } else if (side === 'left') {
+      ctx.moveTo(px + 1, py);
+      ctx.lineTo(px + 1, py + cell);
+    } else {
+      ctx.moveTo(px + cell - 1, py);
+      ctx.lineTo(px + cell - 1, py + cell);
+    }
+    ctx.stroke();
+  }
+}
+
+// ── 道路、桥梁与地标 ──────────────────────────────────────
+
+function drawRoads(
+  ctx: CanvasRenderingContext2D,
+  battle: BattleState,
+  geo: Geo,
+  palette: BattlefieldPalette,
+): void {
+  const roadSet = new Set(
+    (battle.battlefield?.features ?? [])
+      .filter((f) => f.kind === 'road')
+      .map((f) => `${f.x},${f.y}`),
+  );
+  if (roadSet.size === 0) return;
+
+  const { cell, ox, oy } = geo;
+  const width = Math.max(2, cell * 0.3);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  const drawSegments = (style: string, lineWidth: number) => {
+    ctx.strokeStyle = style;
+    ctx.lineWidth = lineWidth;
+    for (const key of roadSet) {
+      const [x, y] = key.split(',').map(Number) as [number, number];
+      const cx = ox + x * cell + cell / 2;
+      const cy = oy + y * cell + cell / 2;
+      for (const [dx, dy] of [
+        [1, 0],
+        [0, 1],
+        [-1, 0],
+        [0, -1],
+      ] as const) {
+        if (!roadSet.has(`${x + dx},${y + dy}`)) continue;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(cx + dx * cell, cy + dy * cell);
+        ctx.stroke();
+      }
+      ctx.beginPath();
+      ctx.arc(cx, cy, lineWidth / 2, 0, Math.PI * 2);
+      ctx.fillStyle = style;
+      ctx.fill();
+    }
+  };
+
+  drawSegments(rgba(palette.roadAlt, 0.4), width + Math.max(2, cell * 0.07));
+  drawSegments(palette.road, width);
+
+  // 官道抵近城墙：补上最后一小段，避免道路在城门前半格处断头
+  const drawGateSpurs = (style: string, lineWidth: number) => {
+    ctx.strokeStyle = style;
+    ctx.lineWidth = lineWidth;
+    for (const key of roadSet) {
+      const [x, y] = key.split(',').map(Number) as [number, number];
+      const cx = ox + x * cell + cell / 2;
+      const cy = oy + y * cell + cell / 2;
+      for (const [dx, dy] of [
+        [1, 0],
+        [0, 1],
+        [-1, 0],
+        [0, -1],
+      ] as const) {
+        if (battle.grid[y + dy]?.[x + dx] !== 'city') continue;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(cx + dx * cell * 0.5, cy + dy * cell * 0.5);
+        ctx.stroke();
+      }
+    }
+  };
+  drawGateSpurs(rgba(palette.roadAlt, 0.4), width + Math.max(2, cell * 0.07));
+  drawGateSpurs(palette.road, width);
+
+  // 车辙碎石
+  ctx.fillStyle = rgba(palette.roadAlt, 0.7);
+  for (const key of roadSet) {
+    const [x, y] = key.split(',').map(Number) as [number, number];
+    const cx = ox + x * cell + cell / 2;
+    const cy = oy + y * cell + cell / 2;
+    for (let i = 0; i < 3; i++) {
+      const nx = noise(x, y, 400 + i) - 0.5;
+      const ny = noise(x, y, 420 + i) - 0.5;
+      ctx.beginPath();
+      ctx.ellipse(cx + nx * cell * 0.34, cy + ny * cell * 0.34, Math.max(1, cell * 0.014), Math.max(1, cell * 0.01), 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+function drawBridge(
+  ctx: CanvasRenderingContext2D,
+  px: number,
+  py: number,
+  cell: number,
+  palette: BattlefieldPalette,
+  dir: 'h' | 'v' | 'cross' = 'h',
+): void {
+  ctx.save();
+  ctx.translate(px + cell / 2, py + cell / 2);
+  if (dir === 'v') ctx.rotate(Math.PI / 2);
+
+  const w = cell * 0.96;
+  const h = cell * 0.58;
+
+  // 桥下阴影
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.fillRect(-w / 2 + cell * 0.03, -h / 2 + cell * 0.04, w, h);
+
+  // 木桥面
+  ctx.fillStyle = palette.road;
+  ctx.fillRect(-w / 2, -h / 2, w, h);
+
+  // 木板纹理
+  ctx.strokeStyle = rgba('#2b2016', 0.38);
+  ctx.lineWidth = Math.max(1, cell * 0.012);
+  const plank = Math.max(4, cell * 0.12);
+  for (let x = -w / 2 + plank; x < w / 2; x += plank) {
+    ctx.beginPath();
+    ctx.moveTo(x, -h / 2 + cell * 0.03);
+    ctx.lineTo(x, h / 2 - cell * 0.03);
+    ctx.stroke();
+  }
+
+  // 边梁
+  ctx.fillStyle = rgba(palette.roadAlt, 0.85);
+  ctx.fillRect(-w / 2, -h / 2, w, Math.max(2, cell * 0.045));
+  ctx.fillRect(-w / 2, h / 2 - Math.max(2, cell * 0.045), w, Math.max(2, cell * 0.045));
+
+  // 栏杆
+  ctx.strokeStyle = rgba(palette.wall, 0.85);
+  ctx.lineWidth = Math.max(1, cell * 0.03);
+  ctx.beginPath();
+  ctx.moveTo(-w / 2, -h / 2 - cell * 0.045);
+  ctx.lineTo(w / 2, -h / 2 - cell * 0.045);
+  ctx.moveTo(-w / 2, h / 2 + cell * 0.045);
+  ctx.lineTo(w / 2, h / 2 + cell * 0.045);
+  ctx.stroke();
+  for (let x = -w / 2 + cell * 0.08; x <= w / 2; x += cell * 0.22) {
+    ctx.beginPath();
+    ctx.moveTo(x, -h / 2 - cell * 0.05);
+    ctx.lineTo(x, -h / 2 + cell * 0.06);
+    ctx.moveTo(x, h / 2 + cell * 0.05);
+    ctx.lineTo(x, h / 2 - cell * 0.06);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function drawFord(
+  ctx: CanvasRenderingContext2D,
+  px: number,
+  py: number,
+  cell: number,
+  palette: BattlefieldPalette,
+): void {
+  // 浅水带
+  ctx.fillStyle = rgba(palette.waterLight, 0.16);
+  ctx.fillRect(px, py + cell * 0.2, cell, cell * 0.6);
+
+  // 踏石
+  for (let i = 0; i < 4; i++) {
+    const cx = px + cell * (0.18 + i * 0.21);
+    const cy = py + cell * (0.5 + (i % 2 === 0 ? -0.05 : 0.06));
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, cell * 0.075, cell * 0.045, 0, 0, Math.PI * 2);
+    ctx.fillStyle = rgba('#3b3a31', 0.95);
+    ctx.fill();
+    ctx.strokeStyle = rgba(palette.waterLight, 0.6);
+    ctx.lineWidth = Math.max(1, cell * 0.012);
+    ctx.stroke();
+  }
+
+  // 水纹
+  ctx.strokeStyle = rgba(palette.waterLight, 0.4);
+  ctx.lineWidth = Math.max(1, cell * 0.012);
+  for (let i = 0; i < 2; i++) {
+    ctx.beginPath();
+    ctx.moveTo(px + cell * 0.1, py + cell * (0.3 + i * 0.36));
+    ctx.bezierCurveTo(
+      px + cell * 0.35,
+      py + cell * (0.22 + i * 0.36),
+      px + cell * 0.65,
+      py + cell * (0.4 + i * 0.36),
+      px + cell * 0.9,
+      py + cell * (0.3 + i * 0.36),
+    );
+    ctx.stroke();
+  }
+}
+
+function drawVillage(
+  ctx: CanvasRenderingContext2D,
+  px: number,
+  py: number,
+  cell: number,
+  palette: BattlefieldPalette,
+): void {
+  const houses = cell >= 30 ? 2 : 1;
+  for (let i = 0; i < houses; i++) {
+    const hx = px + cell * (i === 0 ? 0.24 : 0.58);
+    const hy = py + cell * (i === 0 ? 0.48 : 0.36);
+    const w = cell * 0.18;
+    const h = cell * 0.14;
+
+    // 墙体
+    ctx.fillStyle = rgba('#8a7758', 0.9);
+    ctx.fillRect(hx, hy, w, h);
+
+    // 屋顶
+    ctx.beginPath();
+    ctx.moveTo(hx - cell * 0.025, hy);
+    ctx.lineTo(hx + w / 2, hy - h * 0.7);
+    ctx.lineTo(hx + w + cell * 0.025, hy);
+    ctx.closePath();
+    ctx.fillStyle = palette.roof;
+    ctx.fill();
+    ctx.strokeStyle = rgba('#2a1b12', 0.5);
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // 门洞
+    ctx.fillStyle = rgba('#1b140e', 0.7);
+    ctx.fillRect(hx + w * 0.38, hy + h * 0.38, w * 0.24, h * 0.5);
+  }
+
+  // 篱笆
+  ctx.strokeStyle = rgba(palette.roadAlt, 0.7);
+  ctx.lineWidth = Math.max(1, cell * 0.012);
+  ctx.beginPath();
+  ctx.moveTo(px + cell * 0.12, py + cell * 0.78);
+  ctx.lineTo(px + cell * 0.88, py + cell * 0.78);
+  ctx.stroke();
+}
+
+function drawCamp(
+  ctx: CanvasRenderingContext2D,
+  px: number,
+  py: number,
+  cell: number,
+  palette: BattlefieldPalette,
+): void {
+  // 营帐
+  for (let i = 0; i < 2; i++) {
+    const cx = px + cell * (i === 0 ? 0.34 : 0.66);
+    const cy = py + cell * 0.58;
+    const w = cell * 0.24;
+    const h = cell * 0.24;
+    ctx.beginPath();
+    ctx.moveTo(cx - w / 2, cy);
+    ctx.lineTo(cx, cy - h);
+    ctx.lineTo(cx + w / 2, cy);
+    ctx.closePath();
+    ctx.fillStyle = i === 0 ? rgba('#a08a63', 0.9) : rgba('#8f7a57', 0.9);
+    ctx.fill();
+    ctx.strokeStyle = rgba('#2b2015', 0.55);
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // 帐门
+    ctx.beginPath();
+    ctx.moveTo(cx - w * 0.12, cy);
+    ctx.lineTo(cx, cy - h * 0.55);
+    ctx.lineTo(cx + w * 0.12, cy);
+    ctx.closePath();
+    ctx.fillStyle = rgba('#241a11', 0.65);
+    ctx.fill();
+  }
+
+  // 粮箱
+  ctx.fillStyle = rgba('#6f5a3d', 0.95);
+  ctx.fillRect(px + cell * 0.12, py + cell * 0.62, cell * 0.14, cell * 0.12);
+  ctx.strokeStyle = rgba('#2b2015', 0.5);
+  ctx.strokeRect(px + cell * 0.12, py + cell * 0.62, cell * 0.14, cell * 0.12);
+
+  // 旗
+  ctx.strokeStyle = rgba('#2a2118', 0.9);
+  ctx.lineWidth = Math.max(1, cell * 0.018);
+  ctx.beginPath();
+  ctx.moveTo(px + cell * 0.82, py + cell * 0.58);
+  ctx.lineTo(px + cell * 0.82, py + cell * 0.16);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(px + cell * 0.82, py + cell * 0.18);
+  ctx.lineTo(px + cell * 0.98, py + cell * 0.24);
+  ctx.lineTo(px + cell * 0.82, py + cell * 0.32);
+  ctx.closePath();
+  ctx.fillStyle = palette.accent;
+  ctx.fill();
+}
+
+function drawPass(
+  ctx: CanvasRenderingContext2D,
+  px: number,
+  py: number,
+  cell: number,
+  palette: BattlefieldPalette,
+): void {
+  // 木栅关墙
+  ctx.strokeStyle = rgba('#3b2b1c', 0.95);
+  ctx.lineWidth = Math.max(2, cell * 0.05);
+  ctx.beginPath();
+  ctx.moveTo(px + cell * 0.12, py + cell * 0.42);
+  ctx.lineTo(px + cell * 0.88, py + cell * 0.42);
+  ctx.stroke();
+
+  ctx.lineWidth = Math.max(2, cell * 0.045);
+  for (let i = 0; i < 4; i++) {
+    const x = px + cell * (0.2 + i * 0.18);
+    ctx.beginPath();
+    ctx.moveTo(x, py + cell * 0.3);
+    ctx.lineTo(x, py + cell * 0.7);
+    ctx.stroke();
+  }
+
+  // 关门
+  ctx.fillStyle = rgba('#1d1610', 0.75);
+  ctx.fillRect(px + cell * 0.42, py + cell * 0.46, cell * 0.16, cell * 0.26);
+
+  // 旗
+  ctx.strokeStyle = rgba('#2a2118', 0.9);
+  ctx.lineWidth = Math.max(1, cell * 0.016);
+  ctx.beginPath();
+  ctx.moveTo(px + cell * 0.82, py + cell * 0.38);
+  ctx.lineTo(px + cell * 0.82, py + cell * 0.12);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(px + cell * 0.82, py + cell * 0.14);
+  ctx.lineTo(px + cell * 0.97, py + cell * 0.2);
+  ctx.lineTo(px + cell * 0.82, py + cell * 0.27);
+  ctx.closePath();
+  ctx.fillStyle = palette.accent;
+  ctx.fill();
+}
+
+function drawWatchtower(
+  ctx: CanvasRenderingContext2D,
+  px: number,
+  py: number,
+  cell: number,
+  palette: BattlefieldPalette,
+): void {
+  const w = cell * 0.24;
+  const h = cell * 0.28;
+  const cx = px + cell / 2;
+  const cy = py + cell * 0.62;
+
+  // 塔身
+  ctx.fillStyle = rgba('#6d5b43', 0.95);
+  ctx.fillRect(cx - w / 2, cy - h, w, h);
+  ctx.strokeStyle = rgba('#2a2118', 0.55);
+  ctx.lineWidth = 1;
+  ctx.strokeRect(cx - w / 2, cy - h, w, h);
+
+  // 檐口
+  ctx.beginPath();
+  ctx.moveTo(cx - w * 0.75, cy - h);
+  ctx.lineTo(cx, cy - h * 1.45);
+  ctx.lineTo(cx + w * 0.75, cy - h);
+  ctx.closePath();
+  ctx.fillStyle = palette.roof;
+  ctx.fill();
+  ctx.strokeStyle = rgba('#2a1b12', 0.5);
+  ctx.stroke();
+
+  // 旗
+  ctx.strokeStyle = rgba('#2a2118', 0.9);
+  ctx.lineWidth = Math.max(1, cell * 0.014);
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - h * 1.45);
+  ctx.lineTo(cx, cy - h * 1.9);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - h * 1.9);
+  ctx.lineTo(cx + cell * 0.12, cy - h * 1.78);
+  ctx.lineTo(cx, cy - h * 1.66);
+  ctx.closePath();
+  ctx.fillStyle = palette.accent;
+  ctx.fill();
+}
+
+function drawTemple(
+  ctx: CanvasRenderingContext2D,
+  px: number,
+  py: number,
+  cell: number,
+  palette: BattlefieldPalette,
+): void {
+  const cx = px + cell / 2;
+  const cy = py + cell * 0.64;
+  const w = cell * 0.34;
+  const h = cell * 0.2;
+
+  // 台基
+  ctx.fillStyle = rgba('#6c5d48', 0.9);
+  ctx.fillRect(cx - w / 2, cy, w, cell * 0.08);
+
+  // 殿身
+  ctx.fillStyle = rgba('#8a7659', 0.92);
+  ctx.fillRect(cx - w * 0.38, cy - h, w * 0.76, h);
+
+  // 翘檐
+  ctx.beginPath();
+  ctx.moveTo(cx - w * 0.7, cy - h);
+  ctx.quadraticCurveTo(cx, cy - h * 2.1, cx + w * 0.7, cy - h);
+  ctx.closePath();
+  ctx.fillStyle = palette.roof;
+  ctx.fill();
+  ctx.strokeStyle = rgba('#2a1b12', 0.55);
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // 灯笼
+  ctx.fillStyle = palette.accent;
+  ctx.beginPath();
+  ctx.arc(cx, cy - h * 0.45, Math.max(1, cell * 0.035), 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawRuins(
+  ctx: CanvasRenderingContext2D,
+  px: number,
+  py: number,
+  cell: number,
+  palette: BattlefieldPalette,
+): void {
+  // 断墙
+  ctx.fillStyle = rgba('#7b6c53', 0.9);
+  ctx.fillRect(px + cell * 0.16, py + cell * 0.46, cell * 0.3, cell * 0.16);
+  ctx.fillRect(px + cell * 0.54, py + cell * 0.56, cell * 0.26, cell * 0.12);
+  ctx.strokeStyle = rgba('#2b2419', 0.55);
+  ctx.lineWidth = 1;
+  ctx.strokeRect(px + cell * 0.16, py + cell * 0.46, cell * 0.3, cell * 0.16);
+  ctx.strokeRect(px + cell * 0.54, py + cell * 0.56, cell * 0.26, cell * 0.12);
+
+  // 断口
+  ctx.strokeStyle = rgba('#2b2419', 0.5);
+  ctx.beginPath();
+  ctx.moveTo(px + cell * 0.46, py + cell * 0.46);
+  ctx.lineTo(px + cell * 0.52, py + cell * 0.38);
+  ctx.stroke();
+
+  // 断戟
+  ctx.strokeStyle = rgba('#8d7b5c', 0.8);
+  ctx.lineWidth = Math.max(1, cell * 0.018);
+  ctx.beginPath();
+  ctx.moveTo(px + cell * 0.62, py + cell * 0.72);
+  ctx.lineTo(px + cell * 0.78, py + cell * 0.52);
+  ctx.stroke();
+}
+
+function drawBanner(
+  ctx: CanvasRenderingContext2D,
+  px: number,
+  py: number,
+  cell: number,
+  palette: BattlefieldPalette,
+): void {
+  ctx.strokeStyle = rgba('#2a2118', 0.9);
+  ctx.lineWidth = Math.max(1, cell * 0.018);
+  ctx.beginPath();
+  ctx.moveTo(px + cell * 0.42, py + cell * 0.72);
+  ctx.lineTo(px + cell * 0.42, py + cell * 0.2);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(px + cell * 0.42, py + cell * 0.22);
+  ctx.lineTo(px + cell * 0.7, py + cell * 0.3);
+  ctx.lineTo(px + cell * 0.58, py + cell * 0.4);
+  ctx.lineTo(px + cell * 0.42, py + cell * 0.36);
+  ctx.closePath();
+  ctx.fillStyle = palette.accent;
+  ctx.fill();
+}
+
+function drawLandmark(
+  ctx: CanvasRenderingContext2D,
+  feature: BattlefieldFeature,
+  px: number,
+  py: number,
+  cell: number,
+  palette: BattlefieldPalette,
+): void {
+  switch (feature.kind) {
+    case 'village':
+      drawVillage(ctx, px, py, cell, palette);
+      break;
+    case 'camp':
+      drawCamp(ctx, px, py, cell, palette);
+      break;
+    case 'pass':
+      drawPass(ctx, px, py, cell, palette);
+      break;
+    case 'watchtower':
+      drawWatchtower(ctx, px, py, cell, palette);
+      break;
+    case 'temple':
+      drawTemple(ctx, px, py, cell, palette);
+      break;
+    case 'ruins':
+      drawRuins(ctx, px, py, cell, palette);
+      break;
+    case 'banner':
+      drawBanner(ctx, px, py, cell, palette);
+      break;
+    default:
+      break;
+  }
+}
+
+// ── 城池 ──────────────────────────────────────────────────
+
+function cityBounds(battle: BattleState): { x0: number; y0: number; x1: number; y1: number } | null {
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (let y = 0; y < BATTLE_H; y++) {
+    for (let x = 0; x < BATTLE_W; x++) {
+      if (battle.grid[y]?.[x] !== 'city') continue;
+      x0 = Math.min(x0, x);
+      y0 = Math.min(y0, y);
+      x1 = Math.max(x1, x);
+      y1 = Math.max(y1, y);
+    }
+  }
+  if (!Number.isFinite(x0)) return null;
+  return { x0, y0, x1, y1 };
+}
+
+function drawCityBlock(
+  ctx: CanvasRenderingContext2D,
+  battle: BattleState,
+  geo: Geo,
+  palette: BattlefieldPalette,
+): void {
+  const bounds = cityBounds(battle);
+  if (!bounds) return;
+
+  const { cell, ox, oy } = geo;
+  const bx = ox + bounds.x0 * cell;
+  const by = oy + bounds.y0 * cell;
+  const bw = (bounds.x1 - bounds.x0 + 1) * cell;
+  const bh = (bounds.y1 - bounds.y0 + 1) * cell;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(bx, by, bw, bh);
+  ctx.clip();
+
+  // 城基
+  ctx.fillStyle = palette.city;
+  ctx.fillRect(bx, by, bw, bh);
+
+  // 城内石板
+  ctx.fillStyle = palette.cityAlt;
+  ctx.fillRect(bx + cell * 0.16, by + cell * 0.16, bw - cell * 0.32, bh - cell * 0.32);
+  ctx.strokeStyle = rgba(palette.wall, 0.18);
+  ctx.lineWidth = 1;
+  for (let i = 1; i < 4; i++) {
+    const yy = by + (bh / 4) * i;
+    ctx.beginPath();
+    ctx.moveTo(bx + cell * 0.2, yy);
+    ctx.lineTo(bx + bw - cell * 0.2, yy);
+    ctx.stroke();
+  }
+
+  // 主屋与厢房
+  const house = (hx: number, hy: number, hw: number, hh: number) => {
+    ctx.fillStyle = rgba('#31241c', 0.9);
+    ctx.fillRect(hx, hy + hh * 0.32, hw, hh * 0.68);
+    ctx.beginPath();
+    ctx.moveTo(hx - hw * 0.12, hy + hh * 0.36);
+    ctx.lineTo(hx + hw * 0.5, hy);
+    ctx.lineTo(hx + hw * 1.12, hy + hh * 0.36);
+    ctx.closePath();
+    ctx.fillStyle = palette.roof;
+    ctx.fill();
+    ctx.strokeStyle = rgba('#24170f', 0.55);
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    // 门
+    ctx.fillStyle = rgba('#15100c', 0.65);
+    ctx.fillRect(hx + hw * 0.42, hy + hh * 0.62, hw * 0.16, hh * 0.3);
+  };
+
+  house(bx + bw * 0.24, by + bh * 0.3, bw * 0.22, bh * 0.24);
+  house(bx + bw * 0.56, by + bh * 0.36, bw * 0.2, bh * 0.2);
+  house(bx + bw * 0.26, by + bh * 0.62, bw * 0.18, bh * 0.16);
+
+  // 城墙
+  const wall = Math.max(3, cell * 0.12);
+  ctx.strokeStyle = palette.wall;
+  ctx.lineWidth = wall;
+  ctx.strokeRect(bx + wall / 2, by + wall / 2, bw - wall, bh - wall);
+  ctx.strokeStyle = rgba('#2a2118', 0.3);
+  ctx.lineWidth = Math.max(1, cell * 0.015);
+  ctx.strokeRect(bx + wall, by + wall, bw - wall * 2, bh - wall * 2);
+
+  // 垛口
+  const crenel = Math.max(3, cell * 0.11);
+  ctx.fillStyle = palette.wall;
+  for (let x = bx + cell * 0.16; x < bx + bw - cell * 0.08; x += crenel * 2) {
+    ctx.fillRect(x, by + cell * 0.02, crenel, cell * 0.09);
+    ctx.fillRect(x, by + bh - cell * 0.11, crenel, cell * 0.09);
+  }
+  for (let y = by + cell * 0.16; y < by + bh - cell * 0.08; y += crenel * 2) {
+    ctx.fillRect(bx + cell * 0.02, y, cell * 0.09, crenel);
+    ctx.fillRect(bx + bw - cell * 0.11, y, cell * 0.09, crenel);
+  }
+
+  // 角楼
+  for (const [cx, cy] of [
+    [bx + cell * 0.12, by + cell * 0.12],
+    [bx + bw - cell * 0.12, by + cell * 0.12],
+    [bx + cell * 0.12, by + bh - cell * 0.12],
+    [bx + bw - cell * 0.12, by + bh - cell * 0.12],
+  ] as const) {
+    ctx.fillStyle = rgba('#2a2018', 0.8);
+    ctx.fillRect(cx - cell * 0.055, cy - cell * 0.055, cell * 0.11, cell * 0.11);
+    ctx.strokeStyle = palette.wall;
+    ctx.lineWidth = Math.max(1, cell * 0.02);
+    ctx.strokeRect(cx - cell * 0.055, cy - cell * 0.055, cell * 0.11, cell * 0.11);
+  }
+
+  // 城门（朝攻方一侧，尽量与来路对齐）
+  const gateH = bh * 0.42;
+  const gateW = cell * 0.2;
+  const gateX = bx - cell * 0.015;
+  const features = battle.battlefield?.features ?? [];
+  const westFeatures = features.filter(
+    (f) => f.x === bounds.x0 - 1 && f.y >= bounds.y0 && f.y <= bounds.y1,
+  );
+  const approachY =
+    westFeatures.find((f) => f.kind === 'banner')?.y ??
+    westFeatures.find((f) => f.kind === 'road')?.y;
+  const gateY =
+    approachY !== undefined
+      ? oy + approachY * cell + cell / 2 - gateH / 2
+      : by + (bh - gateH) / 2;
+  ctx.fillStyle = rgba('#15100c', 0.92);
+  ctx.beginPath();
+  ctx.roundRect(gateX, gateY, gateW, gateH, [cell * 0.08, 0, 0, cell * 0.08]);
+  ctx.fill();
+  ctx.strokeStyle = palette.wall;
+  ctx.lineWidth = Math.max(1, cell * 0.02);
+  ctx.stroke();
+  ctx.fillStyle = rgba('#4d3826', 0.95);
+  ctx.fillRect(gateX + gateW * 0.18, gateY + gateH * 0.18, gateW * 0.64, gateH * 0.78);
+  ctx.strokeStyle = rgba('#1d1510', 0.7);
+  ctx.lineWidth = 1;
+  for (let i = 1; i < 3; i++) {
+    const yy = gateY + (gateH / 3) * i;
+    ctx.beginPath();
+    ctx.moveTo(gateX + gateW * 0.18, yy);
+    ctx.lineTo(gateX + gateW * 0.82, yy);
+    ctx.stroke();
+  }
+
+  // 城旗
+  const flag = (fx: number, fy: number, h: number) => {
+    ctx.strokeStyle = rgba('#241b13', 0.9);
+    ctx.lineWidth = Math.max(1, cell * 0.015);
+    ctx.beginPath();
+    ctx.moveTo(fx, fy);
+    ctx.lineTo(fx, fy - h);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(fx, fy - h);
+    ctx.lineTo(fx + cell * 0.14, fy - h * 0.82);
+    ctx.lineTo(fx, fy - h * 0.64);
+    ctx.closePath();
+    ctx.fillStyle = palette.accent;
+    ctx.fill();
+  };
+  flag(bx + cell * 0.18, by + cell * 0.25, cell * 0.34);
+  flag(bx + bw - cell * 0.18, by + cell * 0.25, cell * 0.34);
+
+  ctx.restore();
+}
+
+// ── 高亮 / 粮仓 / 单位 ────────────────────────────────────
+
+function drawSupplyMarker(
+  ctx: CanvasRenderingContext2D,
+  battle: BattleState,
+  geo: Geo,
+  palette: BattlefieldPalette,
+): void {
+  const point = battle.supplyPoint;
+  if (!point) return;
+  const { cell, ox, oy } = geo;
+  const px = ox + point.x * cell;
+  const py = oy + point.y * cell;
+  const taken = Boolean(battle.supplyTaken);
+
+  ctx.fillStyle = taken ? 'rgba(193,74,58,0.2)' : rgba(palette.accent, 0.16);
+  ctx.fillRect(px, py, cell, cell);
+  ctx.strokeStyle = taken ? 'rgba(224,122,102,0.9)' : rgba(palette.accent, 0.9);
+  ctx.lineWidth = 2;
+  ctx.setLineDash([4, 3]);
+  ctx.strokeRect(px + 2, py + 2, cell - 4, cell - 4);
+  ctx.setLineDash([]);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = taken ? '#e07a66' : '#f0ddb0';
+  ctx.font = `700 ${Math.floor(cell * 0.28)}px "PingFang SC", sans-serif`;
+  ctx.fillText(taken ? '劫' : '粮', px + cell / 2, py + cell / 2);
+}
+
+// ── 组件 ──────────────────────────────────────────────────
+
 export function BattleCanvas({
   battle,
   selectedUnitId,
@@ -239,7 +1292,7 @@ export function BattleCanvas({
     return () => ro.disconnect();
   }, []);
 
-  // 主画布：地形、单位、高亮与悬停情报
+  // 主画布：地形、地标、单位、高亮与悬停情报
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || size.w < 10 || size.h < 10) return;
@@ -256,8 +1309,12 @@ export function BattleCanvas({
     ctx.fillStyle = '#11100d';
     ctx.fillRect(0, 0, size.w, size.h);
 
-    const { cell, ox, oy } = geometry(size.w, size.h);
-    geoRef.current = { cell, ox, oy };
+    const geo = geometry(size.w, size.h);
+    const { cell, ox, oy } = geo;
+    geoRef.current = geo;
+
+    const palette = BATTLEFIELD_PALETTE[themeOf(battle)];
+    const features = battle.battlefield?.features ?? [];
 
     const reachCost = new Map(reachable.map((r) => [`${r.x},${r.y}`, r.cost]));
     const reachSet = new Set(reachCost.keys());
@@ -278,84 +1335,83 @@ export function BattleCanvas({
       }
     }
 
-    // 地形
+    // 1. 地形纹理
     for (let y = 0; y < BATTLE_H; y++) {
       for (let x = 0; x < BATTLE_W; x++) {
         const t = battle.grid[y]?.[x] ?? 'plain';
         const px = ox + x * cell;
         const py = oy + y * cell;
-        ctx.fillStyle = TERRAIN_FILL[t];
-        ctx.fillRect(px, py, cell, cell);
-
         if (t === 'forest') {
-          ctx.fillStyle = 'rgba(120,160,110,0.28)';
-          for (let i = 0; i < 3; i++) {
-            const cx = px + cell * (0.25 + i * 0.25);
-            const cy = py + cell * (0.6 - (i % 2) * 0.15);
-            ctx.beginPath();
-            ctx.moveTo(cx, cy);
-            ctx.lineTo(cx + cell * 0.07, cy - cell * 0.16);
-            ctx.lineTo(cx + cell * 0.14, cy);
-            ctx.closePath();
-            ctx.fill();
-          }
-        }
-        if (t === 'mountain') {
-          ctx.strokeStyle = 'rgba(190,160,110,0.35)';
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          ctx.moveTo(px + cell * 0.18, py + cell * 0.72);
-          ctx.lineTo(px + cell * 0.5, py + cell * 0.28);
-          ctx.lineTo(px + cell * 0.82, py + cell * 0.72);
-          ctx.stroke();
-        }
-        if (t === 'water') {
-          ctx.strokeStyle = 'rgba(120,170,180,0.25)';
-          ctx.lineWidth = 1;
-          for (let i = 0; i < 2; i++) {
-            ctx.beginPath();
-            ctx.moveTo(px + cell * 0.15, py + cell * (0.4 + i * 0.22));
-            ctx.bezierCurveTo(
-              px + cell * 0.35,
-              py + cell * (0.3 + i * 0.22),
-              px + cell * 0.62,
-              py + cell * (0.5 + i * 0.22),
-              px + cell * 0.85,
-              py + cell * (0.4 + i * 0.22),
-            );
-            ctx.stroke();
-          }
-        }
-        if (t === 'city') {
-          ctx.strokeStyle = 'rgba(220,190,140,0.45)';
-          ctx.lineWidth = 1.4;
-          for (let i = 0; i < 4; i++) {
-            ctx.strokeRect(
-              px + cell * (0.12 + i * 0.22),
-              py + cell * 0.12,
-              cell * 0.12,
-              cell * 0.1,
-            );
-          }
-          ctx.strokeRect(px + cell * 0.1, py + cell * 0.26, cell * 0.8, cell * 0.62);
-        }
-
-        // 截粮 / 护粮目标点：粮仓
-        if (battle.supplyPoint?.x === x && battle.supplyPoint.y === y) {
-          const taken = Boolean(battle.supplyTaken);
-          ctx.fillStyle = taken ? 'rgba(193,74,58,0.28)' : 'rgba(200,164,94,0.22)';
+          drawForestCell(ctx, px, py, cell, palette, themeOf(battle), x, y);
+        } else if (t === 'mountain') {
+          drawMountainCell(ctx, px, py, cell, palette, x, y);
+        } else if (t === 'water') {
+          drawWaterCell(ctx, battle, px, py, cell, palette, x, y);
+        } else {
+          ctx.fillStyle = t === 'city' ? palette.city : palette.plain;
           ctx.fillRect(px, py, cell, cell);
-          ctx.strokeStyle = taken ? 'rgba(224,122,102,0.9)' : 'rgba(230,211,161,0.85)';
-          ctx.lineWidth = 2;
-          ctx.setLineDash([4, 3]);
-          ctx.strokeRect(px + 2, py + 2, cell - 4, cell - 4);
-          ctx.setLineDash([]);
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillStyle = taken ? '#e07a66' : '#e6d3a1';
-          ctx.font = `700 ${Math.floor(cell * 0.3)}px "PingFang SC", sans-serif`;
-          ctx.fillText(taken ? '劫' : '粮', px + cell / 2, py + cell / 2);
+          if (t !== 'city') drawPlainCell(ctx, px, py, cell, palette, themeOf(battle), x, y);
         }
+      }
+    }
+
+    // 2. 桥 / 浅滩先铺在水面上，再铺道路
+    for (const f of features) {
+      if (f.kind !== 'bridge' && f.kind !== 'ford') continue;
+      const px = ox + f.x * cell;
+      const py = oy + f.y * cell;
+      if (f.kind === 'bridge') drawBridge(ctx, px, py, cell, palette, f.dir);
+      else drawFord(ctx, px, py, cell, palette);
+    }
+
+    // 3. 道路
+    drawRoads(ctx, battle, geo, palette);
+
+    // 4. 城池（把 2×2 城池格画成一座完整城郭）
+    drawCityBlock(ctx, battle, geo, palette);
+
+    // 5. 村落、粮营、关隘、烽燧、寺庙、废墟、军旗
+    for (const f of features) {
+      if (f.kind === 'road' || f.kind === 'bridge' || f.kind === 'ford') continue;
+      drawLandmark(
+        ctx,
+        f,
+        ox + f.x * cell,
+        oy + f.y * cell,
+        cell,
+        palette,
+      );
+    }
+
+    // 6. 网格
+    ctx.strokeStyle = 'rgba(10,9,7,0.55)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x <= BATTLE_W; x++) {
+      ctx.beginPath();
+      ctx.moveTo(ox + x * cell, oy);
+      ctx.lineTo(ox + x * cell, oy + BATTLE_H * cell);
+      ctx.stroke();
+    }
+    for (let y = 0; y <= BATTLE_H; y++) {
+      ctx.beginPath();
+      ctx.moveTo(ox, oy + y * cell);
+      ctx.lineTo(ox + BATTLE_W * cell, oy + y * cell);
+      ctx.stroke();
+    }
+
+    // 外框
+    ctx.strokeStyle = rgba(palette.accent, 0.2);
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(ox - 1, oy - 1, BATTLE_W * cell + 2, BATTLE_H * cell + 2);
+
+    // 7. 粮仓标记
+    drawSupplyMarker(ctx, battle, geo, palette);
+
+    // 8. 高亮层
+    for (let y = 0; y < BATTLE_H; y++) {
+      for (let x = 0; x < BATTLE_W; x++) {
+        const px = ox + x * cell;
+        const py = oy + y * cell;
 
         // 敌方威胁范围：红色斜纹
         if (threatSet.has(`${x},${y}`)) {
@@ -384,22 +1440,6 @@ export function BattleCanvas({
       }
     }
 
-    // 网格
-    ctx.strokeStyle = 'rgba(10,9,7,0.55)';
-    ctx.lineWidth = 1;
-    for (let x = 0; x <= BATTLE_W; x++) {
-      ctx.beginPath();
-      ctx.moveTo(ox + x * cell, oy);
-      ctx.lineTo(ox + x * cell, oy + BATTLE_H * cell);
-      ctx.stroke();
-    }
-    for (let y = 0; y <= BATTLE_H; y++) {
-      ctx.beginPath();
-      ctx.moveTo(ox, oy + y * cell);
-      ctx.lineTo(ox + BATTLE_W * cell, oy + y * cell);
-      ctx.stroke();
-    }
-
     const hoverUnit = hover ? unitAt(battle, hover.x, hover.y) : null;
     const hoverClickable = Boolean(
       hover && (hoverUnit || reachSet.has(`${hover.x},${hover.y}`)),
@@ -419,7 +1459,7 @@ export function BattleCanvas({
       );
     }
 
-    // 单位
+    // 9. 单位
     for (const u of Object.values(battle.units)) {
       if (u.routed) continue;
       const px = ox + u.x * cell + cell / 2;
@@ -474,7 +1514,7 @@ export function BattleCanvas({
       ctx.restore();
     }
 
-    // 悬停情报
+    // 10. 悬停情报
     if (hover) {
       const selected = selectedUnitId ? battle.units[selectedUnitId] ?? null : null;
       const info = hoverInfo(battle, hover.x, hover.y, selected, targets, reachCost);

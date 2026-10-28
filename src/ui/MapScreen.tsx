@@ -419,23 +419,6 @@ export function MapScreen() {
             </section>
           ) : null}
 
-          <div className="supply">
-            <div className="section-title">
-              <span>粮草安全</span>
-            </div>
-            <Bar
-              value={Math.min(totalFood, BALANCE.FOOD_CAP)}
-              max={BALANCE.FOOD_CAP}
-              color="var(--gold)"
-            />
-            <p className="muted small">
-              单城上限 {fmt(BALANCE.FOOD_CAP)}，
-              {overflowMode === 'classic'
-                ? '超出归零。'
-                : '超出部分折损 50%（可在设置中切换经典模式）。'}
-              征兵与卖粮是最快的消耗方式。
-            </p>
-          </div>
         </aside>
 
         <main className="map-main">

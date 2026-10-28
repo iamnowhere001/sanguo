@@ -417,6 +417,55 @@ export interface BattleUnit {
   bonusMove?: number;
 }
 
+/** 战场主题：决定地表质感、植被密度与整体色调 */
+export type BattlefieldThemeId =
+  | 'farmland'
+  | 'river'
+  | 'pass'
+  | 'gorge'
+  | 'forest'
+  | 'watertown'
+  | 'lake'
+  | 'city'
+  | 'ruins'
+  | 'highland';
+
+/** 战场地标：只负责可读性与视觉辨识，具体规则仍由 grid 地形承担 */
+export type BattlefieldFeatureKind =
+  | 'road'
+  | 'bridge'
+  | 'ford'
+  | 'village'
+  | 'camp'
+  | 'pass'
+  | 'watchtower'
+  | 'temple'
+  | 'ruins'
+  | 'banner';
+
+export interface BattlefieldFeature {
+  x: number;
+  y: number;
+  kind: BattlefieldFeatureKind;
+  label: string;
+  description?: string;
+  /** 桥 / 道路的走向，供渲染层绘制木板与栏杆 */
+  dir?: 'h' | 'v' | 'cross';
+}
+
+/**
+ * 每场战斗的战场身份：城市 + 地形主题 + 地标。
+ * 旧存档没有该字段时，渲染层会按 grid 推断一个兼容主题。
+ */
+export interface BattlefieldInfo {
+  theme: BattlefieldThemeId;
+  /** 战场专名，例如「汉水渡口」「逍遥津」 */
+  name: string;
+  /** 一句话战术氛围，供战棋 HUD 展示 */
+  subtitle: string;
+  features?: BattlefieldFeature[];
+}
+
 export interface BattleState {
   fromCityId: string;
   targetCityId: string;
@@ -430,6 +479,8 @@ export interface BattleState {
   fortification?: number;
   /** [y][x] */
   grid: BattleTerrain[][];
+  /** 本场战场的主题、专名与地标；旧存档可缺省 */
+  battlefield?: BattlefieldInfo;
   units: Record<string, BattleUnit>;
   side: BattleSide;
   day: number;

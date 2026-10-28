@@ -2,6 +2,7 @@ import type { GameState } from '../core/state';
 import { emptyMonthFacts } from '../core/state';
 import { createStreams, RANDOM_STREAMS, streamFor, type RngState } from '../core/rng';
 import { createChapter, ensureChapterShape } from '../systems/chapter';
+import { describeLegacyBattlefield } from '../systems/battle/battlefield';
 import { attachBattleObjectives } from '../systems/battle/objectives';
 import { ensureDiplomacy } from '../systems/factionDiplomacy';
 
@@ -100,6 +101,18 @@ export function migrateSave(state: GameState): GameState {
       state.cities[state.battle.targetCityId]?.fortification ?? 0;
     state.battle.tacticUses ??= {};
     state.battle.tacticBonus ??= 0;
+    if (!state.battle.battlefield) {
+      const city = state.cities[state.battle.targetCityId];
+      if (city) {
+        state.battle.battlefield = describeLegacyBattlefield(
+          city.id,
+          city.name,
+          city.terrain,
+          city.isWaterCity,
+          state.battle.grid,
+        );
+      }
+    }
     if (state.settings.ruleset === 'modern' && state.battle.playerInvolved) {
       state.battle.commandPoints ??= 3;
       // 旧存档没有敌方军令池：补一份，读档后 AI 也能用军令

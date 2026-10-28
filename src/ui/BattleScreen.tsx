@@ -9,6 +9,7 @@ import {
 } from '../data/tables/tactics';
 import { type BattleState, type BattleTerrain, type GameState } from '../core/state';
 import {
+  BATTLEFIELD_THEME_LABEL,
   PILOT_DELAY,
   activeUnits,
   attackRangeOf,
@@ -16,6 +17,7 @@ import {
   damagePreview,
   detectPilotHandoff,
   estimateBreakDays,
+  inferBattlefieldTheme,
   otherSide,
   objectiveProgress,
   planPilotAction,
@@ -29,7 +31,8 @@ import {
 } from '../systems/battle';
 import { trainingMultiplier } from '../systems/formulas';
 import { gameStore, useGameStore } from '../store/gameStore';
-import { BattleCanvas, TERRAIN_FILL, TERRAIN_SWATCH, type BattleFx } from '../render/BattleCanvas';
+import { BattleCanvas, TERRAIN_SWATCH, type BattleFx } from '../render/BattleCanvas';
+import { BATTLEFIELD_PALETTE } from '../render/battlefieldTheme';
 import { audio } from '../audio';
 import { AudioSettingsButton } from './AudioSettings';
 import { SaveDialog } from './SaveDialog';
@@ -126,6 +129,46 @@ export function BattleScreen() {
   const sideObjectiveProgress = sideObjective
     ? objectiveProgress(battle, sideObjective)
     : null;
+
+  const battlefieldTheme = battle.battlefield?.theme ?? inferBattlefieldTheme(battle.grid);
+  const battlefieldPalette = BATTLEFIELD_PALETTE[battlefieldTheme];
+  const battlefieldName = battle.battlefield?.name ?? '无名战场';
+  const battlefieldSubtitle =
+    battle.battlefield?.subtitle ?? '地形随城池而变，先看清道路与地标再布阵。';
+  const targetCityName = state.cities[battle.targetCityId]?.name ?? battle.targetCityId;
+  const terrainCounts = useMemo(() => {
+    const counts: Record<BattleTerrain, number> = {
+      plain: 0,
+      forest: 0,
+      mountain: 0,
+      water: 0,
+      city: 0,
+    };
+    for (const row of battle.grid) {
+      for (const t of row) counts[t] += 1;
+    }
+    return counts;
+  }, [battle.grid]);
+  const terrainColors: Record<BattleTerrain, string> = {
+    plain: battlefieldPalette.plain,
+    forest: battlefieldPalette.forest,
+    mountain: battlefieldPalette.mountain,
+    water: battlefieldPalette.water,
+    city: battlefieldPalette.city,
+  };
+  const landmarkLabels = useMemo(() => {
+    const seen = new Set<string>();
+    const labels: string[] = [];
+    for (const f of battle.battlefield?.features ?? []) {
+      if (f.kind === 'road') continue;
+      const key = `${f.kind}:${f.label}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      labels.push(f.label);
+    }
+    return labels;
+  }, [battle.battlefield]);
+  const battlefieldTone = `linear-gradient(90deg, ${battlefieldPalette.plain}, ${battlefieldPalette.grass}, ${battlefieldPalette.mountain}, ${battlefieldPalette.water}, ${battlefieldPalette.accent})`;
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pendingTactic, setPendingTactic] = useState<TacticId | null>(null);
@@ -775,6 +818,16 @@ export function BattleScreen() {
             onUnitClick={onUnitClick}
             onCellClick={onCellClick}
           />
+          <div
+            className="battlefield-badge"
+            style={{ borderLeftColor: battlefieldPalette.accent }}
+            aria-hidden="true"
+          >
+            <span>
+              {targetCityName} · {BATTLEFIELD_THEME_LABEL[battlefieldTheme]}
+            </span>
+            <b>{battlefieldName}</b>
+          </div>
           <div className={`battle-hint${pilot ? ' pilot' : pendingTactic || pendingCharge ? ' accent' : ''}`}>
             {hint}
           </div>
@@ -1082,16 +1135,52 @@ export function BattleScreen() {
 
           <section>
             <div className="section-title">
-              <span>地形</span>
+              <span>战场</span>
               <span className="muted small">城池减伤 50%</span>
             </div>
-            <div className="terrain-list">
-              {(Object.keys(TERRAIN_SWATCH) as BattleTerrain[]).map((t) => (
-                <span key={t}>
-                  <i style={{ background: TERRAIN_FILL[t] }} />
-                  {TERRAIN_SWATCH[t]}
-                </span>
-              ))}
+            <div className="battlefield-card">
+              <i
+                className="bf-tone"
+                style={{ background: battlefieldTone }}
+                aria-hidden="true"
+              />
+              <div className="bf-body">
+                <div className="bf-head">
+                  <span
+                    className="bf-theme"
+                    style={{
+                      color: battlefieldPalette.accent,
+                      borderColor: battlefieldPalette.accent,
+                    }}
+                  >
+                    {BATTLEFIELD_THEME_LABEL[battlefieldTheme]}
+                  </span>
+                  <b>{battlefieldName}</b>
+                </div>
+                <p className="bf-subtitle">{battlefieldSubtitle}</p>
+                <div className="bf-legend">
+                  {(Object.keys(TERRAIN_SWATCH) as BattleTerrain[]).map((t) => (
+                    <span key={t} className="bf-terrain">
+                      <i
+                        style={{
+                          background: terrainColors[t],
+                          borderColor: battlefieldPalette.wall,
+                        }}
+                      />
+                      {TERRAIN_SWATCH[t]}
+                      <em>{terrainCounts[t]}</em>
+                    </span>
+                  ))}
+                </div>
+                {landmarkLabels.length > 0 ? (
+                  <div className="bf-landmarks">
+                    <em>地标</em>
+                    {landmarkLabels.map((label) => (
+                      <span key={label}>{label}</span>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
             </div>
             <button
               className={`btn sm wide${showThreat ? ' primary' : ' ghost'}`}
