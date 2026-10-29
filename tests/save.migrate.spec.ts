@@ -6,6 +6,37 @@ import { restoreRng, type RngState } from '../src/core/rng';
 import { createBattle } from '../src/systems/battle';
 import { migrateSave } from '../src/save/migrate';
 import { SAVE_VERSION, migrateSaveFile } from '../src/save/db';
+import { MAP, MAP_VERSION } from '../src/data/tables/geography';
+import { isWaterKind, tileKindAt, wallTileAt } from '../src/render/terrainGrid';
+import type { Army } from '../src/core/state';
+
+function legacyArmy(col: number, row: number): Army {
+  return {
+    id: 'legacy-army',
+    factionId: 'liubei',
+    originCityId: 'jiangxia',
+    fromCityId: 'jiangxia',
+    targetCityId: 'xiangyang',
+    generalIds: [],
+    at: { col, row },
+    path: [
+      { col: col + 1, row },
+      { col: col + 1, row: row + 1 },
+    ],
+    legDays: 2,
+    troops: 1000,
+    createdTurn: 0,
+  };
+}
+
+function expectStandable(at: { col: number; row: number }): void {
+  expect(at.col).toBeGreaterThanOrEqual(0);
+  expect(at.col).toBeLessThan(MAP.cols);
+  expect(at.row).toBeGreaterThanOrEqual(0);
+  expect(at.row).toBeLessThan(MAP.rows);
+  expect(isWaterKind(tileKindAt(at.col, at.row))).toBe(false);
+  expect(wallTileAt(at.col, at.row)).toBeNull();
+}
 
 describe('旧存档迁移', () => {
   it('补齐缺失的设置、城池运行期字段，并修正空战斗阶段', () => {
@@ -112,6 +143,33 @@ describe('旧存档迁移', () => {
     migrateSave(s);
 
     expect(s.pendingMonth.facts).toEqual(emptyMonthFacts());
+  });
+
+  it('v2 大地图旧档：部队坐标 ×3 放大并吸附上岸', () => {
+    const s = createGame({ playerFactionId: 'liubei', seed: 21 });
+    s.mapVersion = 2;
+    s.armies = [legacyArmy(10, 10)];
+
+    migrateSave(s);
+
+    expect(s.mapVersion).toBe(MAP_VERSION);
+    const at = s.armies[0]!.at;
+    expect(at).toEqual({ col: 31, row: 31 });
+    expectStandable(at);
+    expect(s.armies[0]!.path).toHaveLength(2);
+    expect(s.armies[0]!.legDays).toBe(0);
+  });
+
+  it('无 mapVersion 的 v1 旧档按 6 倍放大', () => {
+    const s = createGame({ playerFactionId: 'liubei', seed: 22 });
+    delete s.mapVersion;
+    s.armies = [legacyArmy(5, 5)];
+
+    migrateSave(s);
+
+    expect(s.mapVersion).toBe(MAP_VERSION);
+    expect(s.armies[0]!.at).toEqual({ col: 32, row: 32 });
+    expectStandable(s.armies[0]!.at);
   });
 
   it('更高版本存档直接拒绝，不静默读取', () => {

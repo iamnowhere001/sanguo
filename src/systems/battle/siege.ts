@@ -10,9 +10,15 @@ import { BATTLE_H, BATTLE_W, activeUnits, battleTerrainAt } from './grid';
  * 这给「守军缩在城里硬顶、攻方杀不完」的僵局一个明确出口。
  */
 
-/** 战场上属于城池的格子（2×2 城区） */
+/** 战场上属于城池的格子（大地图为目标城 3×3 城墙，旧存档为 2×2 城区） */
 export function cityTiles(b: BattleState): Array<{ x: number; y: number }> {
   const out: Array<{ x: number; y: number }> = [];
+  if (b.cityBlock) {
+    for (let y = b.cityBlock.y0; y <= b.cityBlock.y1; y++) {
+      for (let x = b.cityBlock.x0; x <= b.cityBlock.x1; x++) out.push({ x, y });
+    }
+    return out;
+  }
   for (let y = 0; y < BATTLE_H; y++) {
     for (let x = 0; x < BATTLE_W; x++) {
       if (battleTerrainAt(b, x, y) === 'city') out.push({ x, y });

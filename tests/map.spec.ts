@@ -107,9 +107,13 @@ describe('城池落位', () => {
     expect(at('xiangping').row).toBeLessThan(at('chengdu').row);
     expect(at('yunnan').col).toBeLessThan(at('jianye').col);
     expect(at('yunnan').row).toBeGreaterThan(at('jianye').row);
-    // 武威在最西北
-    const minCol = Math.min(...Object.values(anchors).map((a) => a.col));
-    expect(at('wuwei').col).toBeLessThanOrEqual(minCol + 8);
+    // 武威在最西北：全图没有既在它西边、又在它北边的城
+    expect(
+      Object.values(anchors).some((a) => a.col < at('wuwei').col && a.row < at('wuwei').row),
+    ).toBe(false);
+    // 与河西诸城相比，武威更靠西、更靠北
+    expect(at('wuwei').col).toBeLessThan(at('jincheng').col);
+    expect(at('wuwei').row).toBeLessThan(at('jincheng').row);
   });
 
   it('旧字段兜底：没有地理落点的城退回 City.x/y', () => {

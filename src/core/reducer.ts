@@ -57,6 +57,7 @@ import {
 import { continueAiPhase, startAiPhase, aiFactionIds } from '../systems/ai';
 import { tickDiplomacy } from '../systems/factionDiplomacy';
 import { assaultCity, moveArmyTo, playArmyTurn, runSiegeAttrition, sortieArmy } from '../systems/army';
+import { assaultGate, runGateProduction } from '../systems/gates';
 import { doDiplomacy, doPersuadeCity, type DiplomacyKind } from '../systems/diplomacy';
 import {
   doFactionDiplomacy,
@@ -109,6 +110,7 @@ export type Action =
   | { t: 'SORTIE'; fromCityId: string; targetCityId: string; generalIds?: string[] }
   | { t: 'MOVE_ARMY'; armyId: string; to: GridPoint }
   | { t: 'ASSAULT'; armyId: string }
+  | { t: 'ASSAULT_GATE'; armyId: string; gateId: string }
   | { t: 'BATTLE_MOVE'; unitId: string; x: number; y: number }
   | { t: 'BATTLE_UNDO_MOVE'; unitId: string }
   | { t: 'BATTLE_ATTACK'; attackerId: string; targetId: string }
@@ -161,6 +163,7 @@ export function runMonthStages(s: GameState, facts = emptyMonthFacts()): string[
   runOutput(s, facts);
   runTax(s, facts);
   runFacilities(s);
+  runGateProduction(s);
   applyPolicyMonthly(s);
   runProjects(s, facts);
   runExplorations(s, facts);
@@ -448,6 +451,18 @@ export function reduce(
         return { state, result: { ok: false, message: '只能指挥己方部队攻城' } };
       }
       const r = assaultCity(s, action.armyId);
+      return { state: r.ok ? s : state, result: r };
+    }
+    case 'ASSAULT_GATE': {
+      if (s.phase !== 'map') {
+        return { state, result: { ok: false, message: '当前不在大地图阶段' } };
+      }
+      const army = (s.armies ?? []).find((a) => a.id === action.armyId);
+      if (!army) return { state, result: { ok: false, message: '部队不存在' } };
+      if (army.factionId !== s.playerFactionId) {
+        return { state, result: { ok: false, message: '只能指挥己方部队攻关' } };
+      }
+      const r = assaultGate(s, action.armyId, action.gateId);
       return { state: r.ok ? s : state, result: r };
     }
     case 'BATTLE_MOVE': {

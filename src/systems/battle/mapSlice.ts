@@ -1,11 +1,6 @@
 import type { BattleTerrain, BattlefieldFeature } from '../../core/state';
-import {
-  cityAnchors,
-  isWaterKind,
-  tileKindAt,
-  type TileKind,
-} from '../../render/terrainGrid';
-import { BATTLE_H, BATTLE_W } from './grid';
+import { cityAnchors, isWaterKind, tileKindAt } from '../../render/terrainGrid';
+import { BATTLE_H, BATTLE_W, KIND_TO_TERRAIN } from './grid';
 
 /**
  * 地图裁切战场（L 档 · 战斗合一的第一层）。
@@ -49,19 +44,6 @@ const RESERVED: Array<[number, number]> = [
   [9, 4],
   [SUPPLY_X, SUPPLY_Y],
 ];
-
-/** 大地图地形 → 战棋地形；丘陵按山地处理，荒漠与沼泽按平地 / 林地处理 */
-const KIND_TO_TERRAIN: Record<TileKind, BattleTerrain> = {
-  sea: 'water',
-  lake: 'water',
-  river: 'water',
-  marsh: 'forest',
-  plain: 'plain',
-  forest: 'forest',
-  hill: 'mountain',
-  mountain: 'mountain',
-  desert: 'plain',
-};
 
 function inBounds(x: number, y: number): boolean {
   return x >= 0 && x < BATTLE_W && y >= 0 && y < BATTLE_H;

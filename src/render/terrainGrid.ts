@@ -13,6 +13,7 @@ import {
   RIVERS,
   lonLatToTile,
   projectLonLat,
+  riverHalfWidth,
   type Pt,
 } from '../data/tables/geography';
 
@@ -171,8 +172,8 @@ function lakeAt(lon: number, lat: number): string | null {
 /** 河流：按相对宽度给一个"近河"阈值（度） */
 function riverAt(lon: number, lat: number): { id: string; scale: number } | null {
   for (const river of RIVERS) {
-    // M 档加宽河面：干流约 0.28°（≈1 格），支流约 0.23°
-    const halfWidth = 0.16 + river.scale * 0.12;
+    // L2 档加宽河面：干流约 5 格、支流约 4 格，江面可容水军展开
+    const halfWidth = riverHalfWidth(river.scale);
     if (distToPolyline(lon, lat, river.points) <= halfWidth) {
       return { id: river.id, scale: river.scale };
     }

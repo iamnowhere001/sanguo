@@ -1,11 +1,16 @@
-import type { GameState } from '../core/state';
+import type { GameState, GridPoint } from '../core/state';
 import { emptyMonthFacts } from '../core/state';
 import { createStreams, RANDOM_STREAMS, streamFor, type RngState } from '../core/rng';
 import { createChapter, ensureChapterShape } from '../systems/chapter';
 import { cityMaxDurability } from '../systems/formulas';
-import { describeLegacyBattlefield } from '../systems/battle/battlefield';
+import {
+  describeLegacyBattlefield,
+  identityOfBattlefield,
+} from '../systems/battle/battlefield';
 import { attachBattleObjectives } from '../systems/battle/objectives';
 import { ensureDiplomacy } from '../systems/factionDiplomacy';
+import { MAP, MAP_VERSION } from '../data/tables/geography';
+import { isWaterKind, nearestLandTile, tileKindAt, wallTileAt } from '../render/terrainGrid';
 
 const DEFAULT_SETTINGS: GameState['settings'] = {
   easterEggEnabled: false,
@@ -16,6 +21,37 @@ const DEFAULT_SETTINGS: GameState['settings'] = {
   aiEnabled: true,
   difficulty: 'normal',
 };
+
+/**
+ * 旧版地图坐标 → 当前 576×432。
+ *
+ * 版本链：v1 = 96×72，v2 = 192×144，v3 = 576×432。
+ * 逐级放大后把格心映射到新格心，再吸附到最近的可站立陆地，
+ * 避免扩图后河流加宽导致旧部队落水。
+ */
+function migrateLegacyPoint(p: GridPoint, factor: number): GridPoint {
+  const offset = Math.floor((factor - 1) / 2);
+  const col = Math.min(MAP.cols - 1, Math.max(0, p.col * factor + offset));
+  const row = Math.min(MAP.rows - 1, Math.max(0, p.row * factor + offset));
+  const seed = nearestLandTile(col, row, 10);
+  const standable = (c: number, r: number): boolean => {
+    if (c < 0 || r < 0 || c >= MAP.cols || r >= MAP.rows) return false;
+    if (isWaterKind(tileKindAt(c, r))) return false;
+    return !wallTileAt(c, r);
+  };
+  if (standable(seed.col, seed.row)) return seed;
+  for (let radius = 1; radius <= 12; radius++) {
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
+        if (standable(seed.col + dx, seed.row + dy)) {
+          return { col: seed.col + dx, row: seed.row + dy };
+        }
+      }
+    }
+  }
+  return seed;
+}
 
 /**
  * 旧状态兼容：就地补齐新增设置、随机数流与运行期字段。
@@ -35,6 +71,23 @@ export function migrateSave(state: GameState): GameState {
   state.xunTurn ??= (state.turn - 1) * 3 + 1;
   state.armies ??= [];
   state.armySerial ??= 0;
+  state.gates ??= {};
+
+  // 大地图扩容：没有 mapVersion 的档来自 96×72，按版本链逐级放大后吸附上岸
+  let mapVersion = state.mapVersion ?? 1;
+  if (mapVersion < MAP_VERSION) {
+    let factor = 1;
+    while (mapVersion < MAP_VERSION) {
+      factor *= mapVersion === 1 ? 2 : 3;
+      mapVersion += 1;
+    }
+    for (const army of state.armies) {
+      army.at = migrateLegacyPoint(army.at, factor);
+      army.path = army.path.map((p) => migrateLegacyPoint(p, factor));
+      army.legDays = 0;
+    }
+  }
+  state.mapVersion = MAP_VERSION;
 
   if (!state.streams) {
     state.streams = createStreams(state.seed, state.turn);
@@ -126,13 +179,26 @@ export function migrateSave(state: GameState): GameState {
     if (!state.battle.battlefield) {
       const city = state.cities[state.battle.targetCityId];
       if (city) {
-        state.battle.battlefield = describeLegacyBattlefield(
-          city.id,
-          city.name,
-          city.terrain,
-          city.isWaterCity,
-          state.battle.grid,
-        );
+        state.battle.battlefield = state.battle.mapBattle
+          ? identityOfBattlefield({
+              seed: state.seed,
+              turn: state.turn,
+              battleSerial: state.battleSerial,
+              attackerCityId: state.battle.fromCityId,
+              defenderCityId: state.battle.targetCityId,
+              targetCityId: city.id,
+              targetCityName: city.name,
+              targetTerrain: city.terrain,
+              isWaterCity: city.isWaterCity,
+              citySize: city.size,
+            })
+          : describeLegacyBattlefield(
+              city.id,
+              city.name,
+              city.terrain,
+              city.isWaterCity,
+              state.battle.grid ?? [],
+            );
       }
     }
     if (state.settings.ruleset === 'modern' && state.battle.playerInvolved) {

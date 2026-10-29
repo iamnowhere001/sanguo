@@ -16,8 +16,9 @@ import {
   RIDGES,
   RIVERS,
   projectLonLat,
+  riverWorldWidth,
 } from '../data/tables/geography';
-import { GATES } from '../data/tables/gates';
+import { GATE_KIND_LABEL } from '../data/tables/gates';
 import {
   armyMaxMp,
   armyMp,
@@ -25,6 +26,14 @@ import {
   armyReach as armyReachTiles,
   armyWorldPos,
 } from '../systems/army';
+import {
+  gateAccessFor,
+  gateAccessLabel,
+  gateBlockedFor,
+  gateGarrisonOf,
+  gateOwnerOf,
+  gateSupplyCityOf,
+} from '../systems/gates';
 import { gatesOf, siegeTargetOf } from '../systems/cityGrid';
 import { TERRAIN_LABEL } from '../data/tables/unitClasses';
 import {
@@ -37,6 +46,7 @@ import {
   type CityBlock,
   type GateSide,
 } from './terrainGrid';
+import { gateAtCenter, gateSiteById, gateSites, gateWorldPos } from './gateGrid';
 import { drawFactionPattern, factionPattern, PATTERN_LABEL } from './factionPattern';
 
 interface ProjectedCity {
@@ -65,7 +75,11 @@ interface Layout {
 }
 
 const MIN_ZOOM = 1;
-const MAX_ZOOM = 3.6;
+/**
+ * 世界从 96×72 扩到 192×144 后，100% 缩放只有旧版一半的像素密度。
+ * 默认 200% 让城池、部队的屏幕尺寸与旧版一致；720% 对应旧版 360% 的最大特写。
+ */
+const MAX_ZOOM = 7.2;
 
 /**
  * 宣纸绘本地图配色。
@@ -203,8 +217,7 @@ function project(
   });
 }
 
-// ── 地形底图（离屏缓存） ────────────────────────────────────
-let terrainCache: HTMLCanvasElement | null = null;
+// ── 地形底图（分块缓存） ────────────────────────────────────
 
 function pathFromLonLat(
   ctx: CanvasRenderingContext2D,
@@ -413,11 +426,11 @@ function drawLandShape(ctx: CanvasRenderingContext2D, W: number, H: number): voi
 
   const rivers = [...RIVERS].sort((a, b) => a.scale - b.scale);
   for (const river of rivers) {
-    const base = river.scale >= 1 ? 4.2 : 2.8;
+    const base = riverWorldWidth(river.scale);
     for (const [width, color] of [
-      [base * 2.1, 'rgba(52,66,58,0.45)'],
+      [base * 1.55, 'rgba(52,66,58,0.38)'],
       [base, PALETTE.river1],
-      [base * 0.42, PALETTE.riverCore],
+      [base * 0.4, PALETTE.riverCore],
     ] as const) {
       ctx.beginPath();
       pathFromLonLat(ctx, [...river.points] as Array<[number, number]>);
@@ -442,19 +455,107 @@ function drawLandShape(ctx: CanvasRenderingContext2D, W: number, H: number): voi
   ctx.stroke();
 }
 
-function ensureTerrainCache(): HTMLCanvasElement {
-  if (terrainCache) return terrainCache;
-  const scale = 2;
+/**
+ * 地形分块缓存。
+ *
+ * 576×432 世界 = 6912×5184；若整图缓存，即使 0.5× 也要 ~72MB，
+ * 手机上必然触发 canvas 上限。改为 576×576 世界单位一块、0.6× 分辨率、
+ * LRU 40 块（约 16MB），只生成视口附近的块。
+ */
+const TERRAIN_CHUNK_WORLD = 576;
+const TERRAIN_CHUNK_SCALE = 0.6;
+const TERRAIN_CHUNK_LIMIT = 40;
+
+interface TerrainChunk {
+  canvas: HTMLCanvasElement;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  used: number;
+}
+
+const terrainChunks = new Map<string, TerrainChunk>();
+let terrainChunkTick = 0;
+
+function terrainChunkAt(cx: number, cy: number): TerrainChunk {
+  const key = `${cx},${cy}`;
+  const hit = terrainChunks.get(key);
+  if (hit) {
+    hit.used = ++terrainChunkTick;
+    return hit;
+  }
+
+  const x = cx * TERRAIN_CHUNK_WORLD;
+  const y = cy * TERRAIN_CHUNK_WORLD;
+  const w = Math.min(TERRAIN_CHUNK_WORLD, MAP.width - x);
+  const h = Math.min(TERRAIN_CHUNK_WORLD, MAP.height - y);
   const canvas = document.createElement('canvas');
-  canvas.width = MAP.width * scale;
-  canvas.height = MAP.height * scale;
+  canvas.width = Math.max(1, Math.round(w * TERRAIN_CHUNK_SCALE));
+  canvas.height = Math.max(1, Math.round(h * TERRAIN_CHUNK_SCALE));
   const ctx = canvas.getContext('2d');
   if (ctx) {
-    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    ctx.setTransform(
+      TERRAIN_CHUNK_SCALE,
+      0,
+      0,
+      TERRAIN_CHUNK_SCALE,
+      -x * TERRAIN_CHUNK_SCALE,
+      -y * TERRAIN_CHUNK_SCALE,
+    );
+    ctx.beginPath();
+    // 稍微外扩 1 世界单位，压掉块与块之间的抗锯齿缝
+    ctx.rect(x - 1, y - 1, w + 2, h + 2);
+    ctx.clip();
     paintTerrain(ctx);
   }
-  terrainCache = canvas;
-  return canvas;
+
+  const chunk: TerrainChunk = { canvas, x, y, w, h, used: ++terrainChunkTick };
+  terrainChunks.set(key, chunk);
+  if (terrainChunks.size > TERRAIN_CHUNK_LIMIT) {
+    let oldestKey = '';
+    let oldest = Infinity;
+    for (const [k, c] of terrainChunks) {
+      if (c.used < oldest) {
+        oldest = c.used;
+        oldestKey = k;
+      }
+    }
+    if (oldestKey) terrainChunks.delete(oldestKey);
+  }
+  return chunk;
+}
+
+function screenToWorld(
+  sx: number,
+  sy: number,
+  w: number,
+  h: number,
+  view: MapView,
+  layout: Layout,
+): { x: number; y: number } {
+  const cx = w / 2;
+  const cy = h / 2;
+  return {
+    x: ((sx - cx - view.x) / view.zoom + cx - layout.ox) / layout.scale,
+    y: ((sy - cy - view.y) / view.zoom + cy - layout.oy) / layout.scale,
+  };
+}
+
+function visibleWorldRect(
+  w: number,
+  h: number,
+  view: MapView,
+  layout: Layout,
+): { x: number; y: number; w: number; h: number } {
+  const a = screenToWorld(0, 0, w, h, view, layout);
+  const b = screenToWorld(w, h, w, h, view, layout);
+  const pad = Math.max(b.x - a.x, b.y - a.y) * 0.35;
+  const x = Math.max(0, Math.min(a.x, b.x) - pad);
+  const y = Math.max(0, Math.min(a.y, b.y) - pad);
+  const x1 = Math.min(MAP.width, Math.max(a.x, b.x) + pad);
+  const y1 = Math.min(MAP.height, Math.max(a.y, b.y) + pad);
+  return { x, y, w: Math.max(0, x1 - x), h: Math.max(0, y1 - y) };
 }
 
 const LEGEND: Array<{ label: string; color: string }> = [
@@ -991,10 +1092,12 @@ export function MapCanvas({
   marchFrom,
   marchTargets,
   selectedArmyId,
+  selectedGateId,
   onSelect,
   onMarchTarget,
   onSelectArmy,
   onMoveArmy,
+  onSelectGate,
 }: {
   state: GameState;
   selectedCityId: string;
@@ -1006,18 +1109,23 @@ export function MapCanvas({
   marchTargets?: string[];
   /** 选中的部队 id：非空时进入「部队调度」模式 */
   selectedArmyId?: string | null;
+  /** 选中的关防 id：显示高亮与关防提示 */
+  selectedGateId?: string | null;
   onSelect: (id: string) => void;
   onMarchTarget?: (cityId: string) => void;
   onSelectArmy?: (id: string | null) => void;
   onMoveArmy?: (armyId: string, to: GridPoint) => void;
+  onSelectGate?: (gateId: string | null) => void;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pointsRef = useRef<ProjectedCity[]>([]);
   const armyHitsRef = useRef<Array<{ id: string; x: number; y: number; r: number }>>([]);
+  const gateHitsRef = useRef<Array<{ id: string; x: number; y: number; r: number }>>([]);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [hover, setHover] = useState<string | null>(null);
   const [hoverArmy, setHoverArmy] = useState<string | null>(null);
+  const [hoverGate, setHoverGate] = useState<string | null>(null);
   const [hoverTile, setHoverTile] = useState<GridPoint | null>(null);
   const [view, setView] = useState<MapView>({ zoom: 1, x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
@@ -1096,7 +1204,8 @@ export function MapCanvas({
   useEffect(() => {
     if (!size.w || !size.h || mobileInit.current) return;
     mobileInit.current = true;
-    if (size.w < 560) centerView(2.1);
+    // 大地图默认进入「州郡视角」：桌面 200%，手机 260%。
+    centerView(size.w < 560 ? 2.6 : 2);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [size.w, size.h]);
 
@@ -1149,7 +1258,7 @@ export function MapCanvas({
     ctx.fillRect(0, 0, size.w, size.h);
 
     const layout = layoutOf(size.w, size.h);
-    const cache = ensureTerrainCache();
+    const worldRect = visibleWorldRect(size.w, size.h, view, layout);
     const tileScreen = (p: GridPoint) => {
       const c = tileCenter(p.col, p.row);
       return worldToScreen(c.x, c.y, size.w, size.h, view, layout);
@@ -1167,18 +1276,40 @@ export function MapCanvas({
     ctx.translate(layout.ox, layout.oy);
     ctx.scale(layout.scale, layout.scale);
     ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(cache, 0, 0, MAP.width, MAP.height);
-    if (view.zoom >= 1.2) {
-      ctx.strokeStyle = `rgba(58,48,32,${0.14 * Math.min(1, (view.zoom - 1.2) / 0.45)})`;
+    const chunkX0 = Math.max(0, Math.floor(worldRect.x / TERRAIN_CHUNK_WORLD));
+    const chunkY0 = Math.max(0, Math.floor(worldRect.y / TERRAIN_CHUNK_WORLD));
+    const chunkX1 = Math.min(
+      Math.ceil(MAP.width / TERRAIN_CHUNK_WORLD) - 1,
+      Math.floor((worldRect.x + worldRect.w) / TERRAIN_CHUNK_WORLD),
+    );
+    const chunkY1 = Math.min(
+      Math.ceil(MAP.height / TERRAIN_CHUNK_WORLD) - 1,
+      Math.floor((worldRect.y + worldRect.h) / TERRAIN_CHUNK_WORLD),
+    );
+    for (let cy = chunkY0; cy <= chunkY1; cy++) {
+      for (let cx = chunkX0; cx <= chunkX1; cx++) {
+        const chunk = terrainChunkAt(cx, cy);
+        // 0.5 世界单位外扩，遮住块缝
+        ctx.drawImage(chunk.canvas, chunk.x - 0.5, chunk.y - 0.5, chunk.w + 1, chunk.h + 1);
+      }
+    }
+    if (view.zoom >= 0.32) {
+      ctx.strokeStyle = `rgba(58,48,32,${0.14 * Math.min(1, (view.zoom - 0.32) / 0.4)})`;
       ctx.lineWidth = 0.4;
       ctx.beginPath();
-      for (let c = 1; c < MAP.cols; c++) {
-        ctx.moveTo(c * MAP.tile, 0);
-        ctx.lineTo(c * MAP.tile, MAP.height);
+      const c0 = Math.max(1, Math.floor(worldRect.x / MAP.tile));
+      const c1 = Math.min(MAP.cols, Math.ceil((worldRect.x + worldRect.w) / MAP.tile));
+      const r0 = Math.max(1, Math.floor(worldRect.y / MAP.tile));
+      const r1 = Math.min(MAP.rows, Math.ceil((worldRect.y + worldRect.h) / MAP.tile));
+      for (let c = c0; c < c1; c++) {
+        const x = c * MAP.tile;
+        ctx.moveTo(x, worldRect.y);
+        ctx.lineTo(x, worldRect.y + worldRect.h);
       }
-      for (let r = 1; r < MAP.rows; r++) {
-        ctx.moveTo(0, r * MAP.tile);
-        ctx.lineTo(MAP.width, r * MAP.tile);
+      for (let r = r0; r < r1; r++) {
+        const y = r * MAP.tile;
+        ctx.moveTo(worldRect.x, y);
+        ctx.lineTo(worldRect.x + worldRect.w, y);
       }
       ctx.stroke();
     }
@@ -1284,19 +1415,42 @@ export function MapCanvas({
       ctx.fill();
     }
 
-    // 关卡 / 渡口
-    const gateOwnerColor = (gate: (typeof GATES)[number]): string => {
-      const owner = gate.guardCityId ? state.cities[gate.guardCityId]?.ownerId : null;
-      return owner ? state.factions[owner]?.color ?? '#8a8274' : '#8a8274';
-    };
-    for (const gate of GATES) {
-      const [ea, eb] = gate.edges[0]!;
-      const ca = CITY_COORDS[ea];
-      const cb = CITY_COORDS[eb];
-      if (!ca || !cb) continue;
-      const world = projectLonLat((ca[0] + cb[0]) / 2, (ca[1] + cb[1]) / 2);
+    // 关隘 / 港口（L2）：先画通行线，再画关防图标
+    const gateList = Object.values(gateSites());
+    const gateScreen = new Map<string, { x: number; y: number }>();
+    gateHitsRef.current = [];
+    for (const site of gateList) {
+      const world = gateWorldPos(site);
       const sp = worldToScreen(world.x, world.y, size.w, size.h, view, layout);
-      const color = gateOwnerColor(gate);
+      gateScreen.set(site.gate.id, sp);
+      gateHitsRef.current.push({ id: site.gate.id, x: sp.x, y: sp.y, r: 10 });
+    }
+
+    if (view.zoom >= 1.35) {
+      for (const site of gateList) {
+        const blocked = gateBlockedFor(state, site.gate.id, state.playerFactionId);
+        const points = site.lane.map(tileScreen);
+        if (points.length < 2) continue;
+        ctx.beginPath();
+        ctx.setLineDash(blocked ? [2, 3] : [3, 4]);
+        ctx.lineWidth = blocked ? 1.6 : 1.3;
+        ctx.strokeStyle = blocked
+          ? 'rgba(186,76,56,0.82)'
+          : site.water
+            ? 'rgba(124,184,190,0.68)'
+            : 'rgba(158,124,68,0.7)';
+        points.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+        ctx.stroke();
+      }
+      ctx.setLineDash([]);
+    }
+
+    for (const site of gateList) {
+      const gate = site.gate;
+      const sp = gateScreen.get(gate.id)!;
+      const owner = gateOwnerOf(state, gate.id);
+      const color = owner ? state.factions[owner]?.color ?? '#8a8274' : '#8a8274';
+      const blocked = gateBlockedFor(state, gate.id, state.playerFactionId);
       const r = 5;
       ctx.save();
       ctx.translate(sp.x, sp.y);
@@ -1341,8 +1495,8 @@ export function MapCanvas({
         ctx.arc(0, 0, r, 0, Math.PI * 2);
         ctx.fillStyle = 'rgba(72,120,122,0.95)';
         ctx.fill();
-        ctx.strokeStyle = 'rgba(228,242,236,0.85)';
-        ctx.lineWidth = 1;
+        ctx.strokeStyle = owner ? color : 'rgba(228,242,236,0.85)';
+        ctx.lineWidth = 1.4;
         ctx.stroke();
         ctx.beginPath();
         ctx.moveTo(-r * 0.62, 0);
@@ -1350,6 +1504,30 @@ export function MapCanvas({
         ctx.quadraticCurveTo(r * 0.2, r * 0.5, r * 0.62, 0);
         ctx.strokeStyle = 'rgba(214,240,234,0.95)';
         ctx.lineWidth = 1.1;
+        ctx.stroke();
+      }
+
+      // 敌对封锁：红圈 + 斜杠，全图一眼能看出此路不通
+      if (blocked) {
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 1.55, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(206,86,62,0.95)';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(-r * 0.9, -r * 0.9);
+        ctx.lineTo(r * 0.9, r * 0.9);
+        ctx.strokeStyle = 'rgba(206,86,62,0.95)';
+        ctx.lineWidth = 1.4;
+        ctx.stroke();
+      }
+
+      if (gate.id === selectedGateId || gate.id === hoverGate) {
+        ctx.beginPath();
+        ctx.arc(0, 0, r * 2.05, 0, Math.PI * 2);
+        ctx.strokeStyle =
+          gate.id === selectedGateId ? 'rgba(246,214,122,0.95)' : 'rgba(246,232,196,0.75)';
+        ctx.lineWidth = 1.3;
         ctx.stroke();
       }
       ctx.restore();
@@ -1644,24 +1822,21 @@ export function MapCanvas({
       }
     }
 
-    // 关卡名
+    // 关防名
     if (view.zoom >= 1.25) {
       const gateFont = '600 9px "PingFang SC", "Noto Sans SC", sans-serif';
-      for (const gate of GATES) {
-        const [ea, eb] = gate.edges[0]!;
-        const ca = CITY_COORDS[ea];
-        const cb = CITY_COORDS[eb];
-        if (!ca || !cb) continue;
-        const world = projectLonLat((ca[0] + cb[0]) / 2, (ca[1] + cb[1]) / 2);
+      for (const site of Object.values(gateSites())) {
+        const world = gateWorldPos(site);
         const sp = worldToScreen(world.x, world.y, size.w, size.h, view, layout);
+        const blocked = gateBlockedFor(state, site.gate.id, state.playerFactionId);
         ctx.font = gateFont;
-        const tw = ctx.measureText(gate.name).width + 7;
+        const tw = ctx.measureText(site.gate.name).width + 7;
         const box: Box = { x1: sp.x - tw / 2, y1: sp.y + 6, x2: sp.x + tw / 2, y2: sp.y + 18 };
         if (overlaps(box)) continue;
         drawChip(
           box,
-          gate.name,
-          gate.kind === 'ferry' ? '#1f565a' : '#6b4a24',
+          site.gate.name,
+          blocked ? '#a94834' : site.gate.kind === 'port' ? '#1f565a' : '#6b4a24',
           'rgba(243,235,214,0.92)',
           gateFont,
         );
@@ -1769,6 +1944,83 @@ export function MapCanvas({
         );
       }
     }
+
+    // 关防 tooltip
+    if (hoverGate && !selectedArmyId) {
+      const site = gateSiteById(hoverGate);
+      const sp = site ? gateScreen.get(site.gate.id) : null;
+      if (site && sp) {
+        const ownerId = gateOwnerOf(state, site.gate.id);
+        const ownerName = ownerId
+          ? state.factions[ownerId]?.name ?? ownerId
+          : '无主';
+        const access = gateAccessFor(state, site.gate.id, state.playerFactionId);
+        const supply = gateSupplyCityOf(state, site.gate.id);
+        const w = 232;
+        const h = 138;
+        let x = sp.x + 12;
+        let y = sp.y - 48;
+        if (x + w > size.w - 8) x = sp.x - w - 12;
+        if (y < 8) y = 8;
+        if (y + h > size.h - 8) y = size.h - h - 8;
+
+        ctx.beginPath();
+        ctx.roundRect(x, y, w, h, 7);
+        ctx.fillStyle = 'rgba(20,18,14,0.96)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(75,67,50,0.9)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'alphabetic';
+        ctx.fillStyle = '#efe6d2';
+        ctx.font = '600 13px "PingFang SC", "Noto Sans SC", sans-serif';
+        ctx.fillText(site.gate.name, x + 12, y + 21);
+
+        ctx.fillStyle = ownerId ? state.factions[ownerId]?.color ?? '#8a8274' : '#8a8274';
+        ctx.fillRect(x + 12, y + 29, 6, 6);
+        ctx.fillStyle = '#a3977e';
+        ctx.font = '10px "PingFang SC", "Noto Sans SC", sans-serif';
+        ctx.fillText(
+          `${GATE_KIND_LABEL[site.gate.kind]} · ${ownerName} · ${gateAccessLabel(access)}`,
+          x + 23,
+          y + 36,
+        );
+
+        ctx.fillStyle = '#c8a45e';
+        ctx.fillText(
+          `守军 ${gateGarrisonOf(state, site.gate.id)} · 工事 ${site.gate.fortification}`,
+          x + 12,
+          y + 54,
+        );
+        ctx.fillStyle = '#efe6d2';
+        ctx.fillText(
+          `月产 金 +${site.gate.gold} · 粮 +${site.gate.food}`,
+          x + 12,
+          y + 71,
+        );
+        ctx.fillStyle = '#a3977e';
+        ctx.fillText(
+          `解送 ${supply ? state.cities[supply]?.name ?? supply : '暂无接收城'}`,
+          x + 12,
+          y + 88,
+        );
+        ctx.fillText(
+          `${site.water ? '渡线' : '山道'} ${site.lane.length} 格 · ${
+            access === 'blocked' ? '须先攻关才能通行' : '可通行'
+          }`,
+          x + 12,
+          y + 105,
+        );
+        ctx.fillStyle = access === 'blocked' ? '#d98a72' : '#8fb8a4';
+        ctx.fillText(
+          access === 'blocked' ? '敌关封锁整条通行线' : '点击查看关防 · 无内政，按月解送',
+          x + 12,
+          y + 124,
+        );
+      }
+    }
   }, [
     state,
     selectedCityId,
@@ -1784,6 +2036,8 @@ export function MapCanvas({
     reach,
     previewPath,
     selectedArmyId,
+    selectedGateId,
+    hoverGate,
   ]);
 
   /** 屏幕坐标 → 城池（用城墙矩形做命中，比圆心距离更准） */
@@ -1809,6 +2063,15 @@ export function MapCanvas({
     for (const a of armyHitsRef.current) {
       const d = Math.hypot(a.x - x, a.y - y);
       if (d <= a.r && (!best || d < best.d)) best = { id: a.id, d };
+    }
+    return best?.id ?? null;
+  };
+
+  const hitGate = (x: number, y: number): string | null => {
+    let best: { id: string; d: number } | null = null;
+    for (const g of gateHitsRef.current) {
+      const d = Math.hypot(g.x - x, g.y - y);
+      if (d <= g.r && (!best || d < best.d)) best = { id: g.id, d };
     }
     return best?.id ?? null;
   };
@@ -1845,7 +2108,7 @@ export function MapCanvas({
               ? 'crosshair'
               : view.zoom > 1.01
                 ? 'grab'
-                : hover || hoverArmy
+                : hover || hoverArmy || hoverGate
                   ? 'pointer'
                   : 'default',
         }}
@@ -1881,6 +2144,7 @@ export function MapCanvas({
               );
               setHover(null);
               setHoverArmy(null);
+              setHoverGate(null);
             }
             return;
           }
@@ -1889,7 +2153,9 @@ export function MapCanvas({
           const sy = e.clientY - box.top;
           const armyId = hitArmy(sx, sy);
           setHoverArmy(armyId);
-          const id = armyId ? null : hitCity(sx, sy);
+          const gateId = armyId ? null : hitGate(sx, sy);
+          setHoverGate(gateId);
+          const id = armyId || gateId ? null : hitCity(sx, sy);
           if (id !== hover) setHover(id);
           if (selectedArmyId) setHoverTile(tileAtScreen(e.clientX, e.clientY));
           else if (hoverTile) setHoverTile(null);
@@ -1908,29 +2174,51 @@ export function MapCanvas({
           const armyId = hitArmy(sx, sy);
           if (armyId) {
             if (onSelectArmy) onSelectArmy(armyId === selectedArmyId ? null : armyId);
+            onSelectGate?.(null);
             return;
           }
 
-          // ② 部队调度模式：点格子即行军；点到城墙则视为选城（城墙不可进入）
+          // ② 部队调度模式：点格子即行军；点到敌对关门则改为查看关防
           if (selectedArmyId && onMoveArmy) {
             const tile = tileAtScreen(e.clientX, e.clientY);
+            const selected = (state.armies ?? []).find((a) => a.id === selectedArmyId);
+            const site = tile ? gateAtCenter(tile.col, tile.row) : null;
+            if (
+              tile &&
+              site &&
+              selected &&
+              gateBlockedFor(state, site.gate.id, selected.factionId)
+            ) {
+              onSelectGate?.(site.gate.id);
+              return;
+            }
             if (tile && !wallTileAt(tile.col, tile.row)) {
               onMoveArmy(selectedArmyId, tile);
               return;
             }
           }
 
-          // ③ 点城池
+          // ③ 点关防
+          const gateId = hitGate(sx, sy);
+          if (gateId) {
+            onSelectGate?.(gateId);
+            if (e.pointerType !== 'mouse') setHoverGate(null);
+            return;
+          }
+
+          // ④ 点城池
           const id = hitCity(sx, sy);
           if (id) {
             if (marchFrom && onMarchTarget && attackSet.has(id)) onMarchTarget(id);
             else onSelect(id);
-          } else if (onSelectArmy) {
-            onSelectArmy(null);
+          } else {
+            if (onSelectArmy) onSelectArmy(null);
+            onSelectGate?.(null);
           }
           if (e.pointerType !== 'mouse') {
             setHover(null);
             setHoverArmy(null);
+            setHoverGate(null);
           }
         }}
         onPointerCancel={() => {
@@ -1941,6 +2229,7 @@ export function MapCanvas({
           if (!dragRef.current) {
             setHover(null);
             setHoverArmy(null);
+            setHoverGate(null);
             setHoverTile(null);
           }
         }}

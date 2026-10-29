@@ -1020,8 +1020,30 @@ function generatorFor(theme: BattlefieldThemeId): (
 }
 
 /**
+ * 只取战场身份（主题 / 专名 / 氛围），不生成 12×8 战术图。
+ * 大地图战斗直接使用真实地形，但仍沿用同一套历史专名。
+ */
+export function identityOfBattlefield(ctx: BattlefieldContext): {
+  theme: BattlefieldThemeId;
+  name: string;
+  subtitle: string;
+} {
+  const identityHash = hashParts([
+    ctx.targetCityId,
+    ctx.targetTerrain,
+    ctx.isWaterCity ? 'water' : 'land',
+    ctx.citySize ?? 'medium',
+  ]);
+  const theme = chooseTheme(ctx, identityHash);
+  const details = themeDetails(ctx, theme, identityHash);
+  return { theme, name: details.name, subtitle: details.subtitle };
+}
+
+/**
  * 生成一场战斗的战场。种子由 runSeed / 回合 / battleSerial / 攻守城共同决定，
  * 同一上下文可复现；不消耗战斗随机流。
+ *
+ * @deprecated 大地图战斗已直接使用 `terrainGrid`，此生成器仅保留给旧存档与测试。
  */
 export function buildBattlefield(ctx: BattlefieldContext): BattlefieldResult {
   const identityHash = hashParts([

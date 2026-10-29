@@ -5,6 +5,7 @@ import { createChapter } from '../../systems/chapter';
 import { cityMaxDurability, troopCap } from '../../systems/formulas';
 import { BALANCE } from './balance';
 import { CITY_TABLE } from './cities';
+import { MAP_VERSION } from './geography';
 import { GENERAL_TABLE } from './generals';
 import { FACTION_RESERVES } from './generalsExtra';
 import { ITEM_TABLE } from './items';
@@ -750,6 +751,8 @@ export function createGame(opts: CreateGameOptions = {}): GameState {
     armySerial: 0,
     facilities: [],
     facilitySerial: 0,
+    gates: {},
+    mapVersion: MAP_VERSION,
     phase: 'map',
     log: [],
     policy: { offer: [] },

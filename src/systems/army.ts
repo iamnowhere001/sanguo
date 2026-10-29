@@ -1,7 +1,6 @@
 import { BALANCE } from '../data/tables/balance';
-import { CITY_COORDS, MAP, projectLonLat } from '../data/tables/geography';
-import { GATES } from '../data/tables/gates';
-import { marchDaysOfTile, TILE_MARCH_DAYS } from '../data/tables/marchCost';
+import { MAP } from '../data/tables/geography';
+import { marchDaysForArmy, marchDaysOfTile, TILE_MARCH_DAYS } from '../data/tables/marchCost';
 import type { Army, GameState, General, GridPoint } from '../core/state';
 import { defendersOf, garrisonTroopsOf } from '../core/state';
 import { done, fail, type OpResult } from '../core/result';
@@ -10,11 +9,15 @@ import { createBattle } from './battle/setup';
 import { topUpFromPool } from './troops';
 import { log } from './economy';
 import { beaconMarchBonusOf } from './facilities';
+import { gateSiteAt, gateSites } from '../render/gateGrid';
+import { gateBlockedFor } from './gates';
 import {
   approachTileAt,
   cityAnchors,
   cityAtCenter,
+  cityBlocks,
   tileCenter,
+  tileKindAt,
   wallTileAt,
   type GateSide,
 } from '../render/terrainGrid';
@@ -77,46 +80,22 @@ export function armyMp(army: Army): number {
   return army.mp ?? armyMaxMp(army);
 }
 
-// ── 关区 ──────────────────────────────────────────────────
-interface GateZone {
-  days: number;
-  water: boolean;
-  /** 敌对关隘 id → 城防加成（同一关隘只算一次） */
-  hostile: Map<string, number>;
-}
-
+// ── 关防 ──────────────────────────────────────────────────
 /**
- * 关区：以关隘地图落点为中心的 3×3 格。
- * 关隘坐标取第一条道路的中点，与 MapCanvas 的关隘图标完全对齐。
+ * 关防路线摘要：记录是否渡水，供攻城战切换水战地形。
+ * 敌对关防会在寻路阶段直接封锁，因此这里只会统计已经走通的关防。
  */
-function gateZones(s: GameState, factionId: string): Map<string, GateZone> {
-  const zones = new Map<string, GateZone>();
-  for (const gate of GATES) {
-    const edge = gate.edges[0];
-    if (!edge) continue;
-    const a = CITY_COORDS[edge[0]];
-    const b = CITY_COORDS[edge[1]];
-    if (!a || !b) continue;
-    const world = projectLonLat((a[0] + b[0]) / 2, (a[1] + b[1]) / 2);
-    const col = Math.floor(world.x / MAP.tile);
-    const row = Math.floor(world.y / MAP.tile);
-    const owner = gate.guardCityId ? s.cities[gate.guardCityId]?.ownerId ?? null : null;
-    const hostile = Boolean(owner && owner !== factionId && canAttackFactions(s, factionId, owner));
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        const c = col + dx;
-        const r = row + dy;
-        if (!isMarchable(c, r)) continue;
-        const key = keyOf(c, r);
-        const zone = zones.get(key) ?? { days: 0, water: false, hostile: new Map() };
-        zone.days = Math.max(zone.days, gate.extraDays);
-        if (gate.kind === 'ferry' && gate.waterBattle) zone.water = true;
-        if (hostile) zone.hostile.set(gate.id, gate.fortification);
-        zones.set(key, zone);
-      }
-    }
+function gateSummaryOf(path: GridPoint[]): {
+  fortificationBonus: number;
+  waterCrossing: boolean;
+} {
+  let waterCrossing = false;
+  for (const p of path) {
+    const site = gateSiteAt(p.col, p.row);
+    if (site?.water) waterCrossing = true;
   }
-  return zones;
+  // 旧版“敌关给目标城加城防”的机制已被“敌关封锁整条线”取代
+  return { fortificationBonus: 0, waterCrossing };
 }
 
 class TileHeap {
@@ -177,32 +156,113 @@ interface MarchField {
   start: GridPoint;
   dist: Float64Array;
   prev: Int32Array;
-  zones: Map<string, GateZone>;
+}
+
+/**
+ * 行军静态栅格：地形代价、关防通行线、城墙归属。
+ *
+ * 576×432 全图 Dijkstra 每个邻格都做字符串 key 查询会非常慢，
+ * 因此把它们预计算成下标数组；Dijkstra 内只做数值访问。
+ */
+interface MarchGrid {
+  cols: number;
+  rows: number;
+  /** 进入该格的天数；Infinity = 不可通行（关防通行线已覆盖地形） */
+  cost: Float64Array;
+  /** 关防序号（1 起）；0 = 普通格 */
+  gateIndex: Int16Array;
+  gateIds: string[];
+  /** 城墙所属城序号（1 起）；0 = 非城墙 */
+  wallCity: Int16Array;
+  /** 1 = 城墙角，城主也不能穿过 */
+  wallCorner: Uint8Array;
+  cityIds: string[];
+}
+
+let marchGridCache: MarchGrid | null = null;
+
+function marchGrid(): MarchGrid {
+  if (marchGridCache) return marchGridCache;
+  const { cols, rows } = MAP;
+  const N = cols * rows;
+  const cost = new Float64Array(N);
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      cost[row * cols + col] = TILE_MARCH_DAYS[tileKindAt(col, row)] ?? Infinity;
+    }
+  }
+
+  const gateIndex = new Int16Array(N);
+  const gateIds: string[] = [];
+  for (const site of Object.values(gateSites())) {
+    gateIds.push(site.gate.id);
+    const gi = gateIds.length;
+    const base = site.water ? 1.5 : 1;
+    const apply = (col: number, row: number): void => {
+      if (col < 0 || row < 0 || col >= cols || row >= rows) return;
+      const i = row * cols + col;
+      gateIndex[i] = gi;
+      const atCenter = col === site.center.col && row === site.center.row;
+      cost[i] = base + (atCenter ? site.gate.extraDays : 0);
+    };
+    for (const p of site.lane) apply(p.col, p.row);
+    // 与 gateSiteAt 的兜底一致：图标格即使不在 lane 内也算通行
+    apply(site.center.col, site.center.row);
+  }
+
+  const wallCity = new Int16Array(N);
+  const wallCorner = new Uint8Array(N);
+  const cityIds: string[] = [];
+  for (const block of Object.values(cityBlocks())) {
+    cityIds.push(block.cityId);
+    const wi = cityIds.length;
+    for (const t of block.tiles) {
+      if (t.col < 0 || t.row < 0 || t.col >= cols || t.row >= rows) continue;
+      const i = t.row * cols + t.col;
+      wallCity[i] = wi;
+      wallCorner[i] = t.col !== block.col && t.row !== block.row ? 1 : 0;
+    }
+  }
+
+  marchGridCache = { cols, rows, cost, gateIndex, gateIds, wallCity, wallCorner, cityIds };
+  return marchGridCache;
 }
 
 /**
  * 全图 Dijkstra。
  *
- * 通行判定按顺序：地形 → 城墙归属 → 部队占位。
+ * 通行判定按顺序：地形 / 关防 → 城墙归属 → 部队占位。
+ * - 关防通行线优先于山岭水域；敌对关防封锁整条线，必须先攻关；
  * - 城墙（含城门格）只对城主开放 —— 「城池被攻占前，敌方部队不能进入城池」；
  * - 一格只站一支部队，所以敌方部队所在格直接不可进入；
- * - `extraBlocked` 用于「出城时绕开被堵的门」。
+ * - `extraBlocked` 用于「出城时绕开被堵的门」；
+ * - 传入 `goals` 时，目标全部取到最短距离后提前结束。
  */
 function marchField(
   s: GameState,
   factionId: string,
   start: GridPoint,
-  extraBlocked?: Set<string>,
+  extraBlocked?: Set<number>,
+  goals?: GridPoint[],
 ): MarchField {
   const { cols, rows } = MAP;
   const N = cols * rows;
-  const zones = gateZones(s, factionId);
   const dist = new Float64Array(N).fill(Infinity);
   const prev = new Int32Array(N).fill(-1);
   const seen = new Uint8Array(N);
   const startIndex = start.row * cols + start.col;
   dist[startIndex] = 0;
 
+  const remaining = new Set<number>();
+  if (goals) {
+    for (const g of goals) {
+      if (g.col < 0 || g.row < 0 || g.col >= cols || g.row >= rows) continue;
+      const i = g.row * cols + g.col;
+      if (i !== startIndex) remaining.add(i);
+    }
+  }
+
+  const grid = marchGrid();
   const heap = new TileHeap();
   heap.push(startIndex, 0);
   const dirs = [
@@ -217,6 +277,10 @@ function marchField(
     if (seen[id]) continue;
     seen[id] = 1;
     if (d > dist[id]!) continue;
+    if (remaining.size > 0) {
+      remaining.delete(id);
+      if (remaining.size === 0) break;
+    }
     const col = id % cols;
     const row = Math.floor(id / cols);
 
@@ -224,21 +288,24 @@ function marchField(
       const nc = col + dx;
       const nr = row + dy;
       if (nc < 0 || nr < 0 || nc >= cols || nr >= rows) continue;
-      const base = marchDaysOfTile(nc, nr);
+      const ni = nr * cols + nc;
+      const gi = grid.gateIndex[ni]!;
+      if (gi > 0 && gateBlockedFor(s, grid.gateIds[gi - 1]!, factionId)) continue;
+      const base = grid.cost[ni]!;
       if (!Number.isFinite(base)) continue;
 
-      const wall = wallTileAt(nc, nr);
-      if (wall && !wallPassableFor(s, wall, factionId)) continue;
+      const wi = grid.wallCity[ni]!;
+      if (wi > 0) {
+        if (grid.wallCorner[ni]) continue;
+        if ((s.cities[grid.cityIds[wi - 1]!]?.ownerId ?? null) !== factionId) continue;
+      }
 
-      const key = keyOf(nc, nr);
-      if (extraBlocked?.has(key)) continue;
+      if (extraBlocked?.has(ni)) continue;
 
       const occupant = armyAtTile(s, nc, nr);
       if (occupant && occupant.factionId !== factionId) continue;
 
-      const zone = zones.get(key);
-      const ni = nr * cols + nc;
-      const nd = d + base + (zone?.days ?? 0);
+      const nd = d + base;
       if (nd < dist[ni]!) {
         dist[ni] = nd;
         prev[ni] = id;
@@ -247,7 +314,7 @@ function marchField(
     }
   }
 
-  return { start, dist, prev, zones };
+  return { start, dist, prev };
 }
 
 function tracePath(field: MarchField, target: GridPoint): GridPoint[] | null {
@@ -265,23 +332,6 @@ function tracePath(field: MarchField, target: GridPoint): GridPoint[] | null {
   return path.reverse();
 }
 
-function gateSummaryOf(path: GridPoint[], zones: Map<string, GateZone>): {
-  fortificationBonus: number;
-  waterCrossing: boolean;
-} {
-  const hostile = new Map<string, number>();
-  let waterCrossing = false;
-  for (const p of path) {
-    const zone = zones.get(keyOf(p.col, p.row));
-    if (!zone) continue;
-    for (const [id, fort] of zone.hostile) hostile.set(id, fort);
-    if (zone.water) waterCrossing = true;
-  }
-  let fortificationBonus = 0;
-  for (const v of hostile.values()) fortificationBonus += v;
-  return { fortificationBonus, waterCrossing };
-}
-
 /** 目标的「门外落位」：陆军只能从这四格接近城池 */
 function approachesOf(s: GameState, cityId: string): GridPoint[] {
   return gatesOf(s, cityId)
@@ -290,10 +340,10 @@ function approachesOf(s: GameState, cityId: string): GridPoint[] {
 }
 
 /** 从某城出城时的禁行格：被敌军堵住的门外格 */
-function blockedExitKeys(s: GameState, cityId: string): Set<string> {
-  const blocked = new Set<string>();
+function blockedExitKeys(s: GameState, cityId: string): Set<number> {
+  const blocked = new Set<number>();
   for (const g of gatesOf(s, cityId)) {
-    if (g.blockedBy) blocked.add(keyOf(g.approach.col, g.approach.row));
+    if (g.blockedBy) blocked.add(g.approach.row * MAP.cols + g.approach.col);
   }
   return blocked;
 }
@@ -334,6 +384,7 @@ export function routeForArmy(
     factionId,
     { col: fromBlock.col, row: fromBlock.row },
     blockedExitKeys(s, fromCityId),
+    goals,
   );
 
   let best: { goal: GridPoint; days: number } | null = null;
@@ -367,7 +418,7 @@ export function routeForArmy(
     exit,
     path,
     days: Math.max(0, days - exitDays),
-    ...gateSummaryOf(full, field.zones),
+    ...gateSummaryOf(full),
     gate,
   };
 }
@@ -426,7 +477,7 @@ export function reachableTargets(
       days: Math.max(0, best.days - exitDays),
       exit,
       path: full.slice(exitIdx + 1),
-      ...gateSummaryOf(full, field.zones),
+      ...gateSummaryOf(full),
     });
   }
   return out.sort((a, b) => a.days - b.days || a.cityId.localeCompare(b.cityId));
@@ -436,9 +487,9 @@ export function reachableTargets(
 /** 剩余路程（天）：含当前这一步已走的零头 */
 export function armyDaysRemaining(_s: GameState, army: Army): number {
   const next = army.path[0];
-  let total = next ? Math.max(0, marchDaysOfTile(next.col, next.row) - army.legDays) : 0;
+  let total = next ? Math.max(0, marchDaysForArmy(next.col, next.row) - army.legDays) : 0;
   for (let i = 1; i < army.path.length; i++) {
-    total += marchDaysOfTile(army.path[i]!.col, army.path[i]!.row);
+    total += marchDaysForArmy(army.path[i]!.col, army.path[i]!.row);
   }
   return total;
 }
@@ -453,7 +504,7 @@ export function armyWorldPos(_s: GameState, army: Army): { x: number; y: number 
   const from = tileCenter(army.at.col, army.at.row);
   const next = army.path[0];
   if (!next) return from;
-  const cost = marchDaysOfTile(next.col, next.row);
+  const cost = marchDaysForArmy(next.col, next.row);
   const t = Number.isFinite(cost) && cost > 0 ? Math.min(1, Math.max(0, army.legDays / cost)) : 1;
   const to = tileCenter(next.col, next.row);
   return { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t };
@@ -468,7 +519,9 @@ function advanceAlongPath(s: GameState, army: Army, budget: number): number {
   while (left > 0) {
     const next = army.path[0];
     if (!next) break;
-    const cost = marchDaysOfTile(next.col, next.row);
+    const site = gateSiteAt(next.col, next.row);
+    if (site && gateBlockedFor(s, site.gate.id, army.factionId)) break;
+    const cost = marchDaysForArmy(next.col, next.row);
     if (!Number.isFinite(cost)) break;
     // 前路被占 / 被城墙挡住：原地待命，等下一旬重新下令（不硬穿）
     const wall = wallTileAt(next.col, next.row);
@@ -534,8 +587,18 @@ export interface MoveOutcome {
 export function moveArmyTo(s: GameState, armyId: string, to: GridPoint): MoveOutcome {
   const army = (s.armies ?? []).find((a) => a.id === armyId);
   if (!army) return { ok: false, message: '部队不存在', days: 0, remaining: 0, arrived: false };
-  if (!isMarchable(to.col, to.row)) {
+  if (!Number.isFinite(marchDaysForArmy(to.col, to.row))) {
     return { ok: false, message: '此处不可通行', days: 0, remaining: 0, arrived: false };
+  }
+  const gateSite = gateSiteAt(to.col, to.row);
+  if (gateSite && gateBlockedFor(s, gateSite.gate.id, army.factionId)) {
+    return {
+      ok: false,
+      message: `「${gateSite.gate.name}」被敌军封锁，须先攻关`,
+      days: 0,
+      remaining: 0,
+      arrived: false,
+    };
   }
   const occupant = armyAtTile(s, to.col, to.row);
   if (occupant && occupant.id !== army.id) {
@@ -543,7 +606,7 @@ export function moveArmyTo(s: GameState, armyId: string, to: GridPoint): MoveOut
   }
 
   // 从当前位置出发重新寻路：已走的路线一律作废，避免指令堆积
-  const field = marchField(s, army.factionId, army.at);
+  const field = marchField(s, army.factionId, army.at, undefined, [to]);
   const path = tracePath(field, to);
   if (!path) {
     return { ok: false, message: '没有可用的行军路线', days: 0, remaining: 0, arrived: false };
@@ -613,7 +676,7 @@ export function armyReach(s: GameState, army: Army): Map<string, number> {
 
 /** 取到某一格的路径（供地图画预览线） */
 export function armyPreviewPath(s: GameState, army: Army, to: GridPoint): GridPoint[] {
-  const field = marchField(s, army.factionId, army.at);
+  const field = marchField(s, army.factionId, army.at, undefined, [to]);
   return tracePath(field, to) ?? [];
 }
 
@@ -754,6 +817,7 @@ export function assaultCity(s: GameState, armyId: string): OpResult {
       waterCrossing: army.waterCrossing,
       fortificationBonus: army.fortificationBonus,
       skipAdjacency: true,
+      attackerAt: { x: army.at.col, y: army.at.row },
     },
   );
 
@@ -833,6 +897,7 @@ export function playArmyTurn(s: GameState): { battleStarted: boolean } {
           waterCrossing: army.waterCrossing,
           fortificationBonus: army.fortificationBonus,
           skipAdjacency: true,
+          attackerAt: { x: army.at.col, y: army.at.row },
         },
       );
       if (battle.result.ok) {

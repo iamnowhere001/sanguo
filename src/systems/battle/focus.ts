@@ -5,18 +5,18 @@ import { TERRAIN_MODIFIER } from '../../data/tables/unitClasses';
 import { computeDamage } from './combat';
 import { computeDamageValue } from './damage';
 import {
-  BATTLE_H,
-  BATTLE_W,
   activeUnits,
   attackRangeOf,
   battleTerrainAt,
   distanceBetween,
   inAttackRange,
+  inBattleBounds,
   otherSide,
   reachableTiles,
   unitKey,
 } from './grid';
 import { objectiveMoveScore, objectiveTargetPriority } from './objectives';
+import { cityTiles } from './siege';
 import { commandPointsOf } from './turn';
 
 /**
@@ -98,7 +98,7 @@ export function buildThreatSources(b: BattleState, side: BattleSide): ThreatSour
           if (dist < range.min || dist > range.max) continue;
           const x = spot.x + dx;
           const y = spot.y + dy;
-          if (x < 0 || y < 0 || x >= BATTLE_W || y >= BATTLE_H) continue;
+          if (!inBattleBounds(b, x, y)) continue;
           tiles.add(unitKey(x, y));
         }
       }
@@ -323,14 +323,11 @@ export function bestAttackOption(
 function nearestCityTile(b: BattleState, unit: BattleUnit): Tile | null {
   let best: Tile | null = null;
   let bestDistance = Infinity;
-  for (let y = 0; y < BATTLE_H; y++) {
-    for (let x = 0; x < BATTLE_W; x++) {
-      if (b.grid[y]?.[x] !== 'city') continue;
-      const d = distanceBetween(unit, { x, y });
-      if (d < bestDistance) {
-        bestDistance = d;
-        best = { x, y };
-      }
+  for (const tile of cityTiles(b)) {
+    const d = distanceBetween(unit, tile);
+    if (d < bestDistance) {
+      bestDistance = d;
+      best = tile;
     }
   }
   return best;

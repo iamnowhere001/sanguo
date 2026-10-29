@@ -2,7 +2,7 @@ import { BALANCE } from '../../data/tables/balance';
 import { WEATHER_LABEL } from '../../data/tables/tactics';
 import { done, fail, type OpResult } from '../../core/result';
 import type { BattleCommand, BattleSide, BattleState } from '../../core/state';
-import { activeUnits } from './grid';
+import { activeUnits, battleTerrainAt } from './grid';
 import { assaultWalls } from './siege';
 import { rollWeather } from './setup';
 
@@ -108,7 +108,7 @@ export function advanceBattleDay(
   if (b.waterBattle) {
     for (const u of Object.values(b.units)) {
       if (u.routed || u.unitClass === 'navy' || u.troops <= 0) continue;
-      if (b.grid[u.y]?.[u.x] !== 'water') continue;
+      if (battleTerrainAt(b, u.x, u.y) !== 'water') continue;
       const lost = Math.max(1, Math.floor(u.troops * 0.05));
       u.troops = Math.max(1, u.troops - lost);
       b.log.push(`${u.name} 不习水战，溺水减员 ${lost}`);

@@ -109,7 +109,7 @@ function UnitCard({
   );
 }
 
-export function BattleScreen() {
+function BattleScreenBody() {
   const store = useGameStore();
   const state = store.state as GameState;
   const battle = state.battle as BattleState;
@@ -130,7 +130,9 @@ export function BattleScreen() {
     ? objectiveProgress(battle, sideObjective)
     : null;
 
-  const battlefieldTheme = battle.battlefield?.theme ?? inferBattlefieldTheme(battle.grid);
+  const battlefieldTheme =
+    battle.battlefield?.theme ??
+    (battle.grid ? inferBattlefieldTheme(battle.grid) : 'farmland');
   const battlefieldPalette = BATTLEFIELD_PALETTE[battlefieldTheme];
   const battlefieldName = battle.battlefield?.name ?? '无名战场';
   const battlefieldSubtitle =
@@ -144,11 +146,26 @@ export function BattleScreen() {
       water: 0,
       city: 0,
     };
-    for (const row of battle.grid) {
-      for (const t of row) counts[t] += 1;
+    if (battle.mapBattle) {
+      const cx = battle.cityBlock
+        ? Math.round((battle.cityBlock.x0 + battle.cityBlock.x1) / 2)
+        : battle.units[Object.keys(battle.units)[0] ?? '']?.x ?? 0;
+      const cy = battle.cityBlock
+        ? Math.round((battle.cityBlock.y0 + battle.cityBlock.y1) / 2)
+        : battle.units[Object.keys(battle.units)[0] ?? '']?.y ?? 0;
+      const radius = 18;
+      for (let y = cy - radius; y <= cy + radius; y++) {
+        for (let x = cx - radius; x <= cx + radius; x++) {
+          counts[battleTerrainAt(battle, x, y)] += 1;
+        }
+      }
+    } else {
+      for (const row of battle.grid ?? []) {
+        for (const t of row) counts[t] += 1;
+      }
     }
     return counts;
-  }, [battle.grid]);
+  }, [battle.mapBattle, battle.cityBlock, battle.grid, battle.targetCityId]);
   const terrainColors: Record<BattleTerrain, string> = {
     plain: battlefieldPalette.plain,
     forest: battlefieldPalette.forest,
@@ -1312,4 +1329,17 @@ export function BattleScreen() {
       ) : null}
     </div>
   );
+}
+
+/**
+ * 战斗页入口。
+ *
+ * 托管 / 自动结算可能在渲染间隙清空 `state.battle`，此时直接卸载，
+ * 避免战报接管前读到 undefined。
+ */
+export function BattleScreen() {
+  const store = useGameStore();
+  const state = store.state as GameState;
+  if (state.phase !== 'battle' || !state.battle) return null;
+  return <BattleScreenBody />;
 }

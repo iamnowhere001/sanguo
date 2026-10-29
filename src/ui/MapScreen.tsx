@@ -7,6 +7,7 @@ import { MapCanvas } from '../render/MapCanvas';
 import { audio } from '../audio';
 import { AudioSettingsButton } from './AudioSettings';
 import { CityPanel } from './CityPanel';
+import { GatePanel } from './GatePanel';
 import { FactionDiplomacyDialog } from './FactionDiplomacyDialog';
 import { FactionRail } from './FactionRail';
 import { RosterDialog } from './RosterDialog';
@@ -20,6 +21,13 @@ import { activePolicy } from '../systems/policy';
 import { buildCouncilBrief } from '../systems/council';
 import { armyEtaXun, armyMp, armyMaxMp, openGateCount, reachableTargets, sortieBlocked } from '../systems/army';
 import { gatesOf, siegeTargetOf } from '../systems/cityGrid';
+import {
+  gateAccessLabel,
+  gateGarrisonOf,
+  gatesOfFaction,
+  gateSummary,
+} from '../systems/gates';
+import { GATE_KIND_LABEL } from '../data/tables/gates';
 
 const XUN_LABEL = ['上旬', '中旬', '下旬'];
 
@@ -50,6 +58,7 @@ export function MapScreen() {
   );
   const [marchFrom, setMarchFrom] = useState<string | null>(null);
   const [selectedArmyId, setSelectedArmyId] = useState<string | null>(null);
+  const [selectedGateId, setSelectedGateId] = useState<string | null>(null);
   const [saveOpen, setSaveOpen] = useState(false);
   const [rosterOpen, setRosterOpen] = useState(false);
   const [factionDipOpen, setFactionDipOpen] = useState(false);
@@ -100,9 +109,23 @@ export function MapScreen() {
     [state],
   );
 
+  /** 我方关防：无内政，但每月解送钱粮，左侧单独成栏 */
+  const myGates = useMemo(
+    () => gatesOfFaction(state, state.playerFactionId),
+    [state],
+  );
+
   const selectedArmy = useMemo(
     () => (state.armies ?? []).find((a) => a.id === selectedArmyId) ?? null,
     [state.armies, selectedArmyId],
+  );
+
+  const selectedGate = useMemo(
+    () =>
+      selectedGateId
+        ? gateSummary(state, selectedGateId, state.playerFactionId)
+        : null,
+    [state, selectedGateId],
   );
 
   /** 选中部队脚下的围城目标 */
@@ -134,6 +157,26 @@ export function MapScreen() {
       gameStore.notify(res.message, 'good');
       setSelectedArmyId(null);
     }
+  };
+
+  /** 点城 / 点部队时收起关防面板，保证右栏只有一个焦点 */
+  const selectCity = (id: string) => {
+    setSelectedCityId(id);
+    setSelectedGateId(null);
+  };
+
+  const handleSelectGate = (gateId: string | null) => {
+    setSelectedGateId(gateId);
+    if (gateId) {
+      setSelectedArmyId(null);
+      setMarchFrom(null);
+      audio.play('ui.select');
+    }
+  };
+
+  const handleAssaultGate = (armyId: string, gateId: string) => {
+    const res = store.dispatch({ t: 'ASSAULT_GATE', armyId, gateId });
+    gameStore.notify(res.message, res.ok ? 'good' : 'warn');
   };
 
   const totalGold = mine.reduce((s, c) => s + c.gold, 0);
@@ -173,7 +216,7 @@ export function MapScreen() {
     if (res.ok) {
       gameStore.notify(res.message, 'good');
       setMarchFrom(null);
-      setSelectedCityId(targetCityId);
+      selectCity(targetCityId);
     } else {
       gameStore.notify(res.message, 'warn');
     }
@@ -200,6 +243,10 @@ export function MapScreen() {
       }
       if (e.key === 'Escape' && selectedArmyId) {
         setSelectedArmyId(null);
+        return;
+      }
+      if (e.key === 'Escape' && selectedGateId) {
+        setSelectedGateId(null);
         return;
       }
       if (e.key === '?') {
@@ -230,6 +277,7 @@ export function MapScreen() {
     helpOpen,
     marchFrom,
     selectedArmyId,
+    selectedGateId,
     saveOpen,
     rosterOpen,
     quitOpen,
@@ -408,7 +456,7 @@ export function MapScreen() {
       </header>
 
       {state.settings.ruleset !== 'classic' ? (
-        <ChapterBar state={state} onSelectCity={setSelectedCityId} />
+        <ChapterBar state={state} onSelectCity={selectCity} />
       ) : null}
 
       {modern && councilBrief && topAdvice ? (
@@ -451,7 +499,7 @@ export function MapScreen() {
                 <button
                   key={c.id}
                   className={`city-row${c.id === selectedCityId ? ' on' : ''}`}
-                  onClick={() => setSelectedCityId(c.id)}
+                  onClick={() => selectCity(c.id)}
                 >
                   <i className="fdot" style={{ background: factionColor(state, c.ownerId) }} />
                   <span className="cname">{c.name}</span>
@@ -479,6 +527,7 @@ export function MapScreen() {
                     className={`city-row${a.id === selectedArmyId ? ' on' : ''}`}
                     onClick={() => {
                       setSelectedArmyId(a.id);
+                      setSelectedGateId(null);
                       setMarchFrom(null);
                       audio.play('ui.select');
                     }}
@@ -502,11 +551,47 @@ export function MapScreen() {
             </section>
           ) : null}
 
+          <section className="rail-mine rail-gates">
+            <div className="section-title">
+              <span>我方关防</span>
+              <span className="muted small">{myGates.length}</span>
+            </div>
+            {myGates.length === 0 ? (
+              <p className="rail-empty">
+                尚无关港。地图上的关隘 / 港口可派兵抵近接管，按月解送钱粮。
+              </p>
+            ) : (
+              <div className="city-list">
+                {myGates.map((g) => (
+                  <button
+                    key={g.id}
+                    className={`city-row gate-row${g.id === selectedGateId ? ' on' : ''}`}
+                    onClick={() => handleSelectGate(g.id)}
+                    title={`${GATE_KIND_LABEL[g.kind]} · 守军 ${fmt(gateGarrisonOf(state, g.id))}`}
+                  >
+                    <i
+                      className="fdot"
+                      style={{ background: factionColor(state, state.playerFactionId) }}
+                    />
+                    <span className="cname">
+                      {g.name}
+                      <em className="gate-kind">{GATE_KIND_LABEL[g.kind]}</em>
+                    </span>
+                    <span className="cmeta">{fmt(gateGarrisonOf(state, g.id))} 守</span>
+                    <span className="cres">
+                      <em>月</em> 金+{g.gold} 粮+{g.food}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+
           <FactionRail
             state={state}
             selectedCityId={selectedCityId}
             attackableIds={attackableAny}
-            onSelect={setSelectedCityId}
+            onSelect={selectCity}
           />
 
           {state.log.length > 0 ? (
@@ -538,18 +623,21 @@ export function MapScreen() {
             marchFrom={marchFrom}
             selectedArmyId={selectedArmyId}
             onMarchTarget={handleMarchTarget}
+            selectedGateId={selectedGateId}
             onSelectArmy={(id) => {
               setSelectedArmyId(id);
+              setSelectedGateId(null);
               if (id) {
                 audio.play('ui.select');
                 setMarchFrom(null);
               }
             }}
             onMoveArmy={handleMoveArmy}
+            onSelectGate={handleSelectGate}
             onSelect={(id) => {
               // 地图点选走画布，不经过按钮委托，这里单独补声
               if (id !== selectedCityId) audio.play('ui.select');
-              setSelectedCityId(id);
+              selectCity(id);
               setSelectedArmyId(null);
               // 出征模式下点了非目标城池：退出出征，避免路线锁定与右栏脱节
               if (marchFrom) setMarchFrom(null);
@@ -598,10 +686,22 @@ export function MapScreen() {
           ) : null}
           <div
             className={`map-hint${
-              attackFromSelected.length > 0 || marchFrom || selectedArmy ? ' accent' : ''
+              attackFromSelected.length > 0 || marchFrom || selectedArmy || selectedGate
+                ? ' accent'
+                : ''
             }`}
           >
-            {selectedArmy
+            {selectedGate
+              ? `${GATE_KIND_LABEL[selectedGate.gate.kind]}「${selectedGate.gate.name}」· ${
+                  selectedGate.access === 'blocked'
+                    ? '敌关封锁通行线，须先攻关'
+                    : selectedGate.access === 'neutral'
+                      ? '无主关防，可派兵抵近接管'
+                      : selectedGate.access === 'own'
+                        ? '我方关防，按月解送钱粮'
+                        : '同盟关防，可通行'
+                } · Esc 返回城池`
+              : selectedArmy
               ? '点地图任意格移动（亮色为移动力范围）· 走到敌城门外可下令攻城 · Esc 取消选中'
               : marchFrom
                 ? '金色虚线为实际行军路线 · 山岭与水域不可通行 · Esc 取消出征'
@@ -617,29 +717,62 @@ export function MapScreen() {
           </div>
         </main>
 
-        <CityPanel
-          key={selectedCityId}
-          state={state}
-          cityId={selectedCityId}
-          onMarch={(cityId) => {
-            setMarchFrom(cityId);
-            setSelectedCityId(cityId);
-          }}
-        />
+        {selectedGate ? (
+          <GatePanel
+            key={selectedGate.gate.id}
+            state={state}
+            gateId={selectedGate.gate.id}
+            onClose={() => handleSelectGate(null)}
+            onAssault={handleAssaultGate}
+            onSelectArmy={(armyId) => {
+              setSelectedArmyId(armyId);
+              setMarchFrom(null);
+              audio.play('ui.select');
+            }}
+          />
+        ) : (
+          <CityPanel
+            key={selectedCityId}
+            state={state}
+            cityId={selectedCityId}
+            onMarch={(cityId) => {
+              setMarchFrom(cityId);
+              setSelectedGateId(null);
+              setSelectedCityId(cityId);
+            }}
+          />
+        )}
       </div>
 
       <footer className="statusbar" aria-label="状态栏">
         <div className="sb-left">
-          <span>选中</span>
-          <b className="sb-select">{state.cities[selectedCityId]?.name ?? '—'}</b>
-          <span className="sb-sep" />
-          <span>
-            {state.cities[selectedCityId]
-              ? factionName(state, state.cities[selectedCityId]!.ownerId)
-              : '—'}
-          </span>
-          <span className="sb-sep" />
-          <span>{fmt(cityTroops(state, selectedCityId))} 兵</span>
+          {selectedGate ? (
+            <>
+              <span>{GATE_KIND_LABEL[selectedGate.gate.kind]}</span>
+              <b className="sb-select">{selectedGate.gate.name}</b>
+              <span className="sb-sep" />
+              <span>
+                {selectedGate.ownerId
+                  ? factionName(state, selectedGate.ownerId)
+                  : '无主'}
+              </span>
+              <span className="sb-sep" />
+              <span>{fmt(selectedGate.garrison)} 守军</span>
+            </>
+          ) : (
+            <>
+              <span>选中</span>
+              <b className="sb-select">{state.cities[selectedCityId]?.name ?? '—'}</b>
+              <span className="sb-sep" />
+              <span>
+                {state.cities[selectedCityId]
+                  ? factionName(state, state.cities[selectedCityId]!.ownerId)
+                  : '—'}
+              </span>
+              <span className="sb-sep" />
+              <span>{fmt(cityTroops(state, selectedCityId))} 兵</span>
+            </>
+          )}
         </div>
         <div className="sb-right">
           {import.meta.env.DEV ? (
@@ -647,15 +780,28 @@ export function MapScreen() {
               本月点击 {store.clickStats.total}
             </span>
           ) : null}
-          {selectedBlocked.length > 0 ? (
-            <span className="sb-flag sb-flag-danger">
-              围城 {selectedBlocked.length}/4 门
+          {selectedGate ? (
+            <span
+              className={`sb-flag${
+                selectedGate.access === 'blocked' ? ' sb-flag-danger' : ''
+              }`}
+            >
+              {gateAccessLabel(selectedGate.access)} · 月解 金+{selectedGate.gate.gold} 粮+
+              {selectedGate.gate.food}
             </span>
-          ) : null}
-          {attackFromSelected.length > 0 ? (
-            <span className="sb-flag">可出征 {attackFromSelected.length} 城</span>
           ) : (
-            <span>点地图切换城池 · 点部队调度</span>
+            <>
+              {selectedBlocked.length > 0 ? (
+                <span className="sb-flag sb-flag-danger">
+                  围城 {selectedBlocked.length}/4 门
+                </span>
+              ) : null}
+              {attackFromSelected.length > 0 ? (
+                <span className="sb-flag">可出征 {attackFromSelected.length} 城</span>
+              ) : (
+                <span>点地图切换城池 · 点部队调度</span>
+              )}
+            </>
           )}
           <span className="sb-sep" />
           <span>v0.1</span>
@@ -666,7 +812,7 @@ export function MapScreen() {
         <CouncilModal
           state={state}
           onClose={() => setCouncilOpen(false)}
-          onSelectCity={setSelectedCityId}
+          onSelectCity={selectCity}
         />
       ) : null}
 
@@ -716,7 +862,7 @@ export function MapScreen() {
         <RosterDialog
           state={state}
           onClose={() => setRosterOpen(false)}
-          onPickCity={(id) => setSelectedCityId(id)}
+          onPickCity={(id) => selectCity(id)}
         />
       ) : null}
 

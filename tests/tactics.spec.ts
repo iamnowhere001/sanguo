@@ -31,6 +31,10 @@ function mageBattle(): { s: GameState; b: BattleState; u: BattleUnit } {
   s.generals.guanyu!.stamina = 100;
   const { battle } = createBattle(s, 'jiangxia', 'xiangyang', ['liubei', 'guanyu']);
   if (!battle) throw new Error('战斗未创建');
+  // 本文件只验证计策数值：换成一张固定的 12×8 平地图，避免大地图地形干扰
+  battle.mapBattle = false;
+  battle.cityBlock = undefined;
+  battle.grid = Array.from({ length: 8 }, () => Array(12).fill('plain'));
   const u = battle.units['attacker:guanyu']!;
   const d = battle.units['defender:lvbu']!;
   u.x = 5;
@@ -105,9 +109,9 @@ describe('计策限制与状态', () => {
   it('落石只在山地可用', () => {
     const { s, b, u } = mageBattle();
     const d = b!.units['defender:lvbu']!;
-    b!.grid[3]![5] = 'plain';
+    b!.grid![3]![5] = 'plain';
     expect(castTactic(s, b!, u.id, 'rock', d.id).ok).toBe(false);
-    b!.grid[3]![5] = 'mountain';
+    b!.grid![3]![5] = 'mountain';
     forceRoll(b!, (v) => v < 0.5);
     const r = castTactic(s, b!, u.id, 'rock', d.id);
     expect(r.ok).toBe(true);

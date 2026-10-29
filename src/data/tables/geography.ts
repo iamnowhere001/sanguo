@@ -19,10 +19,20 @@
  * 因此不需要额外做墨卡托校正，城池相对位置不会明显变形。
  */
 
-/** 世界栅格尺寸：96 列 × 72 行，每格 12 世界单位 */
+/**
+ * 世界栅格尺寸：576 列 × 432 行，每格 12 世界单位。
+ *
+ * 在 192×144 基础上长宽再各 ×3：格数 82,944 提升到 248,832（9 倍面积），
+ * 世界尺寸 2304×1728 → 6912×5184。经纬窗口保持不变，城池仍按真实经纬度
+ * 落位，但城与城之间终于有足够的行军纵深；长江、黄河与洞庭 / 鄱阳
+ * 也各自展开成 12–18 格宽的江面 / 湖面，可以直接在整张大地图上打水战。
+ *
+ * 渲染层用「总览 100% + 默认 200%」的相机适配更大世界：
+ * 100% 看天下大势，200% 时城池与世界物件的屏幕尺寸与旧版 100% 一致。
+ */
 export const MAP = {
-  cols: 96,
-  rows: 72,
+  cols: 576,
+  rows: 432,
   tile: 12,
   /** 世界坐标宽高（= cols × tile / rows × tile） */
   get width(): number {
@@ -32,6 +42,12 @@ export const MAP = {
     return this.rows * this.tile;
   },
 } as const;
+
+/**
+ * 大地图数据版本。存档没有这个字段时，按旧版 96×72 迁移坐标。
+ * 以后若继续扩容，递增此值并在 `save/migrate.ts` 增加对应缩放。
+ */
+export const MAP_VERSION = 3;
 
 export const LON_RANGE: [number, number] = [99.0, 124.5];
 export const LAT_RANGE: [number, number] = [20.5, 42.5];
@@ -135,6 +151,21 @@ export interface RiverDef {
   points: Pt[];
   /** 相对宽度（黄河 / 长江 用 1，支流 0.6） */
   scale: number;
+}
+
+/**
+ * 河流半宽（度）。干流 scale=1 → 0.34°，支流 scale=0.55 → 0.26°。
+ * 在 576×432 格网下，经向每格约 0.0443°，因此干流江面约 15 格、支流约 12 格；
+ * 江面足够摆开两支水军，也让港口成为真正的渡江咽喉。
+ */
+export function riverHalfWidth(scale: number): number {
+  return 0.18 + scale * 0.16;
+}
+
+/** 河流在屏幕上的世界宽度（略窄于不可通行的河岸带，留出滩涂） */
+export function riverWorldWidth(scale: number): number {
+  const unitsPerLon = MAP.width / (LON_RANGE[1] - LON_RANGE[0]);
+  return riverHalfWidth(scale) * 2 * unitsPerLon * 0.76;
 }
 
 /** 主要水系。顺序即绘制顺序：先支流后干流，干流压在上面。 */

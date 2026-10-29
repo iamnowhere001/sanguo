@@ -11,8 +11,11 @@ import {
   BATTLE_H,
   BATTLE_W,
   attackRangeOf,
+  battleBounds,
+  battleTerrainAt,
   damagePreview,
   inferBattlefieldTheme,
+  inBattleBounds,
   moveRangeOf,
 } from '../systems/battle';
 import { BATTLEFIELD_PALETTE, type BattlefieldPalette } from './battlefieldTheme';
@@ -59,13 +62,75 @@ interface Geo {
   oy: number;
 }
 
-function geometry(w: number, h: number): Geo {
+export interface BattleView {
+  /** 相机中心（格坐标） */
+  cx: number;
+  cy: number;
+  zoom: number;
+}
+
+function mapBaseCell(w: number): number {
+  return w < 620 ? 24 : 32;
+}
+
+function geometry(w: number, h: number, battle: BattleState, view: BattleView): Geo {
+  if (battle.mapBattle) {
+    const cell = mapBaseCell(w) * view.zoom;
+    return { cell, ox: w / 2 - view.cx * cell, oy: h / 2 - view.cy * cell };
+  }
   const cell = Math.floor(Math.min((w - 24) / BATTLE_W, (h - 24) / BATTLE_H));
   return {
     cell,
     ox: (w - cell * BATTLE_W) / 2,
     oy: (h - cell * BATTLE_H) / 2,
   };
+}
+
+interface CellRange {
+  x0: number;
+  x1: number;
+  y0: number;
+  y1: number;
+}
+
+/** 只绘制视口内的格子：大地图 576×432 不可能整图遍历 */
+function visibleCells(geo: Geo, w: number, h: number, battle: BattleState): CellRange {
+  const bounds = battleBounds(battle);
+  return {
+    x0: Math.max(bounds.x0, Math.floor(-geo.ox / geo.cell) - 1),
+    x1: Math.min(bounds.x1, Math.ceil((w - geo.ox) / geo.cell) + 1),
+    y0: Math.max(bounds.y0, Math.floor(-geo.oy / geo.cell) - 1),
+    y1: Math.min(bounds.y1, Math.ceil((h - geo.oy) / geo.cell) + 1),
+  };
+}
+
+function initialView(battle: BattleState, w: number, h: number): BattleView {
+  if (!battle.mapBattle) return { cx: BATTLE_W / 2, cy: BATTLE_H / 2, zoom: 1 };
+  const xs: number[] = [];
+  const ys: number[] = [];
+  if (battle.cityBlock) {
+    xs.push((battle.cityBlock.x0 + battle.cityBlock.x1) / 2);
+    ys.push((battle.cityBlock.y0 + battle.cityBlock.y1) / 2);
+  }
+  for (const u of Object.values(battle.units)) {
+    if (u.routed) continue;
+    xs.push(u.x);
+    ys.push(u.y);
+  }
+  if (xs.length === 0) return { cx: 0, cy: 0, zoom: 1 };
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const base = mapBaseCell(w);
+  const zoom = Math.max(
+    0.75,
+    Math.min(2, Math.min(
+      (w * 0.72) / Math.max(1, (maxX - minX + 10) * base),
+      (h * 0.72) / Math.max(1, (maxY - minY + 8) * base),
+    )),
+  );
+  return { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2, zoom };
 }
 
 function unitAt(b: BattleState, x: number, y: number): BattleUnit | undefined {
@@ -151,7 +216,7 @@ function hoverInfo(
     return {
       title: `移动至此 · 消耗 ${cost}`,
       lines: [
-        TERRAIN_SWATCH[b.grid[y]?.[x] ?? 'plain'],
+        TERRAIN_SWATCH[battleTerrainAt(b, x, y)],
         ...(feature ? [feature.label] : []),
         adjacentEnemy ? '邻接敌军：进入后停止移动' : '点击移动',
       ],
@@ -244,7 +309,7 @@ function noise(x: number, y: number, salt = 0): number {
 }
 
 function themeOf(battle: BattleState): BattlefieldThemeId {
-  return battle.battlefield?.theme ?? inferBattlefieldTheme(battle.grid);
+  return battle.battlefield?.theme ?? inferBattlefieldTheme(battle.grid ?? []);
 }
 
 // ── 地形纹理 ──────────────────────────────────────────────
@@ -517,7 +582,7 @@ function drawWaterCell(
   ctx.strokeStyle = rgba(palette.waterLight, 0.5);
   ctx.lineWidth = Math.max(1, cell * 0.035);
   for (const [dx, dy, side] of sides) {
-    const nt = battle.grid[y + dy]?.[x + dx] ?? 'plain';
+    const nt = battleTerrainAt(battle, x + dx, y + dy);
     if (nt === 'water') continue;
     ctx.beginPath();
     if (side === 'top') {
@@ -600,7 +665,7 @@ function drawRoads(
         [-1, 0],
         [0, -1],
       ] as const) {
-        if (battle.grid[y + dy]?.[x + dx] !== 'city') continue;
+        if (battleTerrainAt(battle, x + dx, y + dy) !== 'city') continue;
         ctx.beginPath();
         ctx.moveTo(cx, cy);
         ctx.lineTo(cx + dx * cell * 0.5, cy + dy * cell * 0.5);
@@ -1051,13 +1116,14 @@ function drawLandmark(
 // ── 城池 ──────────────────────────────────────────────────
 
 function cityBounds(battle: BattleState): { x0: number; y0: number; x1: number; y1: number } | null {
+  if (battle.cityBlock) return battle.cityBlock;
   let x0 = Infinity;
   let y0 = Infinity;
   let x1 = -Infinity;
   let y1 = -Infinity;
   for (let y = 0; y < BATTLE_H; y++) {
     for (let x = 0; x < BATTLE_W; x++) {
-      if (battle.grid[y]?.[x] !== 'city') continue;
+      if (battle.grid?.[y]?.[x] !== 'city') continue;
       x0 = Math.min(x0, x);
       y0 = Math.min(y0, y);
       x1 = Math.max(x1, x);
@@ -1280,6 +1346,18 @@ export function BattleCanvas({
   const lastFxKeyRef = useRef(0);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [hover, setHover] = useState<{ x: number; y: number } | null>(null);
+  const [view, setView] = useState<BattleView>({ cx: BATTLE_W / 2, cy: BATTLE_H / 2, zoom: 1 });
+  const viewKeyRef = useRef('');
+  const dragRef = useRef<{
+    active: boolean;
+    moved: boolean;
+    startX: number;
+    startY: number;
+    cx: number;
+    cy: number;
+    cell: number;
+  } | null>(null);
+  const draggedRef = useRef(false);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -1291,6 +1369,23 @@ export function BattleCanvas({
     setSize({ w: el.clientWidth, h: el.clientHeight });
     return () => ro.disconnect();
   }, []);
+
+  // 大地图战斗：进入战场或切换城池时把相机对准“目标城 + 双方部队”的包围盒
+  useEffect(() => {
+    if (size.w < 10 || size.h < 10) return;
+    const key = `${battle.targetCityId}:${battle.mapBattle ? 'map' : 'tile'}`;
+    if (viewKeyRef.current === key) return;
+    viewKeyRef.current = key;
+    setView(initialView(battle, size.w, size.h));
+  }, [battle, size.w, size.h]);
+
+  // 选中部队后相机跟随；玩家手动拖动后不会因为同一单位的状态变化而跳回
+  useEffect(() => {
+    if (!battle.mapBattle || !selectedUnitId) return;
+    const u = battle.units[selectedUnitId];
+    if (!u) return;
+    setView((v) => ({ ...v, cx: u.x, cy: u.y }));
+  }, [battle.mapBattle, selectedUnitId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 主画布：地形、地标、单位、高亮与悬停情报
   useEffect(() => {
@@ -1309,9 +1404,10 @@ export function BattleCanvas({
     ctx.fillStyle = '#11100d';
     ctx.fillRect(0, 0, size.w, size.h);
 
-    const geo = geometry(size.w, size.h);
+    const geo = geometry(size.w, size.h, battle, view);
     const { cell, ox, oy } = geo;
     geoRef.current = geo;
+    const range = visibleCells(geo, size.w, size.h, battle);
 
     const palette = BATTLEFIELD_PALETTE[themeOf(battle)];
     const features = battle.battlefield?.features ?? [];
@@ -1326,19 +1422,21 @@ export function BattleCanvas({
       for (const e of Object.values(battle.units)) {
         if (e.routed || e.side === battle.playerSide) continue;
         const reach = moveRangeOf(e.unitClass) + attackRangeOf(e.unitClass).max;
-        for (let ty = 0; ty < BATTLE_H; ty++) {
-          for (let tx = 0; tx < BATTLE_W; tx++) {
+        for (let ty = e.y - reach; ty <= e.y + reach; ty++) {
+          for (let tx = e.x - reach; tx <= e.x + reach; tx++) {
             const d = Math.abs(e.x - tx) + Math.abs(e.y - ty);
-            if (d > 0 && d <= reach) threatSet.add(`${tx},${ty}`);
+            if (d > 0 && d <= reach && inBattleBounds(battle, tx, ty)) {
+              threatSet.add(`${tx},${ty}`);
+            }
           }
         }
       }
     }
 
-    // 1. 地形纹理
-    for (let y = 0; y < BATTLE_H; y++) {
-      for (let x = 0; x < BATTLE_W; x++) {
-        const t = battle.grid[y]?.[x] ?? 'plain';
+    // 1. 地形纹理（只画视口内格子）
+    for (let y = range.y0; y <= range.y1; y++) {
+      for (let x = range.x0; x <= range.x1; x++) {
+        const t = battleTerrainAt(battle, x, y);
         const px = ox + x * cell;
         const py = oy + y * cell;
         if (t === 'forest') {
@@ -1383,33 +1481,39 @@ export function BattleCanvas({
       );
     }
 
-    // 6. 网格
+    // 6. 网格（只画视口内的线）
     ctx.strokeStyle = 'rgba(10,9,7,0.55)';
     ctx.lineWidth = 1;
-    for (let x = 0; x <= BATTLE_W; x++) {
+    const top = oy + Math.max(range.y0, 0) * cell;
+    const bottom = oy + (range.y1 + 1) * cell;
+    for (let x = range.x0; x <= range.x1 + 1; x++) {
       ctx.beginPath();
-      ctx.moveTo(ox + x * cell, oy);
-      ctx.lineTo(ox + x * cell, oy + BATTLE_H * cell);
+      ctx.moveTo(ox + x * cell, top);
+      ctx.lineTo(ox + x * cell, bottom);
       ctx.stroke();
     }
-    for (let y = 0; y <= BATTLE_H; y++) {
+    const left = ox + Math.max(range.x0, 0) * cell;
+    const right = ox + (range.x1 + 1) * cell;
+    for (let y = range.y0; y <= range.y1 + 1; y++) {
       ctx.beginPath();
-      ctx.moveTo(ox, oy + y * cell);
-      ctx.lineTo(ox + BATTLE_W * cell, oy + y * cell);
+      ctx.moveTo(left, oy + y * cell);
+      ctx.lineTo(right, oy + y * cell);
       ctx.stroke();
     }
 
-    // 外框
-    ctx.strokeStyle = rgba(palette.accent, 0.2);
-    ctx.lineWidth = 1.5;
-    ctx.strokeRect(ox - 1, oy - 1, BATTLE_W * cell + 2, BATTLE_H * cell + 2);
+    // 外框：旧 12×8 战场保留边框；大地图不画“棋盘边”
+    if (!battle.mapBattle) {
+      ctx.strokeStyle = rgba(palette.accent, 0.2);
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(ox - 1, oy - 1, BATTLE_W * cell + 2, BATTLE_H * cell + 2);
+    }
 
     // 7. 粮仓标记
     drawSupplyMarker(ctx, battle, geo, palette);
 
     // 8. 高亮层
-    for (let y = 0; y < BATTLE_H; y++) {
-      for (let x = 0; x < BATTLE_W; x++) {
+    for (let y = range.y0; y <= range.y1; y++) {
+      for (let x = range.x0; x <= range.x1; x++) {
         const px = ox + x * cell;
         const py = oy + y * cell;
 
@@ -1529,7 +1633,7 @@ export function BattleCanvas({
         );
       }
     }
-  }, [battle, selectedUnitId, reachable, targets, size, hover, showThreat]);
+  }, [battle, selectedUnitId, reachable, targets, size, hover, showThreat, view]);
 
   // 特效层：选中脉冲 + 伤害飘字（独立画布，不触发 React 重绘）
   useEffect(() => {
@@ -1620,15 +1724,40 @@ export function BattleCanvas({
     const { cell, ox, oy } = geoRef.current;
     const x = Math.floor((clientX - rect.left - ox) / cell);
     const y = Math.floor((clientY - rect.top - oy) / cell);
-    if (x < 0 || y < 0 || x >= BATTLE_W || y >= BATTLE_H) return null;
+    if (!inBattleBounds(battle, x, y)) return null;
     return { x, y };
   };
 
+  /** 以屏幕点为锚缩放：锚点下的地图格保持不动 */
+  const zoomAt = (px: number, py: number, factor: number) => {
+    setView((v) => {
+      const geo = geoRef.current;
+      const nz = Math.max(0.5, Math.min(3, v.zoom * factor));
+      const base = geo.cell / v.zoom;
+      const cell = base * nz;
+      const wx = (px - geo.ox) / geo.cell;
+      const wy = (py - geo.oy) / geo.cell;
+      return {
+        zoom: nz,
+        cx: wx - (px - size.w / 2) / cell,
+        cy: wy - (py - size.h / 2) / cell,
+      };
+    });
+  };
+
+  const resetCamera = () => {
+    if (!battle.mapBattle) return;
+    setView(initialView(battle, size.w, size.h));
+  };
+
   const reachableSet = new Set(reachable.map((r) => `${r.x},${r.y}`));
-  const cursor =
-    hover && (unitAt(battle, hover.x, hover.y) || reachableSet.has(`${hover.x},${hover.y}`))
+  const cursor = dragRef.current?.active
+    ? 'grabbing'
+    : hover && (unitAt(battle, hover.x, hover.y) || reachableSet.has(`${hover.x},${hover.y}`))
       ? 'pointer'
-      : 'default';
+      : battle.mapBattle
+        ? 'grab'
+        : 'default';
 
   return (
     <div className="battle-canvas-wrap" ref={wrapRef}>
@@ -1636,12 +1765,61 @@ export function BattleCanvas({
         ref={canvasRef}
         className="battle-canvas"
         style={{ cursor }}
-        onMouseMove={(e) => {
+        onPointerDown={(e) => {
+          if (!battle.mapBattle || e.button !== 0) return;
+          draggedRef.current = false;
+          dragRef.current = {
+            active: true,
+            moved: false,
+            startX: e.clientX,
+            startY: e.clientY,
+            cx: view.cx,
+            cy: view.cy,
+            cell: geoRef.current.cell,
+          };
+          (e.target as HTMLCanvasElement).setPointerCapture?.(e.pointerId);
+        }}
+        onPointerMove={(e) => {
+          const d = dragRef.current;
+          if (d?.active) {
+            const dx = e.clientX - d.startX;
+            const dy = e.clientY - d.startY;
+            if (!d.moved && Math.abs(dx) + Math.abs(dy) > 3) d.moved = true;
+            if (d.moved) {
+              setView((v) => ({
+                ...v,
+                cx: d.cx - dx / d.cell,
+                cy: d.cy - dy / d.cell,
+              }));
+            }
+            return;
+          }
           const c = toCell(e.clientX, e.clientY);
           if (c?.x !== hover?.x || c?.y !== hover?.y) setHover(c);
         }}
-        onMouseLeave={() => setHover(null)}
+        onPointerUp={() => {
+          const d = dragRef.current;
+          dragRef.current = null;
+          draggedRef.current = Boolean(d?.moved);
+          window.setTimeout(() => {
+            draggedRef.current = false;
+          }, 0);
+        }}
+        onPointerCancel={() => {
+          dragRef.current = null;
+          draggedRef.current = false;
+        }}
+        onPointerLeave={() => {
+          if (!dragRef.current?.active) setHover(null);
+        }}
+        onWheel={(e) => {
+          if (!battle.mapBattle) return;
+          const rect = e.currentTarget.getBoundingClientRect();
+          zoomAt(e.clientX - rect.left, e.clientY - rect.top, e.deltaY < 0 ? 1.15 : 0.87);
+        }}
+        onDoubleClick={() => resetCamera()}
         onClick={(e) => {
+          if (draggedRef.current) return;
           const c = toCell(e.clientX, e.clientY);
           if (!c) return;
           const u = unitAt(battle, c.x, c.y);
@@ -1650,6 +1828,20 @@ export function BattleCanvas({
         }}
       />
       <canvas ref={fxCanvasRef} className="battle-fx" aria-hidden />
+      {battle.mapBattle ? (
+        <div className="battle-camera">
+          <button type="button" onClick={() => zoomAt(size.w / 2, size.h / 2, 1.25)} aria-label="放大">
+            ＋
+          </button>
+          <button type="button" onClick={() => zoomAt(size.w / 2, size.h / 2, 0.8)} aria-label="缩小">
+            －
+          </button>
+          <button type="button" onClick={resetCamera} aria-label="回到城池">
+            城
+          </button>
+          <span>拖动 · 滚轮缩放 · 双击归位</span>
+        </div>
+      ) : null}
     </div>
   );
 }

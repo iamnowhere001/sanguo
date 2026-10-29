@@ -317,6 +317,21 @@ export interface Army {
 /** 大地图设施：占一格地形，归属随所在城易主 */
 export type FacilityKind = 'farm' | 'market' | 'tower' | 'beacon';
 
+/** 关防运行期状态：静态配表 + 这里的覆盖值 = 当前关防 */
+export interface GateRuntime {
+  /**
+   * 独立归属覆盖：
+   * - 缺省：跟随 `guardCityId` 的城主；
+   * - null：无主（可被任意势力接管）；
+   * - 具体势力：独立攻占后保留，不随法理城易主。
+   */
+  ownerId?: string | null;
+  /** 当前守军；缺省按配表满编 */
+  troops?: number;
+  /** 最近一次易手的回合，供面板与日志展示 */
+  capturedTurn?: number;
+}
+
 export interface Facility {
   id: string;
   kind: FacilityKind;
@@ -564,8 +579,15 @@ export interface BattleState {
   cityDurabilityMax?: number;
   /** 城墙耐久：归零即城破，攻方胜 */
   cityDurability?: number;
-  /** [y][x] */
-  grid: BattleTerrain[][];
+  /**
+   * 大地图战斗：单位坐标即 576×432 大地图绝对格坐标，
+   * 地形由 `terrainGrid` 实时推导，不再保存 12×8 战术图。
+   */
+  mapBattle?: boolean;
+  /** 目标城 3×3 城墙范围（大地图绝对坐标），渲染 / 攻城共用 */
+  cityBlock?: { x0: number; y0: number; x1: number; y1: number };
+  /** 旧版 12×8 战术图；大地图战斗缺省 */
+  grid?: BattleTerrain[][];
   /** 本场战场的主题、专名与地标；旧存档可缺省 */
   battlefield?: BattlefieldInfo;
   /** 水战：战场以水域为主或由渡口 / 水城引发，非水兵在水域会持续减员 */
@@ -714,6 +736,13 @@ export interface GameState {
   facilities?: Facility[];
   /** 设施自增序号 */
   facilitySerial?: number;
+  /** 关防运行期状态：key = GateFeature.id；旧档缺省视为空 */
+  gates?: Record<string, GateRuntime>;
+  /**
+   * 大地图版本：用于旧档坐标迁移。
+   * 2 = 192×144（L2 大地图）；缺失 = 旧版 96×72。
+   */
+  mapVersion?: number;
   phase: GamePhase;
   log: LogEntry[];
   battle?: BattleState;

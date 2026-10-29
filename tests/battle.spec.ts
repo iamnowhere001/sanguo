@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createGame } from '../src/data/tables/scenarios';
 import { reduce } from '../src/core/reducer';
-import type { BattleState, GameState } from '../src/core/state';
+import type { BattleState, BattleTerrain, GameState } from '../src/core/state';
 import {
   activeUnits,
   battleOutcome,
@@ -25,13 +25,36 @@ function startXiangyangBattle(s: GameState): BattleState {
   return battle!;
 }
 
+/** 以下规则测试只验证局部战棋逻辑：换成固定 12×8 图，坐标可预期 */
+function useTacticalGrid(b: BattleState): void {
+  const grid: BattleTerrain[][] = Array.from({ length: 8 }, () =>
+    Array<BattleTerrain>(12).fill('plain'),
+  );
+  grid[3]![7] = 'city';
+  grid[3]![8] = 'city';
+  grid[4]![7] = 'city';
+  grid[4]![8] = 'city';
+  b.mapBattle = false;
+  b.cityBlock = undefined;
+  b.grid = grid;
+}
+
 describe('出征与战场生成', () => {
-  it('从江夏出征襄阳：2 攻 2 守，地图 8×12', () => {
+  it('从江夏出征襄阳：2 攻 2 守，直接在大地图上开战', () => {
     const s = fresh();
     const b = startXiangyangBattle(s);
     expect(s.phase).toBe('battle');
-    expect(b.grid.length).toBe(8);
-    expect(b.grid[0]!.length).toBe(12);
+    expect(b.mapBattle).toBe(true);
+    expect(b.grid).toBeUndefined();
+    const box = b.cityBlock!;
+    expect(box.x1 - box.x0).toBe(2);
+    expect(box.y1 - box.y0).toBe(2);
+    for (const u of activeUnits(b, 'defender')) {
+      expect(u.x).toBeGreaterThanOrEqual(box.x0);
+      expect(u.x).toBeLessThanOrEqual(box.x1);
+      expect(u.y).toBeGreaterThanOrEqual(box.y0);
+      expect(u.y).toBeLessThanOrEqual(box.y1);
+    }
     expect(activeUnits(b, 'attacker').map((u) => u.name).sort()).toEqual(['关羽', '刘备']);
     expect(activeUnits(b, 'defender').map((u) => u.name).sort()).toEqual(['刘表', '吕布']);
     expect(b.day).toBe(1);
@@ -75,10 +98,13 @@ describe('伤害与战棋规则', () => {
   it('攻击会扣兵力、写入经验，并标记已行动', () => {
     const s = fresh();
     const b = startXiangyangBattle(s);
+    useTacticalGrid(b);
     const a = b.units['attacker:guanyu']!;
     const d = b.units['defender:lvbu']!;
-    a.x = 7;
-    a.y = 4;
+    a.x = 6;
+    a.y = 3;
+    d.x = 7;
+    d.y = 3;
     const before = d.troops;
     const r = performAttack(s, b, a.id, d.id);
     expect(r.ok).toBe(true);
@@ -100,6 +126,7 @@ describe('伤害与战棋规则', () => {
   it('弓兵贴脸伤害低于距离 2 的射击', () => {
     const s = fresh();
     const b = startXiangyangBattle(s);
+    useTacticalGrid(b);
     const a = b.units['attacker:guanyu']!;
     const d = b.units['defender:lvbu']!;
     d.unitClass = 'archer';
@@ -117,6 +144,7 @@ describe('伤害与战棋规则', () => {
   it('城池格减伤：守方在城内的受击低于平原', () => {
     const s = fresh();
     const b = startXiangyangBattle(s);
+    useTacticalGrid(b);
     const a = b.units['attacker:guanyu']!;
     const d = b.units['defender:lvbu']!;
     a.x = 6;

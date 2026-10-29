@@ -1,4 +1,5 @@
 import { BALANCE } from '../../data/tables/balance';
+import { MAP } from '../../data/tables/geography';
 import { MOVE_COST, MOVE_RANGE } from '../../data/tables/unitClasses';
 import type {
   BattleSide,
@@ -8,9 +9,42 @@ import type {
   Terrain,
   UnitClass,
 } from '../../core/state';
+import { tileKindAt, wallTileAt, type TileKind } from '../../render/terrainGrid';
 
+/** 旧版战术图尺寸：仅用于兼容旧存档与模板生成 */
 export const BATTLE_W = 12;
 export const BATTLE_H = 8;
+
+/** 大地图地形 → 战棋地形；丘陵按山地处理，荒漠与沼泽按平地 / 林地处理 */
+export const KIND_TO_TERRAIN: Record<TileKind, BattleTerrain> = {
+  sea: 'water',
+  lake: 'water',
+  river: 'water',
+  marsh: 'forest',
+  plain: 'plain',
+  forest: 'forest',
+  hill: 'mountain',
+  mountain: 'mountain',
+  desert: 'plain',
+};
+
+export interface BattleBounds {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+/** 本场战斗可活动范围：大地图战斗为整张地图，旧存档为 12×8 */
+export function battleBounds(b: BattleState): BattleBounds {
+  if (b.mapBattle) return { x0: 0, y0: 0, x1: MAP.cols - 1, y1: MAP.rows - 1 };
+  return { x0: 0, y0: 0, x1: BATTLE_W - 1, y1: BATTLE_H - 1 };
+}
+
+export function inBattleBounds(b: BattleState, x: number, y: number): boolean {
+  const bounds = battleBounds(b);
+  return x >= bounds.x0 && y >= bounds.y0 && x <= bounds.x1 && y <= bounds.y1;
+}
 
 export const TEMPLATES: Record<Terrain, string[]> = {
   plain: [
@@ -101,7 +135,13 @@ export function unitKey(x: number, y: number): string {
 }
 
 export function battleTerrainAt(b: BattleState, x: number, y: number): BattleTerrain {
-  const row = b.grid[y];
+  if (b.mapBattle) {
+    if (x < 0 || y < 0 || x >= MAP.cols || y >= MAP.rows) return 'water';
+    const wall = wallTileAt(x, y);
+    if (wall && wall.cityId === b.targetCityId) return 'city';
+    return KIND_TO_TERRAIN[tileKindAt(x, y)];
+  }
+  const row = b.grid?.[y];
   return row?.[x] ?? 'plain';
 }
 
@@ -183,7 +223,7 @@ export function reachableTiles(b: BattleState, unit: BattleUnit): Map<string, nu
     ] as const) {
       const nx = cur.x + dx;
       const ny = cur.y + dy;
-      if (nx < 0 || ny < 0 || nx >= BATTLE_W || ny >= BATTLE_H) continue;
+      if (!inBattleBounds(b, nx, ny)) continue;
       if (isOccupied(b, nx, ny, unit.id)) continue;
       const terrain = battleTerrainAt(b, nx, ny);
       const step = terrain === 'city' ? 1 : MOVE_COST[unit.unitClass][terrain];

@@ -8,6 +8,8 @@ import type {
   GameState,
   General,
 } from '../../core/state';
+import { MAP } from '../../data/tables/geography';
+import { cityBlocks, isWaterKind, tileKindAt, wallTileAt } from '../../render/terrainGrid';
 import { activeUnits, distanceBetween } from './grid';
 
 /**
@@ -56,7 +58,43 @@ export interface BattleObjectiveProgress {
   progress: number;
 }
 
-const SUPPLY_POINT: BattleObjectivePoint = { x: 10, y: 3, label: '粮仓' };
+/**
+ * 粮仓点：目标城外围的可站立陆地，离城 4–8 格。
+ * 与作战方向无关，保证部署预览与实战使用同一个点。
+ */
+export function supplyPointForCity(
+  targetCityId: string,
+): BattleObjectivePoint | undefined {
+  const block = cityBlocks()[targetCityId];
+  if (!block) return undefined;
+  const standable = (x: number, y: number): boolean =>
+    x >= 0 && y >= 0 && x < MAP.cols && y < MAP.rows &&
+    !wallTileAt(x, y) && !isWaterKind(tileKindAt(x, y));
+  const dirs: Array<[number, number]> = [
+    [-1, 0],
+    [1, 0],
+    [0, 1],
+    [0, -1],
+  ];
+  for (const dist of [4, 5, 6, 7, 8]) {
+    for (const [dx, dy] of dirs) {
+      const x = block.col + dx * dist;
+      const y = block.row + dy * dist;
+      if (standable(x, y)) return { x, y, label: '粮仓' };
+    }
+  }
+  for (let radius = 4; radius <= 14; radius++) {
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
+        const x = block.col + dx;
+        const y = block.row + dy;
+        if (standable(x, y)) return { x, y, label: '粮仓' };
+      }
+    }
+  }
+  return undefined;
+}
 const ATK_MAIN_REWARD = {
   gold: BALANCE.MODERN.OBJECTIVE.MAIN_GOLD,
   exp: BALANCE.MODERN.OBJECTIVE.MAIN_EXP,
@@ -191,7 +229,9 @@ function buildSide(
     };
   }
 
-  plan.supplyPoint = SUPPLY_POINT;
+  const point = supplyPointForCity(ctx.targetCityId);
+  if (!point) return undefined;
+  plan.supplyPoint = point;
   return {
     kind: 'supply',
     side,
@@ -200,7 +240,7 @@ function buildSide(
       side === 'attacker'
         ? '派一支部队占领敌军粮仓'
         : '挡住敌军，保住我方粮仓',
-    point: SUPPLY_POINT,
+    point,
     reward: { ...SUPPLY_REWARD },
     optional: true,
   };

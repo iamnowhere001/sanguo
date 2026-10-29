@@ -1,7 +1,7 @@
 import type { GameState } from '../core/state';
 import { migrateSave } from './migrate';
 
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 5;
 export const DB_NAME = 'sanguo-baye';
 export const STORE_NAME = 'saves';
 
@@ -48,7 +48,9 @@ export function defaultPresets(state: GameState): SavePresets {
 
 /**
  * 版本迁移链：每个函数只负责“上一版 → 下一版”，失败时抛明确错误。
- * 当前只有 v2 → v3（随机数分流 + 顶层 runSeed / presets）。
+ * v2 → v3：随机数分流 + 顶层 runSeed / presets；
+ * v3 → v4：大地图 192×144 与关防字段（具体补齐在 migrateSave）；
+ * v4 → v5：大地图 576×432 与全图战斗（具体补齐在 migrateSave）。
  */
 const migrations: Record<number, (file: StoredSaveFile) => StoredSaveFile> = {
   2: (file) => ({
@@ -57,6 +59,14 @@ const migrations: Record<number, (file: StoredSaveFile) => StoredSaveFile> = {
     runSeed: file.runSeed ?? file.state.seed,
     turn: file.turn ?? file.state.turn,
     presets: file.presets ?? defaultPresets(file.state),
+  }),
+  3: (file) => ({
+    ...file,
+    schemaVersion: 4,
+  }),
+  4: (file) => ({
+    ...file,
+    schemaVersion: 5,
   }),
 };
 

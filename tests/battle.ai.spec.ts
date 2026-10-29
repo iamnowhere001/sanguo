@@ -79,6 +79,13 @@ describe('战斗 AI：不再站桩', () => {
     const b = aiAttacks(s);
     const playerCp = b.commandPoints;
     expect(b.foeCommandPoints).toBe(3);
+    // 守军拉满，避免 AI 两日内击溃单位返还军令，干扰“只花自己的点”断言
+    for (const u of Object.values(b.units)) {
+      if (u.side === 'defender') {
+        u.troops = 9000;
+        u.maxTroops = 9000;
+      }
+    }
 
     for (let day = 0; day < 2; day++) {
       runSideTurn(s, b, 'attacker');

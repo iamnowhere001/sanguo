@@ -1310,6 +1310,26 @@ input[type='number'] {
   border-color: var(--line2);
   box-shadow: inset 2px 0 0 var(--gold);
 }
+/* 关防列表：与城池行同构，只多一个类型小签 */
+.gate-kind {
+  flex: none;
+  font-style: normal;
+  font-size: 9px;
+  line-height: 1.5;
+  padding: 0 4px;
+  color: var(--gold);
+  border: 1px solid rgba(200, 164, 94, 0.4);
+  border-radius: 3px;
+}
+.rail-empty {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: var(--dim);
+  border: 1px dashed var(--line2);
+  border-radius: 7px;
+}
 .fdot {
   grid-area: dot;
   width: 8px;
@@ -1667,6 +1687,176 @@ input[type='number'] {
 .owner-badge.mine {
   color: var(--teal);
   border-color: rgba(93, 154, 139, 0.55);
+}
+
+/* ── 关防面板：无内政，只读关防归属 / 产出 / 通行线 ───────────────── */
+.faction-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+}
+.faction-inline i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+}
+.gate-panel .cp-title h2 {
+  font-size: 20px;
+}
+.gate-state {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: var(--sp-3);
+  padding: 8px 10px;
+  border: 1px solid var(--line2);
+  border-radius: 7px;
+  background: var(--panel2);
+}
+.gate-state b {
+  font-size: 12px;
+  letter-spacing: 0.06em;
+}
+.gate-state span {
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+.gate-state.blocked {
+  border-color: rgba(193, 74, 58, 0.55);
+  background: var(--red-soft);
+}
+.gate-state.blocked b {
+  color: var(--red-text);
+}
+.gate-state.own {
+  border-color: rgba(93, 154, 139, 0.5);
+  background: var(--teal-soft);
+}
+.gate-state.own b {
+  color: var(--teal);
+}
+.gate-state.open b {
+  color: var(--gold);
+}
+.gate-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+.gate-section {
+  padding-top: var(--sp-3);
+  border-top: 1px solid var(--line);
+}
+.gate-section:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+.gate-lines {
+  display: flex;
+  flex-direction: column;
+}
+.gate-lines > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: 4px 0;
+  border-bottom: 1px dashed rgba(75, 67, 50, 0.55);
+  font-size: 12px;
+}
+.gate-lines > div:last-child {
+  border-bottom: none;
+}
+.gate-lines span {
+  flex: none;
+  color: var(--muted);
+}
+.gate-lines b {
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  font-weight: 500;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.gate-note {
+  margin-top: var(--sp-2);
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: var(--dim);
+}
+.gate-note.danger {
+  color: var(--red-text);
+}
+.gate-tag {
+  flex: none;
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  padding: 1px 6px;
+  border: 1px solid var(--line2);
+  border-radius: 3px;
+  color: var(--muted);
+}
+.gate-tag.danger {
+  color: var(--red-text);
+  border-color: rgba(193, 74, 58, 0.5);
+  background: var(--red-soft);
+}
+.gate-tag.safe {
+  color: var(--teal);
+  border-color: rgba(93, 154, 139, 0.45);
+  background: var(--teal-soft);
+}
+.gate-armies {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.gate-army {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 6px 8px;
+  background: var(--panel2);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+.gate-army-name {
+  min-width: 0;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--paper);
+  font-size: 12px;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.gate-army-name:hover {
+  color: var(--gold);
+}
+.gate-army > span {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.gate-empty {
+  padding: 8px 10px;
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: var(--dim);
+  border: 1px dashed var(--line2);
+  border-radius: 7px;
+}
+.gate-foot-hint {
+  margin-left: auto;
+  text-align: right;
 }
 .panel-scroll {
   flex: 1;
@@ -3657,6 +3847,50 @@ input[type='number'] {
   display: block;
   pointer-events: none;
 }
+.battle-camera {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px 4px 4px;
+  background: rgba(20, 18, 14, 0.9);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  backdrop-filter: blur(6px);
+}
+.battle-camera button {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgba(40, 36, 28, 0.85);
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+.battle-camera button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.battle-camera span {
+  margin-left: 3px;
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+@media (max-width: 699px) {
+  .battle-camera span {
+    display: none;
+  }
+}
+
 .battle-hint {
   position: absolute;
   left: 50%;
@@ -4488,6 +4722,7 @@ input[type='number'] {
   }
   .left-panel .city-row .cmeta,
   .left-panel .city-row .cres,
+  .left-panel .rail-empty,
   .left-panel .rail-others,
   .left-panel .log-section,
   .left-panel .supply {

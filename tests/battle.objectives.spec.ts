@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createGame } from '../src/data/tables/scenarios';
-import type { BattleObjective, BattleState, GameState } from '../src/core/state';
+import type { BattleObjective, BattleState, BattleTerrain, GameState } from '../src/core/state';
 import {
   applyAiAction,
   createBattle,
@@ -12,6 +12,7 @@ import {
   planBattleObjectives,
   planPilotAction,
   resolveBattle,
+  supplyPointForCity,
   undoMove,
 } from '../src/systems/battle';
 import { migrateSave } from '../src/save/migrate';
@@ -340,42 +341,57 @@ describe('E6 战斗题目：托管权重', () => {
   it('截粮点会引导 AI 向粮仓靠拢', () => {
     const s = fresh();
     const b = startXiangyang(s);
+    const point = supplyPointForCity(b.targetCityId)!;
     b.sideObjective = {
       kind: 'supply',
       side: 'attacker',
       title: '截粮',
       description: '派一支部队占领敌军粮仓',
-      point: { x: 10, y: 3, label: '粮仓' },
+      point,
       reward: {},
       optional: true,
     };
-    const near = objectiveMoveScore(b, 'attacker', 9, 3);
-    const far = objectiveMoveScore(b, 'attacker', 0, 3);
+    const near = objectiveMoveScore(b, 'attacker', point.x, point.y);
+    const far = objectiveMoveScore(b, 'attacker', Math.max(0, point.x - 8), point.y);
     expect(near).toBeGreaterThan(far);
   });
 
   it('托管在没有攻击目标时会朝粮仓推进', () => {
     const s = fresh();
     const b = startXiangyang(s);
+    // 用固定 12×8 平地图隔离“行军评分”本身：攻守相距 7 格，无接战目标
+    b.mapBattle = false;
+    b.cityBlock = undefined;
+    b.grid = Array.from({ length: 8 }, () => Array<BattleTerrain>(12).fill('plain'));
+    const point = { x: 10, y: 3, label: '粮仓' };
     b.objective = undefined;
     b.sideObjective = {
       kind: 'supply',
       side: 'attacker',
       title: '截粮',
       description: '派一支部队占领敌军粮仓',
-      point: { x: 10, y: 3, label: '粮仓' },
+      point,
       reward: {},
       optional: true,
     };
-    b.supplyPoint = { x: 10, y: 3, label: '粮仓' };
+    b.supplyPoint = point;
     b.supplyTaken = false;
+    for (const u of Object.values(b.units)) {
+      if (u.side === 'attacker') {
+        u.x = 0;
+        u.y = u.id.endsWith('liubei') ? 4 : 3;
+      } else {
+        u.x = 7;
+        u.y = u.id.endsWith('lvbu') ? 3 : 4;
+      }
+    }
 
     const action = planPilotAction(s, b);
     expect(action?.kind).toBe('move');
     if (action?.kind !== 'move') return;
     const unit = b.units[action.unitId]!;
-    const before = distanceBetween(unit, { x: 10, y: 3 });
+    const before = distanceBetween(unit, point);
     applyAiAction(s, b, action);
-    expect(distanceBetween(unit, { x: 10, y: 3 })).toBeLessThan(before);
+    expect(distanceBetween(unit, point)).toBeLessThan(before);
   });
 });

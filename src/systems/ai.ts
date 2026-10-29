@@ -18,7 +18,13 @@ import {
   planReinforcement,
   type StrategicMove,
 } from './aiStrategy';
-import { aiDiplomacyTick, tickDiplomacy } from './factionDiplomacy';
+import {
+  aiDiplomacyTick,
+  canAttackFactions,
+  tickDiplomacy,
+} from './factionDiplomacy';
+import { gatesOnEdge, type GateFeature } from '../data/tables/gates';
+import { assaultGateWithForce, gateOwnerOf } from './gates';
 import { sortieArmy } from './army';
 import { abandonCity, planAbandonment } from './abandon';
 import { log } from './economy';
@@ -129,6 +135,36 @@ function aiRecruitCity(
   }
 }
 
+/** 这条道路上是否有敌国封锁的关防 */
+function blockedGateOnEdge(
+  state: GameState,
+  factionId: string,
+  fromId: string,
+  targetId: string,
+): GateFeature | null {
+  for (const gate of gatesOnEdge(fromId, targetId)) {
+    const owner = gateOwnerOf(state, gate.id);
+    if (owner && owner !== factionId && canAttackFactions(state, factionId, owner)) {
+      return gate;
+    }
+  }
+  return null;
+}
+
+/** 路过的无主关防顺手接管：AI 不额外享受产出，但会留下一支守备队 */
+function claimNeutralGatesOnEdge(
+  state: GameState,
+  factionId: string,
+  fromId: string,
+  targetId: string,
+  generalIds: string[],
+): void {
+  for (const gate of gatesOnEdge(fromId, targetId)) {
+    if (gateOwnerOf(state, gate.id)) continue;
+    assaultGateWithForce(state, factionId, gate.id, generalIds);
+  }
+}
+
 /**
  * AI 月度行动：征兵 → 内政 → 出兵。
  * 返回 'battle' 表示这回合开始了一场玩家防守战，AI 队列需要暂停。
@@ -223,6 +259,29 @@ export function runAiFaction(state: GameState, factionId: string): 'battle' | 'd
     if (!from || !target) break;
 
     const attackerName = state.factions[factionId]?.name ?? factionId;
+
+    // 关防是必经之路：路上有敌关，本月先攻关，不能直接越过关防开战。
+    const gateLogStart = state.log.length;
+    const blockedGate = blockedGateOnEdge(
+      state,
+      factionId,
+      plan.fromId,
+      plan.targetId,
+    );
+    if (blockedGate) {
+      assaultGateWithForce(state, factionId, blockedGate.id, plan.generalIds);
+      tagAiLogs(state, gateLogStart);
+      continue;
+    }
+    // 无主关防顺手接管，然后继续原定攻势
+    claimNeutralGatesOnEdge(
+      state,
+      factionId,
+      plan.fromId,
+      plan.targetId,
+      plan.generalIds,
+    );
+    tagAiLogs(state, gateLogStart);
 
     // 玩家防守：AI 也走「派兵上路」而不是凭空开战 ——
     // 全地图模式下玩家必须看得见威胁、来得及堵门或半路截击。
