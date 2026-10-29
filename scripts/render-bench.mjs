@@ -26,6 +26,10 @@ const argv = process.argv.slice(2);
 const shots = argv.includes('--shots');
 const portArg = argv.indexOf('--port');
 const PORT = portArg >= 0 ? Number(argv[portArg + 1]) : 5199;
+/** 窗口尺寸：默认桌面 1280×800；`--size 390x844` 可验手机端（I7 · 7.6 的 390px 口径） */
+const sizeArg = argv.indexOf('--size');
+const [WIN_W, WIN_H] =
+  sizeArg >= 0 ? argv[sizeArg + 1].split('x').map(Number) : [1280, 800];
 const CDP_PORT = 9333;
 const BENCH_URL = `http://localhost:${PORT}/bench.html`;
 
@@ -123,7 +127,7 @@ async function main() {
       '--disable-extensions',
       '--hide-scrollbars',
       '--force-device-scale-factor=2',
-      '--window-size=1280,800',
+      `--window-size=${WIN_W},${WIN_H}`,
       `--remote-debugging-port=${CDP_PORT}`,
       `--user-data-dir=/tmp/wb-render-bench-profile`,
       'about:blank',
@@ -154,6 +158,13 @@ async function main() {
     const cdp = await Cdp.connect(page.webSocketDebuggerUrl);
     await cdp.send('Page.enable');
     await cdp.send('Runtime.enable');
+    // `--window-size` 在无头模式下常被会话恢复覆盖，改用 Emulation 精确设定视口
+    await cdp.send('Emulation.setDeviceMetricsOverride', {
+      width: WIN_W,
+      height: WIN_H,
+      deviceScaleFactor: 2,
+      mobile: WIN_W < 600,
+    });
     await cdp.send('Page.navigate', { url: BENCH_URL });
 
     // 等页面里挂上基准入口
@@ -169,24 +180,40 @@ async function main() {
     if (!report || !report.phases) throw new Error('基准没有返回结果');
 
     if (shots) {
-      for (const [name, turns] of [
-        ['full', -6],
-        ['region', 3],
-        ['closeup', 6],
+      // 基准结果面板浮在画布左侧，截图时先藏掉，否则 390px 下会盖住大半张图
+      await cdp.evaluate(
+        `(() => { const o = document.getElementById('out'); if (o) o.style.display = 'none'; return true; })()`,
+      );
+      // 每次先滚到最低档再往上数档位，否则上一张的缩放会带到下一张（run() 结束时停在 720%）
+      // 档位表 0.2 → 0.3 → 0.45 → 0.65 → 0.85 → 1 → 1.25 → 1.6 → 2 → 2.5 → 3.2 → 4 → 5 → 6 → 7.2
+      for (const [name, up, focusId] of [
+        ['full', 0, null],
+        ['region', 5, null],
+        ['closeup', 9, 'chengdu'],
+        // I7 · 7.5 验收：把成都居中再截 720%，看城门与山道是否可辨
+        ['maxzoom', 14, 'chengdu'],
+        // 江陵临长江：720% 下看江岸与渡线
+        ['coast', 14, 'jiangling'],
       ]) {
         await cdp.evaluate(`(() => {
           const c = document.querySelector('canvas.map-canvas');
-          for (let i = 0; i < ${Math.abs(turns)}; i++) {
-            c.dispatchEvent(new WheelEvent('wheel', {
-              deltaY: ${turns > 0 ? -120 : 120}, clientX: 640, clientY: 400,
-              bubbles: true, cancelable: true,
-            }));
-          }
+          const cx = c.clientWidth / 2;
+          const cy = c.clientHeight / 2;
+          const spin = (deltaY, times) => {
+            for (let i = 0; i < times; i++) {
+              c.dispatchEvent(new WheelEvent('wheel', {
+                deltaY, clientX: cx, clientY: cy, bubbles: true, cancelable: true,
+              }));
+            }
+          };
+          spin(120, 20);
+          spin(-120, ${up});
           return true;
         })()`);
-        await delay(700);
+        if (focusId) await cdp.evaluate(`window.__bench.focus('${focusId}')`);
+        await delay(900);
         const shot = await cdp.send('Page.captureScreenshot', { format: 'png' });
-        const file = `/tmp/render-bench-${name}.png`;
+        const file = `/tmp/render-bench-${WIN_W}-${name}.png`;
         writeFileSync(file, Buffer.from(shot.data, 'base64'));
         console.log(`  · 截图 ${file}`);
       }
@@ -208,6 +235,20 @@ async function main() {
           report.size.h,
         ].join(','),
       ),
+      // 四层打点（I7 · 7.3）：phase 直接用 paint:<层名>，p50/p95 就是该层的耗时
+      ...Object.entries(report.paint ?? {}).map(([layer, s]) =>
+        [
+          `paint:${layer}`,
+          s.frames,
+          s.p50,
+          s.p95,
+          s.max,
+          s.p50,
+          report.dpr,
+          report.size.w,
+          report.size.h,
+        ].join(','),
+      ),
     ];
     const out = resolve(ROOT, 'reports/render-bench.csv');
     mkdirSync(dirname(out), { recursive: true });
@@ -222,6 +263,16 @@ async function main() {
       );
     }
     console.log(`\n首屏到可测量：${report.bootMs} ms`);
+    if (report.paint) {
+      console.log('\n绘制分层        P50      P95      max    余量(vs 16.8)');
+      for (const [layer, s] of Object.entries(report.paint)) {
+        console.log(
+          `${layer.padEnd(12)} ${String(s.p50).padStart(7)}ms ${String(s.p95).padStart(
+            7,
+          )}ms ${String(s.max).padStart(7)}ms ${String((16.8 - s.p95).toFixed(2)).padStart(8)}ms`,
+        );
+      }
+    }
     console.log(`DPR ${report.dpr} · 画布 ${report.size.w}×${report.size.h}`);
     console.log(`· 已写入 ${out}`);
 

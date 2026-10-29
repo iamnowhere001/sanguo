@@ -51,6 +51,8 @@ import {
 } from './camera';
 import { territoryField, territorySignature } from '../systems/territory';
 import { territoryPaint, territoryWash } from './territoryPaint';
+import { beginPaintFrame, endPaintFrame, lapPaint } from './paintProfile';
+import { cityLabelVisible, citySubLineVisible, gateLabelVisible, labelLevel } from './labelLod';
 
 interface ProjectedCity {
   city: City;
@@ -132,18 +134,28 @@ function project(
 
 // ── 地形分块缓存 ────────────────────────────────────────────
 /**
- * 地形分块缓存。
+ * 地形分块缓存（两档分辨率，I7 · 7.5）。
  *
  * 576×432 世界 = 6912×5184；若整图缓存，即使 0.5× 也要 ~72MB，
- * 手机上必然触发 canvas 上限。改为 384×384 世界单位一块、1.5× 分辨率、
- * LRU 32 块（约 42MB），只生成视口附近的块。
+ * 手机上必然触发 canvas 上限，所以只生成视口附近的块。
  *
- * 高倍率（720%）下地形会放大到约 2.2 倍，仍保留手绘颗粒；
- * 低倍率全图则直接使用单独的总览缓存。
+ * 粗档：384 世界单位一块、1.5× 分辨率、LRU 32 块（约 42MB），州郡视角的底图。
+ * 细档：144 世界单位一块、3× 分辨率、LRU 16 块（约 12MB），高倍率才启用。
+ *
+ * 为什么要两档：720% 时 layout.scale≈0.753、DPR 2，一个世界单位占 10.8 个设备像素，
+ * 而粗档只烘 1.5 像素/单位，放大后每源像素摊 7 个设备像素，山脊、江岸全成色块。
+ * 细档把每单位烘到 3 像素（≈3.6 设备像素）；144 的块宽又让整张地图只有 4×3 块，
+ * 高倍率视野（约 400×310 世界单位）两三块就够，烘一次能长期复用。
  */
-const TERRAIN_CHUNK_WORLD = 384;
-const TERRAIN_CHUNK_SCALE = 1.5;
-const TERRAIN_CHUNK_LIMIT = 32;
+const COARSE_STEP = 384;
+const COARSE_SCALE = 1.5;
+const COARSE_LIMIT = 32;
+
+const FINE_STEP = 144;
+const FINE_SCALE = 3;
+const FINE_LIMIT = 16;
+/** 从这一倍率起改用细档：320% 时每源像素约 1.6 设备像素，看不出台阶 */
+const FINE_FROM = 3.2;
 
 /**
  * 每帧最多现烘几块地形。
@@ -153,10 +165,16 @@ const TERRAIN_CHUNK_LIMIT = 32;
  * 现在缺块先拿总览图垫底，真正的烘焙按预算分摊到后续帧。
  */
 const CHUNK_BAKE_BUDGET = 6;
+/** 细档一块更贵（432² 画布一次画完），每帧只补 2 块：实测 3 块会让补烘帧的绘制层到 12–19ms */
+const FINE_BAKE_BUDGET = 2;
 /** 距上一帧小于这个间隔，视为"用户还在连续操作"，本轮不烘新块 */
 const RAPID_PAINT_MS = 110;
-/** 补烘的间隔 */
-const REFINE_DELAY_MS = 90;
+/**
+ * 补烘的间隔。
+ * 必须大于 RAPID_PAINT_MS：补烘本身也会刷新 `lastPaintAt`，
+ * 若间隔小于阈值，补烘帧会被自己判成"还在连续操作"，预算永远为 0，地块永远烘不出来。
+ */
+const REFINE_DELAY_MS = 160;
 
 /**
  * 势力光晕精灵缓存。
@@ -198,37 +216,51 @@ interface TerrainChunk {
   used: number;
 }
 
-const terrainChunks = new Map<string, TerrainChunk>();
-let terrainChunkTick = 0;
-/** 本帧还能现烘几块；<=0 时缺块直接返回 null，由调用方拿总览图垫底 */
-let chunkBakeBudget = 0;
+interface ChunkTier {
+  /** 一块覆盖多少世界单位 */
+  step: number;
+  /** 烘焙分辨率：每世界单位多少像素 */
+  scale: number;
+  limit: number;
+  chunks: Map<string, TerrainChunk>;
+  tick: number;
+  /** 本帧还能现烘几块；<=0 时缺块直接返回 null，由调用方垫底 */
+  budget: number;
+}
 
-function terrainChunkAt(cx: number, cy: number): TerrainChunk | null {
+function makeTier(step: number, scale: number, limit: number): ChunkTier {
+  return { step, scale, limit, chunks: new Map(), tick: 0, budget: 0 };
+}
+
+const coarseTier = makeTier(COARSE_STEP, COARSE_SCALE, COARSE_LIMIT);
+const fineTier = makeTier(FINE_STEP, FINE_SCALE, FINE_LIMIT);
+
+function chunkAt(tier: ChunkTier, cx: number, cy: number): TerrainChunk | null {
   const key = `${cx},${cy}`;
-  const hit = terrainChunks.get(key);
+  const hit = tier.chunks.get(key);
   if (hit) {
-    hit.used = ++terrainChunkTick;
+    hit.used = ++tier.tick;
     return hit;
   }
-  if (chunkBakeBudget <= 0) return null;
-  chunkBakeBudget -= 1;
+  if (tier.budget <= 0) return null;
+  tier.budget -= 1;
 
-  const x = cx * TERRAIN_CHUNK_WORLD;
-  const y = cy * TERRAIN_CHUNK_WORLD;
-  const w = Math.min(TERRAIN_CHUNK_WORLD, MAP.width - x);
-  const h = Math.min(TERRAIN_CHUNK_WORLD, MAP.height - y);
+  const x = cx * tier.step;
+  const y = cy * tier.step;
+  const w = Math.min(tier.step, MAP.width - x);
+  const h = Math.min(tier.step, MAP.height - y);
   const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, Math.round(w * TERRAIN_CHUNK_SCALE));
-  canvas.height = Math.max(1, Math.round(h * TERRAIN_CHUNK_SCALE));
+  canvas.width = Math.max(1, Math.round(w * tier.scale));
+  canvas.height = Math.max(1, Math.round(h * tier.scale));
   const ctx = canvas.getContext('2d');
   if (ctx) {
     ctx.setTransform(
-      TERRAIN_CHUNK_SCALE,
+      tier.scale,
       0,
       0,
-      TERRAIN_CHUNK_SCALE,
-      -x * TERRAIN_CHUNK_SCALE,
-      -y * TERRAIN_CHUNK_SCALE,
+      tier.scale,
+      -x * tier.scale,
+      -y * tier.scale,
     );
     ctx.beginPath();
     // 稍微外扩 1 世界单位，压掉块与块之间的抗锯齿缝
@@ -237,18 +269,18 @@ function terrainChunkAt(cx: number, cy: number): TerrainChunk | null {
     paintTerrain(ctx, { x: x - 1, y: y - 1, w: w + 2, h: h + 2 });
   }
 
-  const chunk: TerrainChunk = { canvas, x, y, w, h, used: ++terrainChunkTick };
-  terrainChunks.set(key, chunk);
-  if (terrainChunks.size > TERRAIN_CHUNK_LIMIT) {
+  const chunk: TerrainChunk = { canvas, x, y, w, h, used: ++tier.tick };
+  tier.chunks.set(key, chunk);
+  if (tier.chunks.size > tier.limit) {
     let oldestKey = '';
     let oldest = Infinity;
-    for (const [k, c] of terrainChunks) {
+    for (const [k, c] of tier.chunks) {
       if (c.used < oldest) {
         oldest = c.used;
         oldestKey = k;
       }
     }
-    if (oldestKey) terrainChunks.delete(oldestKey);
+    if (oldestKey) tier.chunks.delete(oldestKey);
   }
   return chunk;
 }
@@ -275,6 +307,53 @@ function terrainOverview(): HTMLCanvasElement {
   }
   overviewCanvas = canvas;
   return canvas;
+}
+
+/**
+ * 画一档分块，返回还缺多少块。
+ * 缺块先用总览图垫底，下一帧再补细节——比"卡住 200ms 再出图"体感好得多。
+ */
+function drawChunkGrid(
+  ctx: CanvasRenderingContext2D,
+  tier: ChunkTier,
+  worldRect: { x: number; y: number; w: number; h: number },
+): number {
+  const cols = Math.ceil(MAP.width / tier.step);
+  const rows = Math.ceil(MAP.height / tier.step);
+  const cx0 = clamp(Math.floor(worldRect.x / tier.step), 0, cols - 1);
+  const cx1 = clamp(Math.floor((worldRect.x + worldRect.w) / tier.step), 0, cols - 1);
+  const cy0 = clamp(Math.floor(worldRect.y / tier.step), 0, rows - 1);
+  const cy1 = clamp(Math.floor((worldRect.y + worldRect.h) / tier.step), 0, rows - 1);
+  let missing = 0;
+  for (let cy = cy0; cy <= cy1; cy++) {
+    for (let cx = cx0; cx <= cx1; cx++) {
+      const chunk = chunkAt(tier, cx, cy);
+      if (chunk) {
+        // 0.5 世界单位外扩，遮住块缝
+        ctx.drawImage(chunk.canvas, chunk.x - 0.5, chunk.y - 0.5, chunk.w + 1, chunk.h + 1);
+        continue;
+      }
+      missing += 1;
+      const ox = cx * tier.step;
+      const oy = cy * tier.step;
+      const ow = Math.min(tier.step, MAP.width - ox);
+      const oh = Math.min(tier.step, MAP.height - oy);
+      if (ow > 0 && oh > 0) {
+        ctx.drawImage(
+          terrainOverview(),
+          ox * OVERVIEW_SCALE,
+          oy * OVERVIEW_SCALE,
+          ow * OVERVIEW_SCALE,
+          oh * OVERVIEW_SCALE,
+          ox,
+          oy,
+          ow,
+          oh,
+        );
+      }
+    }
+  }
+  return missing;
 }
 
 function visibleWorldRect(
@@ -1199,13 +1278,17 @@ export function MapCanvas({
     const paintAt = performance.now();
     const rapid = paintAt - lastPaintAt.current < RAPID_PAINT_MS;
     lastPaintAt.current = paintAt;
-    chunkBakeBudget = rapid ? 0 : CHUNK_BAKE_BUDGET;
+    const fine = view.zoom >= FINE_FROM;
+    // 高倍率时只用细档补烘：粗档在 720% 下本来就是模糊垫底，烘它纯属浪费预算
+    coarseTier.budget = rapid || fine ? 0 : CHUNK_BAKE_BUDGET;
+    fineTier.budget = rapid || !fine ? 0 : FINE_BAKE_BUDGET;
     let missingChunks = 0;
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, size.w, size.h);
+    beginPaintFrame();
 
     // 底：海色渐变（地形底图之外留白也应是海色）
     const bg = ctx.createRadialGradient(
@@ -1220,6 +1303,7 @@ export function MapCanvas({
     bg.addColorStop(1, '#12110d');
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, size.w, size.h);
+    lapPaint('terrain');
 
     const layout = layoutOf(size.w, size.h);
     const worldRect = visibleWorldRect(size.w, size.h, view, layout);
@@ -1244,62 +1328,33 @@ export function MapCanvas({
     if (view.zoom < 0.4) {
       ctx.drawImage(terrainOverview(), 0, 0, MAP.width, MAP.height);
     } else {
-      const chunkX0 = Math.max(0, Math.floor(worldRect.x / TERRAIN_CHUNK_WORLD));
-      const chunkY0 = Math.max(0, Math.floor(worldRect.y / TERRAIN_CHUNK_WORLD));
-      const chunkX1 = Math.min(
-        Math.ceil(MAP.width / TERRAIN_CHUNK_WORLD) - 1,
-        Math.floor((worldRect.x + worldRect.w) / TERRAIN_CHUNK_WORLD),
-      );
-      const chunkY1 = Math.min(
-        Math.ceil(MAP.height / TERRAIN_CHUNK_WORLD) - 1,
-        Math.floor((worldRect.y + worldRect.h) / TERRAIN_CHUNK_WORLD),
-      );
-      for (let cy = chunkY0; cy <= chunkY1; cy++) {
-        for (let cx = chunkX0; cx <= chunkX1; cx++) {
-          const chunk = terrainChunkAt(cx, cy);
-          if (chunk) {
-            // 0.5 世界单位外扩，遮住块缝
-            ctx.drawImage(chunk.canvas, chunk.x - 0.5, chunk.y - 0.5, chunk.w + 1, chunk.h + 1);
-          } else {
-            missingChunks += 1;
-            // 还没烘到：先拿总览图的对应区域垫底，下一帧再补细节。
-            // 用低清图顶着，比"卡住 200ms 再出图"体感好得多。
-            const ox = cx * TERRAIN_CHUNK_WORLD;
-            const oy = cy * TERRAIN_CHUNK_WORLD;
-            const ow = Math.min(TERRAIN_CHUNK_WORLD, MAP.width - ox);
-            const oh = Math.min(TERRAIN_CHUNK_WORLD, MAP.height - oy);
-            if (ow > 0 && oh > 0) {
-              ctx.drawImage(
-                terrainOverview(),
-                ox * OVERVIEW_SCALE,
-                oy * OVERVIEW_SCALE,
-                ow * OVERVIEW_SCALE,
-                oh * OVERVIEW_SCALE,
-                ox,
-                oy,
-                ow,
-                oh,
-              );
-            }
-          }
-        }
-      }
+      // 粗档先铺满视野，高倍率再把细档叠上去：
+      // 细档还没烘完时看到的是"略糊但完整"的地形，而不是空洞
+      const coarseMissing = drawChunkGrid(ctx, coarseTier, worldRect);
+      // 高倍率只等细档：粗档缺口会被细档盖住，不该一直触发补烘
+      if (fine) missingChunks += drawChunkGrid(ctx, fineTier, worldRect);
+      else missingChunks = coarseMissing;
     }
+    lapPaint('terrain');
     // 势力版图（P0-1）：整张图只画两次 drawImage，与城池数量无关。
     // 低倍率重铺色（看大势），高倍率淡出（让地形与城池细节读得出来）。
     if (territory) {
       // 版图是墨晕，永远要平滑
       ctx.imageSmoothingEnabled = true;
-      // multiply：保留宣纸底图的明暗起伏，只染色相
+      // 'color' 混合：取势力色的色相 / 饱和度，保留宣纸的明暗——染色是"染绢"，不是盖色块。
+      // 旧方案 multiply 会把深色压成灰紫（7.2 真机对比后改掉）。
       const wash = territoryWash(view.zoom);
-      ctx.globalCompositeOperation = 'multiply';
+      ctx.globalCompositeOperation = 'color';
       ctx.globalAlpha = wash;
       ctx.drawImage(territory.fill, 0, 0, MAP.width, MAP.height);
+      // 墨线仍用 multiply：宿墨压深纸底，才是线不是面
+      ctx.globalCompositeOperation = 'multiply';
       ctx.globalAlpha = Math.min(1, wash * 0.9);
       ctx.drawImage(territory.edge, 0, 0, MAP.width, MAP.height);
       ctx.globalCompositeOperation = 'source-over';
       ctx.globalAlpha = 1;
     }
+    lapPaint('territory');
     if (view.zoom >= 4.5) {
       ctx.strokeStyle = `rgba(58,48,32,${0.05 * Math.min(1, (view.zoom - 4.5) / 0.8)})`;
       ctx.lineWidth = 0.3;
@@ -1321,6 +1376,7 @@ export function MapCanvas({
       ctx.stroke();
     }
     ctx.restore();
+    lapPaint('terrain');
 
     const pts = project(state, size.w, size.h, view);
     pointsRef.current = pts;
@@ -1381,6 +1437,7 @@ export function MapCanvas({
       ctx.lineWidth = 1.6;
       ctx.stroke();
     }
+    lapPaint('entities');
 
     // 出征路线
     for (const route of attackRoutes) {
@@ -1417,6 +1474,7 @@ export function MapCanvas({
       ctx.fillStyle = marchFrom ? 'rgba(246,214,122,0.95)' : 'rgba(150,54,40,0.8)';
       ctx.fill();
     }
+    lapPaint('interaction');
 
     // 关隘 / 港口（L2）：先画通行线，再画关防图标
     const gateList = Object.values(gateSites());
@@ -1426,7 +1484,7 @@ export function MapCanvas({
       const world = gateWorldPos(site);
       const sp = worldToScreen(world.x, world.y, size.w, size.h, view, layout);
       gateScreen.set(site.gate.id, sp);
-      gateHitsRef.current.push({ id: site.gate.id, x: sp.x, y: sp.y, r: 12 });
+      gateHitsRef.current.push({ id: site.gate.id, x: sp.x, y: sp.y, r: 14 });
     }
 
     if (view.zoom >= 0.8) {
@@ -1552,6 +1610,7 @@ export function MapCanvas({
       }
       ctx.restore();
     }
+    lapPaint('entities');
 
     // ── 行军预览 ──
     if (selectedArmy && previewPath && previewPath.length > 0) {
@@ -1590,6 +1649,7 @@ export function MapCanvas({
       ctx.lineWidth = 1.4;
       ctx.stroke();
     }
+    lapPaint('interaction');
 
     // ── 城池 ──
     for (const p of pts) {
@@ -1615,6 +1675,7 @@ export function MapCanvas({
       if (mark === 'true') drawBadge(p.bx, p.by - 4, '✓', '#d8a54a', '#f0d79a');
       else if (mark === 'false') drawBadge(p.bx, p.by - 4, '×', '#c14a3a', '#e3a79c');
     }
+    lapPaint('entities');
 
     // ── 部队移动范围 ──
     // 只铺一层极淡的亮色，真正的可读性靠「边界线」：战棋式移动力范围
@@ -1656,6 +1717,7 @@ export function MapCanvas({
       ctx.lineWidth = 1.6;
       ctx.stroke();
     }
+    lapPaint('interaction');
 
     // ── 部队 ──
     const armyHits: Array<{ id: string; x: number; y: number; r: number }> = [];
@@ -1739,6 +1801,8 @@ export function MapCanvas({
 
     const priority = (c: City): number =>
       c.id === selectedCityId ? 0 : c.id === hover ? 1 : c.ownerId === state.playerFactionId ? 2 : 3;
+    // 名牌分级（I7 · 7.6）：全图只标都城，放大后逐级放出大中小城
+    const level = labelLevel(view.zoom);
     const ordered = [...pts].sort(
       (a, b) =>
         priority(a.city) - priority(b.city) ||
@@ -1749,6 +1813,8 @@ export function MapCanvas({
     for (const p of ordered) {
       const c = p.city;
       const pri = priority(c);
+      // 选中 / 悬停的城无论档位都要带名牌，否则点完看不到自己点的是哪座
+      if (pri > 1 && !cityLabelVisible(c.size, level)) continue;
       ctx.font = nameFont;
       const nameW = ctx.measureText(c.name).width + 10;
       // 留出门楼的位置：上下各让开 ~7px，否则名牌会盖住北门的屋檐
@@ -1772,7 +1838,7 @@ export function MapCanvas({
         placed.push(nameBox);
       }
 
-      if (pri <= 2) {
+      if (pri <= 2 && citySubLineVisible(level)) {
         const owner = c.ownerId ? state.factions[c.ownerId]?.name ?? '' : '无主';
         const sub = `${owner} · ${cityTroops(state, c.id)}`;
         ctx.font = subFont;
@@ -1790,7 +1856,7 @@ export function MapCanvas({
     }
 
     // 关防名
-    if (view.zoom >= 0.95) {
+    if (gateLabelVisible(level)) {
       const gateFont = '600 9px "PingFang SC", "Noto Sans SC", sans-serif';
       for (const site of Object.values(gateSites())) {
         const world = gateWorldPos(site);
@@ -1810,6 +1876,7 @@ export function MapCanvas({
         placed.push(box);
       }
     }
+    lapPaint('entities');
 
     // 悬停 tooltip
     // 调度部队时不弹城池 tooltip：它会挡住移动范围与路径预览
@@ -1983,6 +2050,7 @@ export function MapCanvas({
     }
 
     // 有块没烘完，或者预算用完还有缺口：过一会儿再补一帧。
+    endPaintFrame();
     if (missingChunks > 0 && !refineTimer.current) {
       refineTimer.current = window.setTimeout(() => {
         refineTimer.current = 0;
@@ -2014,7 +2082,9 @@ export function MapCanvas({
   const hitCity = (x: number, y: number): string | null => {
     let best: { id: string; d: number } | null = null;
     for (const p of pointsRef.current) {
-      const pad = 6;
+      // 低倍率下 3×3 城墙只有十来个像素，手机点不中；
+      // 按"离城心至少 18px"反推外扩量，命中框小的城自动变大，且仍取最近中心，不会误点邻城
+      const pad = Math.max(6, 18 - Math.min(p.bw, p.bh) / 2);
       if (
         x >= p.bx - pad &&
         x <= p.bx + p.bw + pad &&
@@ -2323,30 +2393,33 @@ export function MapCanvas({
         </button>
       </div>
 
-      <div className="map-terrain-legend" aria-label="地形图例">
-        {LEGEND.map((item) => (
-          <span key={item.label}>
-            <i style={{ backgroundColor: item.color }} />
-            {item.label}
-          </span>
-        ))}
-      </div>
+      {/* 图例成组叠在地图左上角：左下角留给提示条，避免浮层挤压后两者互相压字 */}
+      <div className="map-legends">
+        <div className="map-legend">
+          {Object.values(state.factions)
+            .filter((f) => f.cityIds.length > 0)
+            .map((f) => {
+              const pattern = factionPattern(f.id);
+              return (
+                <span key={f.id} aria-label={`${f.name}（${PATTERN_LABEL[pattern]}）`}>
+                  <i
+                    className={`faction-dot pat-${pattern}`}
+                    style={{ backgroundColor: f.color }}
+                  />
+                  {f.name}
+                </span>
+              );
+            })}
+        </div>
 
-      <div className="map-legend">
-        {Object.values(state.factions)
-          .filter((f) => f.cityIds.length > 0)
-          .map((f) => {
-            const pattern = factionPattern(f.id);
-            return (
-              <span key={f.id} aria-label={`${f.name}（${PATTERN_LABEL[pattern]}）`}>
-                <i
-                  className={`faction-dot pat-${pattern}`}
-                  style={{ backgroundColor: f.color }}
-                />
-                {f.name}
-              </span>
-            );
-          })}
+        <div className="map-terrain-legend" aria-label="地形图例">
+          {LEGEND.map((item) => (
+            <span key={item.label}>
+              <i style={{ backgroundColor: item.color }} />
+              {item.label}
+            </span>
+          ))}
+        </div>
       </div>
     </div>
   );

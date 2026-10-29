@@ -92,11 +92,24 @@ function fbm(x: number, y: number, seed = 0): number {
 }
 
 // ── 几何工具 ───────────────────────────────────────────────
-function pointInPolygon(lon: number, lat: number, ring: Pt[]): boolean {
+/**
+ * 陆地多边形：海岸线 + 图外框闭合。
+ * 拆成两条 `Float64Array` 再判内外：这是每个格都要跑一次的热路径，
+ * 避免逐点解构数组。
+ */
+const LAND_RING: Pt[] = [...COASTLINE, ...LAND_FRAME];
+const LAND_X = new Float64Array(LAND_RING.map((p) => p[0]));
+const LAND_Y = new Float64Array(LAND_RING.map((p) => p[1]));
+
+/** 该经纬度是否在大陆内 */
+export function isLand(lon: number, lat: number): boolean {
   let inside = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, yi] = ring[i]!;
-    const [xj, yj] = ring[j]!;
+  const n = LAND_X.length;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const xi = LAND_X[i]!;
+    const yi = LAND_Y[i]!;
+    const xj = LAND_X[j]!;
+    const yj = LAND_Y[j]!;
     if (yi > lat !== yj > lat && lon < ((xj - xi) * (lat - yi)) / (yj - yi) + xi) {
       inside = !inside;
     }
@@ -123,44 +136,91 @@ function distToPolyline(lon: number, lat: number, pts: Pt[]): number {
   return best;
 }
 
-/** 陆地多边形：海岸线 + 图外框闭合 */
-const LAND_RING: Pt[] = [...COASTLINE, ...LAND_FRAME];
-
-/** 该经纬度是否在大陆内 */
-export function isLand(lon: number, lat: number): boolean {
-  return pointInPolygon(lon, lat, LAND_RING);
-}
-
 /** 湖泊椭圆（带轻微噪声，避免正圆） */
-function lakeAt(lon: number, lat: number): string | null {
+function lakeAt(lon: number, lat: number): boolean {
   for (const lake of LAKES) {
     const dx = (lon - lake.lon) / lake.rx;
     const dy = (lat - lake.lat) / lake.ry;
     const d = Math.hypot(dx, dy);
+    // 噪声最多把边界推到 1.1；超出就不必再算噪声
+    if (d > 1.1) continue;
     const edge = 0.9 + 0.2 * valueNoise(lon * 6, lat * 6, 11);
-    if (d <= edge) return lake.name;
+    if (d <= edge) return true;
   }
-  return null;
+  return false;
 }
 
+// ── 折线包围盒 ─────────────────────────────────────────────
+/**
+ * 河流 / 山脊的空间索引。
+ *
+ * 每个格都要跑全部折线：248,832 格 × 几十段距离计算，是冷启动 500 ms 的大头。
+ * 给每条折线算一个包围盒，外扩「该折线的判定宽度」后依然够不到的格直接跳过。
+ * 这只是剪枝，判定口径完全不变，地形结果逐格一致。
+ */
+interface Box {
+  lon0: number;
+  lon1: number;
+  lat0: number;
+  lat1: number;
+}
+
+function boxOf(points: Pt[]): Box {
+  let lon0 = Infinity;
+  let lon1 = -Infinity;
+  let lat0 = Infinity;
+  let lat1 = -Infinity;
+  for (const [lon, lat] of points) {
+    if (lon < lon0) lon0 = lon;
+    if (lon > lon1) lon1 = lon;
+    if (lat < lat0) lat0 = lat;
+    if (lat > lat1) lat1 = lat;
+  }
+  return { lon0, lon1, lat0, lat1 };
+}
+
+let riverBoxes: Box[] | null = null;
+let ridgeBoxes: Box[] | null = null;
+
 /** 河流：按相对宽度给一个"近河"阈值（度） */
-function riverAt(lon: number, lat: number): { id: string; scale: number } | null {
-  for (const river of RIVERS) {
+function riverAt(lon: number, lat: number): boolean {
+  riverBoxes ??= RIVERS.map((r) => boxOf(r.points));
+  for (let i = 0; i < RIVERS.length; i++) {
+    const river = RIVERS[i]!;
     // L2 档加宽河面：干流约 5 格、支流约 4 格，江面可容水军展开
     const halfWidth = riverHalfWidth(river.scale);
-    if (distToPolyline(lon, lat, river.points) <= halfWidth) {
-      return { id: river.id, scale: river.scale };
+    const box = riverBoxes[i]!;
+    if (
+      lon < box.lon0 - halfWidth ||
+      lon > box.lon1 + halfWidth ||
+      lat < box.lat0 - halfWidth ||
+      lat > box.lat1 + halfWidth
+    ) {
+      continue;
     }
+    if (distToPolyline(lon, lat, river.points) <= halfWidth) return true;
   }
-  return null;
+  return false;
 }
 
 /** 山体强度：0 = 无，1 = 山脊核心 */
 function ridgeAt(lon: number, lat: number): number {
+  ridgeBoxes ??= RIDGES.map((r) => boxOf(r.points));
   let strongest = 0;
-  for (const ridge of RIDGES) {
+  for (let i = 0; i < RIDGES.length; i++) {
+    const ridge = RIDGES[i]!;
+    const reach = ridge.width * 2;
+    const box = ridgeBoxes[i]!;
+    if (
+      lon < box.lon0 - reach ||
+      lon > box.lon1 + reach ||
+      lat < box.lat0 - reach ||
+      lat > box.lat1 + reach
+    ) {
+      continue;
+    }
     const d = distToPolyline(lon, lat, ridge.points);
-    if (d > ridge.width * 2) continue;
+    if (d > reach) continue;
     const core = 1 - Math.min(1, d / ridge.width);
     strongest = Math.max(strongest, core * ridge.height);
   }
@@ -169,8 +229,15 @@ function ridgeAt(lon: number, lat: number): number {
 
 /** 区块（林地 / 荒漠 / 沼泽）覆盖率，0–1 */
 function blobAt(lon: number, lat: number, blob: { lon: number; lat: number; r: number; wobble?: number }, seed: number): number {
-  const d = Math.hypot(lon - blob.lon, lat - blob.lat);
+  const dx = lon - blob.lon;
+  const dy = lat - blob.lat;
   const wobble = blob.wobble ?? 0;
+  // 噪声最多把半径放大到 r × (1 + wobble)；更远的格一定判不到。
+  // 先用平方距离挡掉，避免每格每块都开一次 sqrt。
+  const rMax = blob.r * (1 + wobble);
+  const d2 = dx * dx + dy * dy;
+  if (d2 > rMax * rMax) return 0;
+  const d = Math.sqrt(d2);
   const r = blob.r * (1 - wobble + wobble * 2 * fbm(lon * 2.2, lat * 2.2, seed));
   return d <= r ? 1 - d / r : 0;
 }
@@ -187,25 +254,41 @@ export interface TerrainGrid {
 
 let cached: TerrainGrid | null = null;
 
-function classify(lon: number, lat: number): TileKind {
-  if (!isLand(lon, lat)) return 'sea';
-  if (lakeAt(lon, lat)) return 'lake';
-  if (riverAt(lon, lat)) return 'river';
+/**
+ * 单格分类，直接返回 `TILE_KINDS` 下标。
+ *
+ * 248,832 格都要跑一遍，返回字符串再做 `KIND_INDEX[kind]` 查表是纯浪费；
+ * 这里用常量下标，顺带把 `stats` 也按下标累加。
+ */
+const SEA = KIND_INDEX.sea;
+const LAKE = KIND_INDEX.lake;
+const RIVER = KIND_INDEX.river;
+const MARSH = KIND_INDEX.marsh;
+const PLAIN = KIND_INDEX.plain;
+const FOREST = KIND_INDEX.forest;
+const HILL = KIND_INDEX.hill;
+const MOUNTAIN = KIND_INDEX.mountain;
+const DESERT = KIND_INDEX.desert;
+
+function classify(lon: number, lat: number): number {
+  if (!isLand(lon, lat)) return SEA;
+  if (lakeAt(lon, lat)) return LAKE;
+  if (riverAt(lon, lat)) return RIVER;
 
   const ridge = ridgeAt(lon, lat);
-  if (ridge > 0.55) return 'mountain';
-  if (ridge > 0.18) return 'hill';
+  if (ridge > 0.55) return MOUNTAIN;
+  if (ridge > 0.18) return HILL;
 
   for (let i = 0; i < DESERTS.length; i++) {
-    if (blobAt(lon, lat, DESERTS[i]!, 31) > 0.12) return 'desert';
+    if (blobAt(lon, lat, DESERTS[i]!, 31) > 0.12) return DESERT;
   }
   for (let i = 0; i < MARSHES.length; i++) {
-    if (blobAt(lon, lat, MARSHES[i]!, 47) > 0.2) return 'marsh';
+    if (blobAt(lon, lat, MARSHES[i]!, 47) > 0.2) return MARSH;
   }
   for (let i = 0; i < FORESTS.length; i++) {
-    if (blobAt(lon, lat, FORESTS[i]!, 59) > 0.15) return 'forest';
+    if (blobAt(lon, lat, FORESTS[i]!, 59) > 0.15) return FOREST;
   }
-  return 'plain';
+  return PLAIN;
 }
 
 /** 生成（或取缓存）整张地形栅格 */
@@ -214,7 +297,7 @@ export function terrainGrid(): TerrainGrid {
 
   const { cols, rows } = MAP;
   const cells = new Uint8Array(cols * rows);
-  const stats = Object.fromEntries(TILE_KINDS.map((k) => [k, 0])) as Record<TileKind, number>;
+  const counts = new Int32Array(TILE_KINDS.length);
   const [lon0, lon1] = LON_RANGE;
   const [lat0, lat1] = LAT_RANGE;
 
@@ -224,11 +307,15 @@ export function terrainGrid(): TerrainGrid {
     for (let col = 0; col < cols; col++) {
       const lon = lon0 + ((col + 0.5) / cols) * (lon1 - lon0);
       const kind = classify(lon, lat);
-      cells[row * cols + col] = KIND_INDEX[kind];
-      stats[kind] += 1;
+      cells[row * cols + col] = kind;
+      counts[kind] += 1;
     }
   }
 
+  const stats = Object.fromEntries(TILE_KINDS.map((k, i) => [k, counts[i]!])) as Record<
+    TileKind,
+    number
+  >;
   cached = { cols, rows, cells, stats };
   return cached;
 }

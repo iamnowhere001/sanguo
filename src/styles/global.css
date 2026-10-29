@@ -1057,62 +1057,69 @@ input[type='number'] {
   border-radius: 50%;
 }
 
-/* ── Layout: 三栏工作区 ────────────────────────────────── */
+/* ── Layout: 地图铺满 + 悬浮侧栏 ─────────────────────────── */
+/* 侧栏不再占独立列，而是浮在地图之上的卡片：
+   画布尺寸恒等于整块工作区，收起只是把卡片滑出视野，地图构图（含相机）不动 */
 .game-grid {
+  --overlay-gap: 12px;
+  /* 浮层遮住的横向区间：图例 / 缩放 / 居中提示按它让位 */
+  --hud-inset-l: 0px;
+  --hud-inset-r: 0px;
+  /* 让位后可视区的真实中心相对画布中心的偏移 */
+  --hud-shift: calc((var(--hud-inset-l) - var(--hud-inset-r)) / 2);
+  --ease-overlay: cubic-bezier(0.32, 0.72, 0, 1);
+  position: relative;
   flex: 1;
   min-height: 0;
-  display: grid;
-  grid-template-columns: var(--rail-l) minmax(0, 1fr) var(--rail-r);
+  display: block;
+  overflow: hidden;
   background: var(--bg);
 }
-/* 左右栏可收起：把整条侧栏让给地图，地图边缘保留窄拉手 */
-.game-grid.left-collapsed {
-  grid-template-columns: 0 minmax(0, 1fr) var(--rail-r);
+.game-grid:not(.left-collapsed) {
+  --hud-inset-l: calc(var(--rail-l) + var(--overlay-gap) * 2);
 }
-.game-grid.left-collapsed > .left-panel {
-  display: none;
+.game-grid:not(.right-collapsed) {
+  --hud-inset-r: calc(var(--rail-r) + var(--overlay-gap) * 2);
 }
-.game-grid.right-collapsed {
-  grid-template-columns: var(--rail-l) minmax(0, 1fr) 0;
-}
-.game-grid.right-collapsed > .city-panel {
-  display: none;
-}
-.game-grid.left-collapsed.right-collapsed {
-  grid-template-columns: 0 minmax(0, 1fr) 0;
-}
+/* 拉手骑在卡片内缘上：展开时跟着卡片走，收起后贴住地图边缘 */
 .rail-toggle {
   position: absolute;
   top: 50%;
-  z-index: 6;
+  z-index: 9;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 5px;
-  width: 19px;
+  width: 20px;
   padding: 10px 0 8px;
   border: 1px solid var(--line2);
-  background: rgba(20, 18, 14, 0.86);
+  border-radius: 6px;
+  background: rgba(24, 21, 16, 0.92);
   color: var(--muted);
   cursor: pointer;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
   backdrop-filter: blur(6px);
-  transition: color 0.15s, background 0.15s;
+  transition: color 0.15s, background 0.15s, border-color 0.15s,
+    left 0.26s var(--ease-overlay), right 0.26s var(--ease-overlay);
 }
 .rail-toggle:hover {
   color: var(--paper);
-  background: rgba(38, 34, 25, 0.94);
+  background: rgba(44, 39, 28, 0.96);
+  border-color: rgba(200, 164, 94, 0.55);
 }
 .rail-toggle-left {
-  left: 0;
+  left: calc(var(--overlay-gap) + var(--rail-l) - 10px);
   transform: translateY(-50%);
-  border-left: 0;
-  border-radius: 0 6px 6px 0;
 }
 .rail-toggle-right {
-  right: 0;
+  right: calc(var(--overlay-gap) + var(--rail-r) - 10px);
   transform: translateY(-50%);
-  border-right: 0;
-  border-radius: 6px 0 0 6px;
+}
+.game-grid.left-collapsed .rail-toggle-left {
+  left: 0;
+}
+.game-grid.right-collapsed .rail-toggle-right {
+  right: 0;
 }
 .rail-toggle i {
   font-style: normal;
@@ -1130,13 +1137,49 @@ input[type='number'] {
   background: var(--panel);
   padding: var(--panel-pad);
 }
+/* 悬浮侧栏：只在地图工作区里生效（战斗界面仍是固定栏）。
+   贴边留 12px 空隙，圆角 + 深投影，读作悬在战场上的一张军报 */
+.game-grid > .side-panel {
+  position: absolute;
+  top: var(--overlay-gap);
+  bottom: var(--overlay-gap);
+  z-index: 8;
+  background: linear-gradient(180deg, rgba(30, 27, 20, 0.93), rgba(17, 16, 13, 0.955));
+  border: 1px solid var(--line2);
+  border-radius: 12px;
+  box-shadow:
+    0 26px 56px -26px rgba(0, 0, 0, 0.92),
+    0 2px 8px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(239, 230, 210, 0.055);
+  backdrop-filter: blur(12px) saturate(1.05);
+  transition: transform 0.26s var(--ease-overlay), opacity 0.18s ease-out,
+    visibility 0s linear 0s;
+}
 .left-panel {
-  border-right: 1px solid var(--line);
+  left: var(--overlay-gap);
+  width: var(--rail-l);
   display: flex;
   flex-direction: column;
   gap: var(--sp-4);
   overflow: hidden;
   padding: var(--panel-pad) var(--sp-4);
+}
+/* 收起 = 滑出视野。地图尺寸不变，所以关闭侧栏不会触发重排或相机重算 */
+.game-grid.left-collapsed .left-panel {
+  transform: translateX(calc(-100% - var(--overlay-gap)));
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: transform 0.26s var(--ease-overlay), opacity 0.16s ease-in,
+    visibility 0s linear 0.26s;
+}
+.game-grid.right-collapsed .city-panel {
+  transform: translateX(calc(100% + var(--overlay-gap)));
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: transform 0.26s var(--ease-overlay), opacity 0.16s ease-in,
+    visibility 0s linear 0.26s;
 }
 .left-panel > section {
   min-height: 0;
@@ -1320,7 +1363,8 @@ input[type='number'] {
   white-space: nowrap;
 }
 .city-panel {
-  border-left: 1px solid var(--line);
+  right: var(--overlay-gap);
+  width: var(--rail-r);
   padding: 0;
   display: flex;
   flex-direction: column;
@@ -1482,8 +1526,10 @@ input[type='number'] {
 }
 
 /* ── Map ───────────────────────────────────────────────── */
+/* 地图铺满整块工作区，所有面板都浮在它上面 */
 .map-main {
-  position: relative;
+  position: absolute;
+  inset: 0;
   min-width: 0;
   min-height: 0;
   background: #12110e;
@@ -1507,11 +1553,21 @@ input[type='number'] {
   display: block;
   cursor: default;
 }
-.map-legend {
+/* 图例组：贴地图左上角竖排，浮层展开时整体让位 */
+.map-legends {
   position: absolute;
-  left: var(--sp-4);
+  left: calc(var(--sp-4) + var(--hud-inset-l));
   top: var(--sp-4);
   z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: 244px;
+  pointer-events: none;
+  transition: left 0.26s var(--ease-overlay);
+}
+.map-legend {
   display: grid;
   grid-template-columns: repeat(2, auto);
   gap: 4px 12px;
@@ -1530,12 +1586,8 @@ input[type='number'] {
   gap: 6px;
   white-space: nowrap;
 }
-/* 地形图例：放在左下角，和左上角的势力图例分居两侧 */
+/* 地形图例：跟在势力图例下方，同属左上角的图例组 */
 .map-terrain-legend {
-  position: absolute;
-  left: var(--sp-4);
-  bottom: var(--sp-4);
-  z-index: 3;
   display: flex;
   flex-wrap: wrap;
   gap: 3px 10px;
@@ -1638,11 +1690,11 @@ input[type='number'] {
 }
 .map-hint {
   position: absolute;
-  left: 50%;
+  left: calc(50% + var(--hud-shift));
   bottom: var(--sp-4);
   z-index: 3;
   transform: translateX(-50%);
-  max-width: calc(100% - 32px);
+  max-width: calc(100% - var(--hud-inset-l) - var(--hud-inset-r) - var(--sp-8));
   overflow: hidden;
   text-overflow: ellipsis;
   font-size: 11px;
@@ -1653,6 +1705,7 @@ input[type='number'] {
   border-radius: 20px;
   white-space: nowrap;
   pointer-events: none;
+  transition: left 0.26s var(--ease-overlay);
 }
 .map-hint.accent {
   color: #e3b3a6;
@@ -1664,7 +1717,7 @@ input[type='number'] {
 .march-banner {
   position: absolute;
   top: var(--sp-4);
-  left: 50%;
+  left: calc(50% + var(--hud-shift));
   z-index: 4;
   transform: translateX(-50%);
   display: flex;
@@ -1719,7 +1772,7 @@ input[type='number'] {
   gap: var(--sp-2);
   padding: var(--panel-pad) var(--panel-pad) var(--sp-3);
   border-bottom: 1px solid var(--line);
-  background: linear-gradient(180deg, #1d1a14, var(--panel));
+  background: linear-gradient(180deg, rgba(40, 35, 26, 0.96), rgba(26, 23, 18, 0.9));
 }
 .panel-head h2 {
   font-size: 22px;
@@ -4868,32 +4921,9 @@ input[type='number'] {
     grid-area: actions;
   }
 
+  /* 平板：浮层间距收一点即可，侧栏宽度保持不变（右栏四列数值需要 316 才不折行） */
   .game-grid {
-    flex: 1;
-    grid-template-columns: minmax(0, 1fr) 320px;
-    grid-template-rows: auto minmax(0, 1fr);
-    grid-template-areas:
-      'rail rail'
-      'map city';
-    min-height: 0;
-  }
-  /* 平板：收起左栏时只留地图 + 右栏，收起右栏时只留上面城池条 + 地图 */
-  .game-grid.left-collapsed {
-    grid-template-columns: minmax(0, 1fr) 320px;
-    grid-template-rows: minmax(0, 1fr);
-    grid-template-areas: 'map city';
-  }
-  .game-grid.right-collapsed {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr);
-    grid-template-areas:
-      'rail'
-      'map';
-  }
-  .game-grid.left-collapsed.right-collapsed {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 1fr);
-    grid-template-areas: 'map';
+    --overlay-gap: 10px;
   }
   .top-deck .advisor-strip {
     flex-basis: 300px;
@@ -4902,84 +4932,9 @@ input[type='number'] {
   .advisor-cta {
     display: none;
   }
-
-  /* 左侧栏 → 横向城池条：保留切换能力，不再整块隐藏 */
-  .left-panel {
-    grid-area: rail;
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: var(--sp-2);
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding: var(--sp-2) var(--sp-4);
-    border-right: none;
-    border-bottom: 1px solid var(--line);
-    scrollbar-width: none;
-  }
-  .left-panel::-webkit-scrollbar {
-    display: none;
-  }
-  .left-panel .rail-mine {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: var(--sp-2);
-    flex: none;
-    max-height: none;
-  }
-  .left-panel .rail-mine .section-title {
-    margin: 0;
-    white-space: nowrap;
-  }
-  .left-panel .rail-mine .city-list {
-    flex-direction: row;
-    flex: none;
-    gap: var(--sp-1);
-    overflow: visible;
-  }
-  .left-panel .city-row {
-    grid-template-columns: 8px auto;
-    grid-template-areas: 'dot name';
-    gap: 6px;
-    padding: 4px 9px;
-    border-color: var(--line);
-    background: var(--panel2);
-  }
-  .left-panel .city-row .cmeta,
-  .left-panel .city-row .cres,
-  .left-panel .rail-empty,
-  .left-panel .rail-others,
-  .left-panel .log-section,
-  .left-panel .supply {
-    display: none;
-  }
-  .left-panel .fdot {
-    align-self: center;
-    margin-top: 0;
-  }
-  .map-main {
-    grid-area: map;
-    min-height: 0;
-  }
-
-  .city-panel {
-    grid-area: city;
-    border-left: 1px solid var(--line);
-    border-top: 1px solid var(--line);
-    height: auto;
-    min-height: 0;
-    overflow: hidden;
-  }
   .panel-scroll {
     overflow-y: auto;
     min-height: 0;
-  }
-  .panel-head {
-    position: static;
-  }
-  .panel-foot {
-    position: static;
   }
 
   .battle-top {
@@ -5104,29 +5059,11 @@ input[type='number'] {
   .statusbar {
     padding: 0 var(--sp-3);
   }
+  /* 窄屏：浮层不占布局，只把侧栏再压窄一档 */
   .game-grid {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(170px, 1fr) minmax(240px, 46vh);
-    grid-template-areas:
-      'rail'
-      'map'
-      'city';
-  }
-  .game-grid.left-collapsed {
-    grid-template-rows: minmax(170px, 1fr) minmax(240px, 46vh);
-    grid-template-areas:
-      'map'
-      'city';
-  }
-  .game-grid.right-collapsed {
-    grid-template-rows: auto minmax(170px, 1fr);
-    grid-template-areas:
-      'rail'
-      'map';
-  }
-  .game-grid.left-collapsed.right-collapsed {
-    grid-template-rows: minmax(0, 1fr);
-    grid-template-areas: 'map';
+    --rail-l: 200px;
+    --rail-r: 312px;
+    --overlay-gap: 8px;
   }
   .rail-toggle span {
     display: none;
@@ -5134,9 +5071,6 @@ input[type='number'] {
   .rail-toggle {
     width: 17px;
     padding: 10px 0;
-  }
-  .city-panel {
-    border-left: none;
   }
   .battle-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -6160,10 +6094,7 @@ input[type='number'] {
   }
 
   /* 小屏地图只有 200px 高，图例比地图本身更抢空间 */
-  .map-legend {
-    display: none;
-  }
-  .map-terrain-legend {
+  .map-legends {
     display: none;
   }
 }
@@ -6530,7 +6461,7 @@ input[type='number'] {
 .map-zoom {
   position: absolute;
   top: var(--sp-3);
-  right: var(--sp-3);
+  right: calc(var(--sp-3) + var(--hud-inset-r));
   z-index: 4;
   display: flex;
   align-items: center;
@@ -6540,6 +6471,7 @@ input[type='number'] {
   border: 1px solid var(--line);
   border-radius: 8px;
   backdrop-filter: blur(6px);
+  transition: right 0.26s var(--ease-overlay);
 }
 .map-zoom button {
   min-width: 26px;
@@ -6579,7 +6511,10 @@ input[type='number'] {
     height: 30px;
   }
   .game-grid {
-    grid-template-rows: auto minmax(200px, 1fr) minmax(220px, 42vh);
+    /* 手机上浮层接近满宽抽屉，展开即专注一侧 */
+    --rail-l: min(72vw, 240px);
+    --rail-r: min(86vw, 320px);
+    --overlay-gap: 8px;
   }
 }
 
@@ -6588,7 +6523,7 @@ input[type='number'] {
 .army-hud {
   position: absolute;
   top: var(--sp-4);
-  left: 50%;
+  left: calc(50% + var(--hud-shift));
   z-index: 5;
   transform: translateX(-50%);
   display: flex;

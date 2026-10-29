@@ -287,9 +287,11 @@ export interface GridPoint {
 /**
  * 大地图行军纵队（L 档 · 网格移动）。
  *
- * 部队在网格上自由行军：`at` 为当前格，`path` 为后续要走的格子（末项是目标城格）。
+ * 部队在网格上自由行军：`at` 为当前格，`path` 为后续要走的格子。
+ * **目的地是格，不是城** —— `dest` 才是真值源；`targetCityId` 只是
+ * 「目的地恰好落在某座敌城门外」时派生出来的字段，供文案与旧逻辑读取。
  * 山岭与水域不可通行，其余地形按格计天数，每旬推进 10 天。
- * 抵达敌城格才切入战棋；经过己方城池格不会解散。
+ * 站在敌城门外只是围城，攻城要另下 `ASSAULT`；经过己方城池格不会解散。
  * 武将仍保留 `locationId`（出发城 / 最近己方城），用 `armyId` 标记为在途。
  */
 export interface Army {
@@ -299,12 +301,23 @@ export interface Army {
   originCityId: string;
   /** 最近经过的己方城：战败撤退与中途受阻时回到这里 */
   fromCityId: string;
-  targetCityId: string;
+  /** 目的地格（真值源）。旧档缺失时按 `targetCityId` 的门外格推断。 */
+  dest?: GridPoint;
+  /**
+   * 派生字段：目的地落在某座**敌对 / 中立城**的门外格时等于该城 id，
+   * 否则为空。地图标记与「在途部队」列表靠它显示「往襄阳」。
+   */
+  targetCityId?: string;
   generalIds: string[];
   /** 当前格 */
   at: GridPoint;
-  /** 剩余路径（不含当前格，末项为目标城格） */
+  /** 剩余路径（不含当前格，末项是目的地） */
   path: GridPoint[];
+  /**
+   * 途经点（不含终点）。仅供绘制拐点标记与「途经 N 处」文案；
+   * 真实路线已烘焙进 `path`，读档丢失也不影响行军。
+   */
+  waypoints?: GridPoint[];
   /** 走向下一格已走的天数（0 ≤ legDays < 下一格耗时） */
   legDays: number;
   /**

@@ -7,10 +7,10 @@ import {
 } from '../data/tables/geography';
 import { GATES, type GateFeature } from '../data/tables/gates';
 import {
+  TILE_KINDS,
   cityAnchors,
-  cityTileIndex,
-  isWaterKind,
-  tileKindAt,
+  cityBlocks,
+  terrainGrid,
   type TileKind,
 } from './terrainGrid';
 import type { GridPoint } from '../core/state';
@@ -74,39 +74,84 @@ const keyOf = (col: number, row: number): string => `${col},${row}`;
 const inMap = (col: number, row: number): boolean =>
   col >= 0 && row >= 0 && col < MAP.cols && row < MAP.rows;
 
+// ── 地形掩码 ───────────────────────────────────────────────
+/**
+ * 关港落位要在全图上反复问"这格能不能走 / 是不是水面 / 是不是城墙"。
+ *
+ * 原来每次都走 `tileKindAt()` + `cityTileIndex().wall`（字符串键），
+ * 31 处关港的候选枚举是几十万次调用，冷启动 600 ms 全花在这上面。
+ * 这里把判定预烘成 5 张 `Uint8Array`（248 KB 级），之后只做一次数组读。
+ */
+const KIND = Object.fromEntries(TILE_KINDS.map((k, i) => [k, i])) as Record<TileKind, number>;
+
+interface Masks {
+  /** 陆路可走：水面与山岭以外 */
+  land: Uint8Array;
+  /** 山口地形：山地 / 丘陵 */
+  pass: Uint8Array;
+  /** 内陆水面：江 / 湖 */
+  inland: Uint8Array;
+  /** 任何水面 */
+  water: Uint8Array;
+  /** 城墙 9 格 */
+  wall: Uint8Array;
+}
+
+let maskCache: Masks | null = null;
+
+function masks(): Masks {
+  if (maskCache) return maskCache;
+  const { cols, rows } = MAP;
+  const N = cols * rows;
+  const cells = terrainGrid().cells;
+  const land = new Uint8Array(N);
+  const pass = new Uint8Array(N);
+  const inland = new Uint8Array(N);
+  const water = new Uint8Array(N);
+  for (let i = 0; i < N; i++) {
+    const k = cells[i]!;
+    if (k === KIND.sea || k === KIND.lake || k === KIND.river) {
+      water[i] = 1;
+      if (k !== KIND.sea) inland[i] = 1;
+    } else if (k !== KIND.mountain) {
+      land[i] = 1;
+    }
+    if (k === KIND.mountain || k === KIND.hill) pass[i] = 1;
+  }
+  const wall = new Uint8Array(N);
+  for (const block of Object.values(cityBlocks())) {
+    for (const t of block.tiles) wall[t.row * cols + t.col] = 1;
+  }
+  maskCache = { land, pass, inland, water, wall };
+  return maskCache;
+}
+
+/** 该格在掩码内（掩码外按 false） */
+function on(mask: Uint8Array, col: number, row: number): boolean {
+  return inMap(col, row) && mask[row * MAP.cols + col] === 1;
+}
+
 /** 陆路可走：水面与山岭都不可通行（与行军规则一致） */
 function isLandStep(col: number, row: number): boolean {
-  if (!inMap(col, row)) return false;
-  const kind = tileKindAt(col, row);
-  return !isWaterKind(kind) && kind !== 'mountain';
+  return on(masks().land, col, row);
 }
 
 /** 关防不能压住城墙：城门与关防是两套入口，混在一起会让寻路语义失效 */
 function isCityWall(col: number, row: number): boolean {
-  return cityTileIndex().wall.has(keyOf(col, row));
-}
-
-/** 山口地形：山地与丘陵都算“山体”，可以开凿山道 */
-function isPassTerrain(kind: TileKind): boolean {
-  return kind === 'mountain' || kind === 'hill';
-}
-
-/** 港口只找江 / 湖，不在外海开渡 */
-function isInlandWater(kind: TileKind): boolean {
-  return kind === 'river' || kind === 'lake';
+  return on(masks().wall, col, row);
 }
 
 function walk(
   center: GridPoint,
   dir: [number, number],
-  accept: (col: number, row: number) => boolean,
+  mask: Uint8Array,
   maxSteps: number,
 ): GridPoint[] {
   const out: GridPoint[] = [];
   for (let step = 1; step <= maxSteps; step++) {
     const col = center.col + dir[0] * step;
     const row = center.row + dir[1] * step;
-    if (!inMap(col, row) || !accept(col, row)) break;
+    if (!on(mask, col, row) || isCityWall(col, row)) break;
     out.push({ col, row });
   }
   return out;
@@ -118,10 +163,7 @@ function walk(
  * 行军只走上下左右，纯斜线在规则层是走不通的；每遇到一个对角步，
  * 就在两个正交拐角里挑一个仍属于该地形（水面 / 山体）的格子补进去。
  */
-function connectLane(
-  points: GridPoint[],
-  inside: (col: number, row: number) => boolean,
-): GridPoint[] | null {
+function connectLane(points: GridPoint[], mask: Uint8Array): GridPoint[] | null {
   const out: GridPoint[] = [points[0]!];
   for (let i = 1; i < points.length; i++) {
     const a = out[out.length - 1]!;
@@ -136,13 +178,9 @@ function connectLane(
     const cornerA = { col: a.col + dc, row: a.row };
     const cornerB = { col: a.col, row: a.row + dr };
     const okA =
-      inMap(cornerA.col, cornerA.row) &&
-      inside(cornerA.col, cornerA.row) &&
-      !isCityWall(cornerA.col, cornerA.row);
+      on(mask, cornerA.col, cornerA.row) && !isCityWall(cornerA.col, cornerA.row);
     const okB =
-      inMap(cornerB.col, cornerB.row) &&
-      inside(cornerB.col, cornerB.row) &&
-      !isCityWall(cornerB.col, cornerB.row);
+      on(mask, cornerB.col, cornerB.row) && !isCityWall(cornerB.col, cornerB.row);
     if (!okA && !okB) return null;
     out.push(okA ? cornerA : cornerB, b);
   }
@@ -152,14 +190,12 @@ function connectLane(
 /** 通行线端点旁的可站立滩头 / 登岸格（必须与端点上下左右相邻） */
 function bankOf(
   end: GridPoint,
-  laneSet: Set<string>,
+  laneSet: Set<number>,
   forward: [number, number],
 ): GridPoint | null {
+  const water = masks().water;
   const standable = (c: number, r: number): boolean =>
-    inMap(c, r) &&
-    !laneSet.has(keyOf(c, r)) &&
-    !isWaterKind(tileKindAt(c, r)) &&
-    !isCityWall(c, r);
+    inMap(c, r) && !water[r * MAP.cols + c] && !laneSet.has(r * MAP.cols + c) && !isCityWall(c, r);
   const straight = { col: end.col + forward[0], row: end.row + forward[1] };
   if (Math.abs(forward[0]) + Math.abs(forward[1]) === 1 && standable(straight.col, straight.row)) {
     return straight;
@@ -176,29 +212,31 @@ function bankOf(
 function lineThrough(
   center: GridPoint,
   dir: [number, number],
-  inside: (col: number, row: number) => boolean,
+  mask: Uint8Array,
   maxSteps: number,
 ): { lane: GridPoint[]; approaches: [GridPoint, GridPoint] } | null {
-  const neg = walk(center, [-dir[0], -dir[1]] as [number, number], (c, r) => inside(c, r) && !isCityWall(c, r), maxSteps);
-  const pos = walk(center, dir, (c, r) => inside(c, r) && !isCityWall(c, r), maxSteps);
+  const neg = walk(center, [-dir[0], -dir[1]] as [number, number], mask, maxSteps);
+  const pos = walk(center, dir, mask, maxSteps);
   if (neg.length === 0 && pos.length === 0) {
     // 中心本身是普通地形时，仍允许“一格关门”，但两侧必须是陆地
     const endA = { col: center.col - dir[0], row: center.row - dir[1] };
     const endB = { col: center.col + dir[0], row: center.row + dir[1] };
+    const water = masks().water;
     if (
       inMap(endA.col, endA.row) &&
       inMap(endB.col, endB.row) &&
-      !isWaterKind(tileKindAt(endA.col, endA.row)) &&
-      !isWaterKind(tileKindAt(endB.col, endB.row))
+      !water[endA.row * MAP.cols + endA.col] &&
+      !water[endB.row * MAP.cols + endB.col]
     ) {
       return { lane: [center], approaches: [endA, endB] };
     }
     return null;
   }
 
-  const lane = connectLane([...neg.reverse(), center, ...pos], inside);
+  const lane = connectLane([...neg.reverse(), center, ...pos], mask);
   if (!lane) return null;
-  const laneSet = new Set(lane.map((p) => keyOf(p.col, p.row)));
+  const cols = MAP.cols;
+  const laneSet = new Set<number>(lane.map((p) => p.row * cols + p.col));
   const before = bankOf(lane[0]!, laneSet, [-dir[0], -dir[1]] as [number, number]);
   const after = bankOf(lane[lane.length - 1]!, laneSet, dir);
   if (!before || !after) return null;
@@ -211,26 +249,23 @@ interface Candidate {
   score: number;
 }
 
-function buildPassSite(gate: GateFeature, mid: { col: number; row: number }, used: Set<string>): GateSite | null {
+function buildPassSite(gate: GateFeature, mid: { col: number; row: number }, taken: Uint8Array): GateSite | null {
+  const m = masks();
+  const cols = MAP.cols;
   // 不要只看最近的一格：同一道山脊可能有更薄的山口。
   // 扫描周边所有山体格，按「离道路中点近 + 山道短」选一条真正能穿过去的口子。
   const centers = findAllNear(
     mid,
-    (c, r) => isPassTerrain(tileKindAt(c, r)) && !isCityWall(c, r) && !used.has(keyOf(c, r)),
+    (c, r) => on(m.pass, c, r) && !taken[r * cols + c],
     24,
   );
 
   let best: Candidate | null = null;
   for (const center of centers) {
     for (const dir of DIRS) {
-      const line = lineThrough(
-        center,
-        dir,
-        (c, r) => isPassTerrain(tileKindAt(c, r)),
-        36,
-      );
+      const line = lineThrough(center, dir, m.pass, 36);
       if (!line) continue;
-      if (line.lane.some((p) => used.has(keyOf(p.col, p.row)))) continue;
+      if (line.lane.some((p) => taken[p.row * cols + p.col])) continue;
       const score =
         line.lane.length * 0.35 +
         Math.hypot(center.col - mid.col, center.row - mid.row) +
@@ -256,7 +291,7 @@ function buildPassSite(gate: GateFeature, mid: { col: number; row: number }, use
 
   const land = findNearest(
     mid,
-    (c, r) => !isWaterKind(tileKindAt(c, r)) && !isCityWall(c, r) && !used.has(keyOf(c, r)),
+    (c, r) => on(m.land, c, r) && !taken[r * cols + c],
     14,
   );
   if (!land) return null;
@@ -273,8 +308,15 @@ function buildPassSite(gate: GateFeature, mid: { col: number; row: number }, use
 // ── 渡口有效性 ─────────────────────────────────────────────
 /** 滩头到最近城池的最大陆路步数；超过即视为“渡过去也到不了城” */
 const MAX_APPROACH_CITY_DIST = 120;
-/** 渡线至少要跨过几格水面，避免把一条小水沟当成江面 */
+/** 渡口至少要跨过几格水面，避免把一条小水沟当成江面 */
 const MIN_PORT_WATER = 3;
+/**
+ * 每个港口只看最近的一批水面中心。
+ *
+ * 大湖 / 江口附近半径 16 内能有上千格水面，逐格 × 8 方向造渡线是几十万次分配；
+ * `findAllNear` 按距离由近到远返回，取前面这批就足够覆盖“离道路最近”的候选。
+ */
+const PORT_CENTER_LIMIT = 256;
 
 let cityDistanceCache: Float64Array | null = null;
 
@@ -318,6 +360,7 @@ function cityLandDistance(): Float64Array {
 }
 
 let detourMark = new Uint32Array(0);
+let detourQueue = new Int32Array(0);
 let detourEpoch = 0;
 
 /**
@@ -326,36 +369,43 @@ let detourEpoch = 0;
  * 真正的渡口：下船后必须绕很远（或根本绕不过去）才能回到另一岸。
  * 若几十步内就能从滩头 A 沿岸走到滩头 B，那这条线只是“沿着河岸划水”，
  * 不是渡口 —— 会给寻路制造假的捷径。
+ *
+ * 实现上按层推进、队列预分配：这里一次冷启动要跑几十次，
+ * 每次都新建 frontier 数组会额外付出大量 GC。
  */
 function landDetour(a: GridPoint, b: GridPoint, cap: number): number {
-  const { cols, rows } = MAP;
-  const N = cols * rows;
+  const { cols } = MAP;
+  const N = cols * MAP.rows;
   if (detourMark.length !== N) detourMark = new Uint32Array(N);
+  if (detourQueue.length !== N) detourQueue = new Int32Array(N);
   const mark = detourMark;
+  const queue = detourQueue;
   const epoch = ++detourEpoch;
   const start = a.row * cols + a.col;
   const goal = b.row * cols + b.col;
   if (start === goal) return 0;
+  const land = masks().land;
   mark[start] = epoch;
-  let frontier: number[] = [start];
-  for (let d = 1; d <= cap; d++) {
-    const next: number[] = [];
-    for (const i of frontier) {
+  queue[0] = start;
+  let head = 0;
+  let tail = 1;
+  for (let d = 1; d <= cap && head < tail; d++) {
+    const levelEnd = tail;
+    while (head < levelEnd) {
+      const i = queue[head++]!;
       const col = i % cols;
       const row = (i - col) / cols;
       for (const [dx, dy] of ORTHO) {
         const nc = col + dx;
         const nr = row + dy;
-        if (!isLandStep(nc, nr)) continue;
+        if (nc < 0 || nr < 0 || nc >= cols || nr >= MAP.rows) continue;
         const ni = nr * cols + nc;
-        if (mark[ni] === epoch) continue;
+        if (!land[ni] || mark[ni] === epoch) continue;
         if (ni === goal) return d;
         mark[ni] = epoch;
-        next.push(ni);
+        queue[tail++] = ni;
       }
     }
-    if (next.length === 0) break;
-    frontier = next;
   }
   return -1;
 }
@@ -378,8 +428,10 @@ function isRealPortLine(line: { lane: GridPoint[]; approaches: [] | [GridPoint, 
   if (line.approaches.length < 2) return false;
   const a = line.approaches[0]!;
   const b = line.approaches[1]!;
-  const water = line.lane.filter((p) => isWaterKind(tileKindAt(p.col, p.row))).length;
-  if (water < MIN_PORT_WATER) return false;
+  const water = masks().water;
+  let crossed = 0;
+  for (const p of line.lane) if (water[p.row * MAP.cols + p.col]) crossed++;
+  if (crossed < MIN_PORT_WATER) return false;
 
   const dist = cityLandDistance();
   const da = dist[a.row * MAP.cols + a.col]!;
@@ -400,34 +452,31 @@ function isRealPortLine(line: { lane: GridPoint[]; approaches: [] | [GridPoint, 
  *
  * 这样 576×432 的大地图上，港口才是真正的路网节点，而不是地图装饰。
  */
-function buildPortSite(gate: GateFeature, mid: { col: number; row: number }, used: Set<string>): GateSite | null {
+function buildPortSite(gate: GateFeature, mid: { col: number; row: number }, taken: Uint8Array): GateSite | null {
+  const m = masks();
+  const cols = MAP.cols;
   const radius = 16;
   const centers = findAllNear(
     mid,
-    (c, r) => isInlandWater(tileKindAt(c, r)) && !isCityWall(c, r) && !used.has(keyOf(c, r)),
+    (c, r) => on(m.inland, c, r) && !taken[r * cols + c],
     radius,
-  );
+  ).slice(0, PORT_CENTER_LIMIT);
   const cityDist = cityLandDistance();
 
   // 先用便宜的几何条件筛一遍，再对少量候选做“绕行检测”（BFS 较贵）。
   const candidates: Candidate[] = [];
   for (const center of centers) {
     for (const dir of DIRS) {
-      const line = lineThrough(
-        center,
-        dir,
-        (c, r) => isInlandWater(tileKindAt(c, r)) || isWaterKind(tileKindAt(c, r)),
-        40,
-      );
+      const line = lineThrough(center, dir, m.water, 40);
       if (!line) continue;
-      if (line.lane.some((p) => used.has(keyOf(p.col, p.row)))) continue;
+      if (line.lane.some((p) => taken[p.row * cols + p.col])) continue;
       // 渡线必须真的跨水，而不是沿着岸线走
-      if (!line.lane.some((p) => isInlandWater(tileKindAt(p.col, p.row)))) continue;
-      const water = line.lane.filter((p) => isWaterKind(tileKindAt(p.col, p.row))).length;
+      if (!line.lane.some((p) => on(m.inland, p.col, p.row))) continue;
+      const water = line.lane.filter((p) => on(m.water, p.col, p.row)).length;
       if (water < MIN_PORT_WATER) continue;
       const [a, b] = line.approaches;
-      const da = cityDist[a.row * MAP.cols + a.col]!;
-      const db = cityDist[b.row * MAP.cols + b.col]!;
+      const da = cityDist[a.row * cols + a.col]!;
+      const db = cityDist[b.row * cols + b.col]!;
       if (!Number.isFinite(da) || !Number.isFinite(db)) continue;
       if (da > MAX_APPROACH_CITY_DIST || db > MAX_APPROACH_CITY_DIST) continue;
       const score =
@@ -457,13 +506,13 @@ function buildPortSite(gate: GateFeature, mid: { col: number; row: number }, use
   // 正常情况下不会走到这里；真走到时 `gate-check` 会把它列为可疑落位。
   const center = findNearest(
     mid,
-    (c, r) => isInlandWater(tileKindAt(c, r)) && !isCityWall(c, r) && !used.has(keyOf(c, r)),
+    (c, r) => on(m.inland, c, r) && !taken[r * cols + c],
     28,
   );
   if (!center) {
     const water = findNearest(
       mid,
-      (c, r) => isWaterKind(tileKindAt(c, r)) && !isCityWall(c, r) && !used.has(keyOf(c, r)),
+      (c, r) => on(m.water, c, r) && !taken[r * cols + c],
       18,
     );
     if (!water) return null;
@@ -472,15 +521,10 @@ function buildPortSite(gate: GateFeature, mid: { col: number; row: number }, use
 
   let fallback: Candidate | null = null;
   for (const dir of DIRS) {
-    const line = lineThrough(
-      center,
-      dir,
-      (c, r) => isInlandWater(tileKindAt(c, r)) || isWaterKind(tileKindAt(c, r)),
-      40,
-    );
+    const line = lineThrough(center, dir, m.water, 40);
     if (!line) continue;
-    if (!line.lane.some((p) => isInlandWater(tileKindAt(p.col, p.row)))) continue;
-    if (line.lane.some((p) => used.has(keyOf(p.col, p.row)))) continue;
+    if (!line.lane.some((p) => on(m.inland, p.col, p.row))) continue;
+    if (line.lane.some((p) => taken[p.row * cols + p.col])) continue;
     const score =
       line.lane.length +
       Math.hypot(center.col - mid.col, center.row - mid.row) * 0.55 +
@@ -582,9 +626,9 @@ let centerCache: Map<string, GateSite> | null = null;
 export function gateSites(): Record<string, GateSite> {
   if (cache) return cache;
 
-  const used = new Set<string>();
+  const cols = MAP.cols;
   // 先占住城墙：关防通行线不得穿过任何城池的 3×3 城墙
-  for (const key of cityTileIndex().wall.keys()) used.add(key);
+  const taken = new Uint8Array(masks().wall);
   const out: Record<string, GateSite> = {};
   // 关隘先占山脊，其次小路（同样走山脊，但落位锚点各不相同），最后港口。
   const rank = (kind: GateFeature['kind']): number =>
@@ -596,10 +640,10 @@ export function gateSites(): Record<string, GateSite> {
     if (!mid) continue;
     const site =
       gate.kind === 'port'
-        ? buildPortSite(gate, mid, used)
-        : buildPassSite(gate, mid, used);
+        ? buildPortSite(gate, mid, taken)
+        : buildPassSite(gate, mid, taken);
     if (!site) continue;
-    for (const p of site.lane) used.add(keyOf(p.col, p.row));
+    for (const p of site.lane) taken[p.row * cols + p.col] = 1;
     out[gate.id] = site;
   }
   cache = out;

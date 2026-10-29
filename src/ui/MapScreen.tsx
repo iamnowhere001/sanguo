@@ -30,6 +30,24 @@ import { GATE_KIND_LABEL } from '../data/tables/gates';
 
 const XUN_LABEL = ['上旬', '中旬', '下旬'];
 
+/**
+ * 浮层侧栏的初始折叠状态。
+ *
+ * 窄屏（手机 / 竖屏平板）上两张浮层叠起来会盖满整张地图，
+ * 所以没有历史偏好时先收起，让首屏落在战场上；用户展开过一次就记住。
+ */
+function readRailCollapsed(key: string): boolean {
+  try {
+    const saved = localStorage.getItem(key);
+    if (saved !== null) return saved === '1';
+  } catch {
+    // 隐私模式下 localStorage 不可读，退回按屏幕宽度判断
+  }
+  return typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+    ? window.matchMedia('(max-width: 900px)').matches
+    : false;
+}
+
 export function MapScreen() {
   const store = useGameStore();
   const state = store.state as GameState;
@@ -62,11 +80,9 @@ export function MapScreen() {
   const [rosterOpen, setRosterOpen] = useState(false);
   const [factionDipOpen, setFactionDipOpen] = useState(false);
   const [quitOpen, setQuitOpen] = useState(false);
-  const [leftCollapsed, setLeftCollapsed] = useState(
-    () => typeof localStorage !== 'undefined' && localStorage.getItem('map.leftCollapsed') === '1',
-  );
-  const [rightCollapsed, setRightCollapsed] = useState(
-    () => typeof localStorage !== 'undefined' && localStorage.getItem('map.rightCollapsed') === '1',
+  const [leftCollapsed, setLeftCollapsed] = useState(() => readRailCollapsed('map.leftCollapsed'));
+  const [rightCollapsed, setRightCollapsed] = useState(() =>
+    readRailCollapsed('map.rightCollapsed'),
   );
   const [helpOpen, setHelpOpen] = useState(false);
   const [councilOpen, setCouncilOpen] = useState(false);
@@ -80,6 +96,20 @@ export function MapScreen() {
       // 隐私模式下 localStorage 可能不可写，折叠状态不持久也不影响使用
     }
   }, [leftCollapsed, rightCollapsed]);
+
+  /** 手机宽度下两张浮层会互相盖住，展开一张时顺手收起另一张 */
+  const phoneWidth = () =>
+    typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 720px)').matches;
+  const toggleLeftRail = () => {
+    const next = !leftCollapsed;
+    setLeftCollapsed(next);
+    if (next && phoneWidth()) setRightCollapsed(true);
+  };
+  const toggleRightRail = () => {
+    const next = !rightCollapsed;
+    setRightCollapsed(next);
+    if (next && phoneWidth()) setLeftCollapsed(true);
+  };
 
   /** 当前规划用的出发城：出征模式下锁定出发城，否则跟随选中城池 */
   const routeFromCityId = marchFrom ?? selectedCityId;
@@ -633,7 +663,7 @@ export function MapScreen() {
             aria-expanded={!leftCollapsed}
             aria-label={leftCollapsed ? '展开左侧城池栏' : '收起左侧城池栏'}
             title={leftCollapsed ? '展开城池 / 关防 / 军情' : '收起左侧栏，放大战场'}
-            onClick={() => setLeftCollapsed((v) => !v)}
+            onClick={toggleLeftRail}
           >
             <i>{leftCollapsed ? '›' : '‹'}</i>
             <span>{leftCollapsed ? '城池' : '收起'}</span>
@@ -644,7 +674,7 @@ export function MapScreen() {
             aria-expanded={!rightCollapsed}
             aria-label={rightCollapsed ? '展开右侧详情栏' : '收起右侧详情栏'}
             title={rightCollapsed ? '展开城池 / 关防详情' : '收起右侧栏，放大战场'}
-            onClick={() => setRightCollapsed((v) => !v)}
+            onClick={toggleRightRail}
           >
             <i>{rightCollapsed ? '‹' : '›'}</i>
             <span>{rightCollapsed ? '详情' : '收起'}</span>

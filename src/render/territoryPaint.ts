@@ -12,11 +12,20 @@ import { NO_OWNER, type TerritoryField } from '../systems/territory';
  * - `fill`：势力色，alpha 低，负责"大片铺色"；
  * - `edge`：边界像素，深墨色，放大模糊后成为"墨线"。
  *
- * 分辨率取 2 px/格：全图 1152×864，两张合计约 8 MB。
+ * 分辨率取 2 px/格（铺色）与 3 px/格（墨线），两张合计约 17 MB。
  * 版图本身是模糊的，再高的分辨率没有意义。
  */
 
 const SCALE = 2;
+/**
+ * 墨线单独用更高分辨率（3 px/格）。
+ *
+ * 铺色是"大片晕染"，2 px/格放大后本来就该模糊；但墨线是边界本身，
+ * 720% 下 2 px/格要摊到 5 倍多设备像素，再叠上烘焙模糊就糊成一片。
+ * 提到 3 px/格后同一倍率只放大 3.6 倍，墨迹的粗细变化还看得出来。
+ * 代价是多 9 MB 内存，只在版图变化时重烘一次。
+ */
+const EDGE_SCALE = 3;
 /**
  * 铺色不透明度。
  *
@@ -43,7 +52,7 @@ export interface TerritoryPaint {
  * 直接用原色做 multiply，纸底会被压成"死色"（尤其深蓝、深绿），
  * 整张图像蒙了层塑料膜。提亮 28% 后色相还在，纸的明暗还透得出来。
  */
-const WHITEN = 0.15;
+const WHITEN = 0.28;
 
 function hexToRgb(hex: string): [number, number, number] {
   const m = /^#([0-9a-f]{6})$/i.exec(hex);
@@ -131,19 +140,19 @@ export function bakeTerritory(
   edgeCtx.putImageData(edgeImg, 0, 0);
 
   // ③ 放大 + 模糊：得到水墨边缘
-  const upscale = (src: HTMLCanvasElement, blur: number): HTMLCanvasElement | null => {
-    const out = makeCanvas(cols * SCALE, rows * SCALE);
+  const upscale = (src: HTMLCanvasElement, scale: number, blur: number): HTMLCanvasElement | null => {
+    const out = makeCanvas(cols * scale, rows * scale);
     const ctx = out?.getContext('2d');
     if (!out || !ctx) return null;
     ctx.imageSmoothingEnabled = true;
     if (supportsFilter(ctx)) ctx.filter = `blur(${blur}px)`;
-    ctx.drawImage(src, 0, 0, cols * SCALE, rows * SCALE);
+    ctx.drawImage(src, 0, 0, cols * scale, rows * scale);
     if (supportsFilter(ctx)) ctx.filter = 'none';
     return out;
   };
 
-  const fill = upscale(base, SCALE * 0.9);
-  const edge = upscale(edgeBase, SCALE * 0.55);
+  const fill = upscale(base, SCALE, SCALE * 0.9);
+  const edge = upscale(edgeBase, EDGE_SCALE, EDGE_SCALE * 0.4);
   if (!fill || !edge) return null;
 
   return { fill, edge, scale: SCALE };
@@ -165,13 +174,13 @@ export function territoryPaint(
 
 
 /**
- * 染色强度随缩放变化。
+ * 染色强度随缩放变化（I7 · 7.2 真机调参）。
  *
- * - 20%（全图）：0.87 —— 这时玩家的唯一问题是"谁的地盘"，色块必须一眼分清；
- * - 100%（州郡）：0.55 —— 看得清归属，也看得清山川；
- * - 200% 以上：线性降到 0.15 —— 近景是看城池、看部队、看地形的，染色退成底噪。
+ * - 20%（全图）：0.71 —— 这时唯一的问题是"谁的地盘"，色块要一眼分清；
+ * - 100%（州郡）：0.42 —— 既要看清归属，也要看清山川，太浓会把纸底压成灰紫；
+ * - 200% 以上：继续线性淡出到 0.10 —— 近景看城池与地形，染色退成底噪。
  */
 export function territoryWash(zoom: number): number {
-  if (zoom <= 1) return 0.55 + (1 - zoom) * 0.4;
-  return Math.max(0.15, 0.55 - (zoom - 1) * 0.18);
+  if (zoom <= 1) return 0.42 + (1 - zoom) * 0.36;
+  return Math.max(0.1, 0.42 - (zoom - 1) * 0.16);
 }

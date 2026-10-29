@@ -1,6 +1,6 @@
 import { BALANCE } from '../data/tables/balance';
 import { MAP } from '../data/tables/geography';
-import { marchDaysForArmy, marchDaysOfTile, TILE_MARCH_DAYS } from '../data/tables/marchCost';
+import { inMap, marchDaysForArmy, marchDaysOfTile, TILE_MARCH_DAYS } from '../data/tables/marchCost';
 import type { Army, GameState, General, GridPoint } from '../core/state';
 import { defendersOf } from '../core/state';
 import { done, fail, type OpResult } from '../core/result';
@@ -148,7 +148,7 @@ class TileHeap {
 }
 
 // ── 寻路 ──────────────────────────────────────────────────
-interface MarchField {
+export interface MarchField {
   start: GridPoint;
   dist: Float64Array;
   prev: Int32Array;
@@ -347,7 +347,7 @@ function blockedExitKeys(s: GameState, cityId: string): Set<number> {
 export interface RouteInfo {
   /** 出城后的第一格（部队出生落位），即某座门的门外格 */
   exit: GridPoint;
-  /** 从 exit 之后开始，最后一项是目标城的门外格 */
+  /** 从 exit 之后开始，最后一项是目的地 */
   path: GridPoint[];
   days: number;
   fortificationBonus: number;
@@ -356,23 +356,126 @@ export interface RouteInfo {
   gate: GateSide | null;
 }
 
-/** 两城之间的网格行军路线；不可达返回 null */
-export function routeForArmy(
+/**
+ * 出征目的地。
+ *
+ * **目的地是格，不是城。** 城只是格的一种吸附语义：
+ * - `city` 表示玩家点的是城郭，落位由四门中耗时最短的那座门外格决定；
+ * - `tile` 表示玩家点的是具体一格，落位就是那一格。
+ *
+ * 之所以不直接把城郭格当成目的地，是因为城 3×3 里全是城墙，
+ * 真正能站的是门外格；把「选哪座门」留给寻路去挑，比让玩家再点一次更省事。
+ */
+export type DispatchTarget =
+  | { kind: 'city'; cityId: string }
+  | { kind: 'tile'; tile: GridPoint };
+
+export interface DispatchResolve {
+  ok: boolean;
+  target?: DispatchTarget;
+  reason?: string;
+}
+
+/** 目的地贴着的敌城（可围城）；不贴任何敌城门外格时返回 null */
+function siegeAt(s: GameState, factionId: string, tile: GridPoint): string | null {
+  const hit = approachTileAt(tile.col, tile.row);
+  if (!hit) return null;
+  const city = s.cities[hit.cityId];
+  if (!city || city.ownerId === factionId) return null;
+  return canAttackFactions(s, factionId, city.ownerId) ? city.id : null;
+}
+
+/**
+ * 把一次地图点击解析成合法目的地。
+ *
+ * 顺序：可通行 → 关防封锁 → 占位 → 城郭吸附。
+ * 城郭（含城门格）会吸附成 `{ kind: 'city' }`，由寻路挑最近的门。
+ */
+export function resolveDispatchDest(
+  s: GameState,
+  factionId: string,
+  tile: GridPoint,
+): DispatchResolve {
+  if (!inMap(tile.col, tile.row)) return { ok: false, reason: '此处不在地图内' };
+  const site = gateSiteAt(tile.col, tile.row);
+  if (site && gateBlockedFor(s, site.gate.id, factionId)) {
+    return { ok: false, reason: `「${site.gate.name}」被敌军封锁，须先攻关` };
+  }
+  const wall = wallTileAt(tile.col, tile.row);
+  if (wall) {
+    const city = s.cities[wall.cityId];
+    if (!city) return { ok: false, reason: '城墙壁垒，须走城门' };
+    if (approachesOf(s, city.id).length === 0) {
+      return { ok: false, reason: `${city.name} 四门皆不可通行` };
+    }
+    return { ok: true, target: { kind: 'city', cityId: city.id } };
+  }
+  if (!Number.isFinite(marchDaysForArmy(tile.col, tile.row))) {
+    return { ok: false, reason: '此处不可通行（山岭 / 水域）' };
+  }
+  const occupant = armyAtTile(s, tile.col, tile.row);
+  if (occupant && occupant.factionId !== factionId) {
+    return { ok: false, reason: '该格已有敌军' };
+  }
+  if (occupant && occupant.factionId === factionId) {
+    return { ok: false, reason: '该格已有我方部队' };
+  }
+  return { ok: true, target: { kind: 'tile', tile: { col: tile.col, row: tile.row } } };
+}
+
+/** 一次出征的完整方案：出哪个门、走哪条路、几天到、到了算什么 */
+export interface DispatchPlan {
+  /** 目的地格（城郭已吸附到门外格） */
+  dest: GridPoint;
+  /** 出城后的第一格（部队出生落位） */
+  exit: GridPoint;
+  /** 从 exit 之后开始，最后一项是 dest；一定非空 */
+  path: GridPoint[];
+  /** exit → dest 的天数 */
+  days: number;
+  /** 目的地贴着敌城门外格：抵达即可围城，攻城仍需另下指令 */
+  siegeCityId: string | null;
+  /** 目的地是己方城池：抵达城心后自动入城解散 */
+  homeCityId: string | null;
+  fortificationBonus: number;
+  waterCrossing: boolean;
+  gate: GateSide | null;
+}
+
+/**
+ * 规划一次出征。
+ *
+ * 出发点取城心：城 3×3 里只有城心能站，四门是唯一出口，
+ * 因此 Dijkstra 从城心起步，再把路径截到「自家门外格」作为部队的实际出生点。
+ * 出发城被堵住的门外格会预先加入禁行集，让部队绕别的门出城。
+ */
+export function planDispatch(
   s: GameState,
   factionId: string,
   fromCityId: string,
-  targetCityId: string,
-): RouteInfo | null {
-  if (fromCityId === targetCityId) return null;
+  target: DispatchTarget,
+): DispatchPlan | null {
   if (s.cities[fromCityId]?.ownerId !== factionId) return null;
-  const target = s.cities[targetCityId];
-  if (!target) return null;
-  if (target.ownerId === factionId) return null;
-  if (!canAttackFactions(s, factionId, target.ownerId)) return null;
   const fromBlock = blockOf(fromCityId);
   if (!fromBlock) return null;
 
-  const goals = approachesOf(s, targetCityId);
+  let goals: GridPoint[];
+  let homeCityId: string | null = null;
+  if (target.kind === 'city') {
+    if (!s.cities[target.cityId]) return null;
+    if (target.cityId === fromCityId) return null;
+    if (s.cities[target.cityId]!.ownerId === factionId) {
+      // 回防己方城：目的地是城心，抵达即入城解散（与旧「回师」一致）
+      const block = blockOf(target.cityId);
+      if (!block) return null;
+      goals = [{ col: block.col, row: block.row }];
+      homeCityId = target.cityId;
+    } else {
+      goals = approachesOf(s, target.cityId);
+    }
+  } else {
+    goals = [target.tile];
+  }
   if (goals.length === 0) return null;
 
   const field = marchField(
@@ -394,16 +497,14 @@ export function routeForArmy(
   const full = tracePath(field, best.goal);
   if (!full || full.length === 0) return null;
 
-  // 城心 → 门格 → 门外格 → …：找到第一个「本城门外格」作为出生点
-  let exitIdx = full.findIndex((p) => {
-    const hit = approachTileAt(p.col, p.row);
-    return hit?.cityId === fromCityId;
-  });
-  if (exitIdx < 0) exitIdx = 0;
-
+  // 城心 → 门格 → 门外格 → …：找到「本城门外格」作为出生点
+  const exitIdx = full.findIndex((p) => approachTileAt(p.col, p.row)?.cityId === fromCityId);
+  if (exitIdx < 0) return null;
   const exit = full[exitIdx]!;
   const path = full.slice(exitIdx + 1);
-  const days = field.dist[best.goal.row * MAP.cols + best.goal.col]!;
+  // 目的地就在自家门口：没有可走的路，也不算一次出征
+  if (path.length === 0) return null;
+
   const exitDays = field.dist[exit.row * MAP.cols + exit.col]!;
   const gate =
     gatesOf(s, fromCityId).find(
@@ -411,11 +512,38 @@ export function routeForArmy(
     )?.side ?? null;
 
   return {
+    dest: best.goal,
     exit,
     path,
-    days: Math.max(0, days - exitDays),
+    days: Math.max(0, best.days - exitDays),
+    siegeCityId: homeCityId ? null : siegeAt(s, factionId, best.goal),
+    homeCityId,
     ...gateSummaryOf(full),
     gate,
+  };
+}
+
+/** 两城之间的网格行军路线；不可达返回 null（旧签名，AI 与测试仍在用） */
+export function routeForArmy(
+  s: GameState,
+  factionId: string,
+  fromCityId: string,
+  targetCityId: string,
+): RouteInfo | null {
+  if (fromCityId === targetCityId) return null;
+  const target = s.cities[targetCityId];
+  if (!target) return null;
+  if (target.ownerId === factionId) return null;
+  if (!canAttackFactions(s, factionId, target.ownerId)) return null;
+  const plan = planDispatch(s, factionId, fromCityId, { kind: 'city', cityId: targetCityId });
+  if (!plan) return null;
+  return {
+    exit: plan.exit,
+    path: plan.path,
+    days: plan.days,
+    fortificationBonus: plan.fortificationBonus,
+    waterCrossing: plan.waterCrossing,
+    gate: plan.gate,
   };
 }
 
@@ -655,8 +783,8 @@ export function moveArmyTo(s: GameState, armyId: string, to: GridPoint): MoveOut
 }
 
 /** 部队本旬还能走到的格子（移动力高亮用） */
-export function armyReach(s: GameState, army: Army): Map<string, number> {
-  const field = marchField(s, army.factionId, army.at);
+export function armyReach(s: GameState, army: Army, cached?: MarchField): Map<string, number> {
+  const field = cached ?? marchField(s, army.factionId, army.at);
   const budget = armyMp(army);
   const out = new Map<string, number>();
   for (let row = 0; row < MAP.rows; row++) {
@@ -671,9 +799,117 @@ export function armyReach(s: GameState, army: Army): Map<string, number> {
 }
 
 /** 取到某一格的路径（供地图画预览线） */
-export function armyPreviewPath(s: GameState, army: Army, to: GridPoint): GridPoint[] {
-  const field = marchField(s, army.factionId, army.at, undefined, [to]);
+export function armyPreviewPath(
+  s: GameState,
+  army: Army,
+  to: GridPoint,
+  cached?: MarchField,
+): GridPoint[] {
+  const field = cached ?? marchField(s, army.factionId, army.at, undefined, [to]);
   return tracePath(field, to) ?? [];
+}
+
+// ── 出征派遣（未成军先看路）────────────────────────────────
+/**
+ * 出征预览用的行军场：进入派遣模式时算一次，之后 hover 只做 tracePath。
+ *
+ * 出发点与 `planDispatch` 一致取城心，因此这张场同时能回答
+ * 「可达范围」和「到某一格怎么走」两个问题，避免每次悬停都重跑全图 Dijkstra。
+ */
+export interface DispatchField {
+  field: MarchField;
+  /** 本旬移动力（天），按出发城烽燧加成算 */
+  mp: number;
+  speed: number;
+}
+
+export function dispatchField(
+  s: GameState,
+  factionId: string,
+  fromCityId: string,
+): DispatchField | null {
+  if (s.cities[fromCityId]?.ownerId !== factionId) return null;
+  const fromBlock = blockOf(fromCityId);
+  if (!fromBlock) return null;
+  const speed = 1 + beaconMarchBonusOf(s, fromCityId);
+  return {
+    field: marchField(
+      s,
+      factionId,
+      { col: fromBlock.col, row: fromBlock.row },
+      blockedExitKeys(s, fromCityId),
+    ),
+    mp: Math.round(MARCH_DAYS_PER_XUN * speed),
+    speed,
+  };
+}
+
+/**
+ * 后续可达的提示圈：3 旬。
+ *
+ * 目的地本身没有任何路程上限（多旬行军令会一直续走），但把整块大陆都点亮
+ * 既不可读也画不动，所以只铺 3 旬的「第二圈」，更远的格仍然可点。
+ */
+export const DISPATCH_HINT_XUN = 3;
+
+export interface DispatchReach {
+  /** 本旬可达：实色填充 + 实线边界 */
+  within: Set<string>;
+  /** 后续可达：仅虚线边界 */
+  beyond: Set<string>;
+}
+
+export function dispatchReachOf(
+  s: GameState,
+  df: DispatchField,
+  fromCityId: string,
+  factionId: string = s.playerFactionId,
+): DispatchReach {
+  const within = new Set<string>();
+  const beyond = new Set<string>();
+  const limit = df.mp * DISPATCH_HINT_XUN;
+
+  // 城池 3×3 一律不点亮（城墙壁垒），只留己方城心作为「入城」落点
+  const blockIdx = new Set<number>();
+  for (const block of Object.values(cityBlocks())) {
+    for (const t of block.tiles) blockIdx.add(t.row * MAP.cols + t.col);
+  }
+  const fromBlock = blockOf(fromCityId);
+  const fromTiles = new Set<number>();
+  if (fromBlock) {
+    for (const t of fromBlock.tiles) fromTiles.add(t.row * MAP.cols + t.col);
+  }
+
+  for (let row = 0; row < MAP.rows; row++) {
+    for (let col = 0; col < MAP.cols; col++) {
+      const i = row * MAP.cols + col;
+      if (fromTiles.has(i)) continue;
+      const d = df.field.dist[i]!;
+      if (!Number.isFinite(d) || d <= 0 || d > limit) continue;
+      if (blockIdx.has(i)) {
+        const center = cityAtCenter(col, row);
+        if (!center || s.cities[center]?.ownerId !== factionId) continue;
+      }
+      (d <= df.mp ? within : beyond).add(keyOf(col, row));
+    }
+  }
+  return { within, beyond };
+}
+
+/** 到某一格的预览路径（含城心 → 门外格那一段，画出来就是「出哪座门」） */
+export function dispatchPreviewOf(df: DispatchField, dest: GridPoint): GridPoint[] {
+  return tracePath(df.field, dest) ?? [];
+}
+
+/** 本旬走完时停在哪一格；整条路都在本旬内则返回 null（当旬即达） */
+export function firstLegEndOf(df: DispatchField, path: GridPoint[]): GridPoint | null {
+  let last: GridPoint | null = null;
+  for (const p of path) {
+    const d = df.field.dist[p.row * MAP.cols + p.col]!;
+    if (!Number.isFinite(d) || d > df.mp) break;
+    last = p;
+  }
+  return last;
 }
 
 // ── 出征 ──────────────────────────────────────────────────

@@ -1,6 +1,8 @@
 import { createRoot } from 'react-dom/client';
+import { useState } from 'react';
 import { MapCanvas } from '../render/MapCanvas';
 import { createGame } from '../data/tables/scenarios';
+import { paintProfile, resetPaintProfile, type PaintLayerStats } from '../render/paintProfile';
 import '../styles/global.css';
 
 /**
@@ -27,19 +29,39 @@ const bootStart = performance.now();
 const state = createGame({ playerFactionId: 'liubei', seed: 20261022, aiEnabled: true });
 
 const root = createRoot(stage);
-root.render(
-  <MapCanvas
-    state={state}
-    selectedCityId="chengdu"
-    attackRoutes={[]}
-    selectedArmyId={null}
-    selectedGateId={null}
-    onSelect={() => {}}
-    onSelectArmy={() => {}}
-    onMoveArmy={() => {}}
-    onSelectGate={() => {}}
-  />,
-);
+
+/**
+ * 截图钩子：把某个城池重新居中。
+ *
+ * 截图脚本只能派发滚轮事件，缩放锚点固定在视口中心，
+ * 于是 720% 很容易落在没有城池的江面或荒地上，没法验收"城门可辨"。
+ * MapCanvas 在 `selectedCityId` 变化时会把该城居中，这里借这条现成逻辑：
+ * 先置空再设回同一个 id，两次渲染就能触发居中。
+ */
+let focusCity: (id: string) => void = () => {};
+
+function BenchApp() {
+  const [cityId, setCityId] = useState('chengdu');
+  focusCity = (id) => {
+    setCityId('');
+    window.setTimeout(() => setCityId(id), 60);
+  };
+  return (
+    <MapCanvas
+      state={state}
+      selectedCityId={cityId}
+      attackRoutes={[]}
+      selectedArmyId={null}
+      selectedGateId={null}
+      onSelect={() => {}}
+      onSelectArmy={() => {}}
+      onMoveArmy={() => {}}
+      onSelectGate={() => {}}
+    />
+  );
+}
+
+root.render(<BenchApp />);
 
 interface PhaseResult {
   name: string;
@@ -112,6 +134,8 @@ export interface BenchReport {
   bootMs: number;
   dpr: number;
   size: { w: number; h: number };
+  /** 四层绘制耗时（I7 · 7.3）：地形 / 版图 / 实体 / 交互 */
+  paint: Record<string, PaintLayerStats>;
 }
 
 async function run(): Promise<BenchReport> {
@@ -119,18 +143,23 @@ async function run(): Promise<BenchReport> {
   await nextFrame();
   // 等两个空帧，让地形分块与版图烘焙先跑完（首帧不在测量范围内）
   for (let i = 0; i < 20; i++) await nextFrame();
+  // 烘焙阶段的帧不算：这里只看稳态四层各自的耗时
+  resetPaintProfile();
 
   const report: BenchReport = {
     phases: [],
     bootMs: +(performance.now() - bootStart).toFixed(2),
     dpr: window.devicePixelRatio,
     size: { w: stage.clientWidth, h: stage.clientHeight },
+    paint: {},
   };
 
   // ① 悬停扫图：最能暴露"每帧全量重绘 + 61 个径向渐变"的成本
+  const W = stage.clientWidth;
+  const H = stage.clientHeight;
   report.phases.push(
     await phase('hover-sweep@100%', 120, (i) => {
-      moveTo(120 + ((i * 9) % 1040), 120 + ((i * 17) % 560));
+      moveTo(W * 0.12 + (i * 9) % (W * 0.76), H * 0.14 + (i * 17) % (H * 0.68));
     }),
   );
 
@@ -138,18 +167,38 @@ async function run(): Promise<BenchReport> {
   report.phases.push(
     await phase('wheel-zoom', 60, (i) => {
       const up = i % 20 < 10;
-      wheel(up ? -120 : 120, 640, 400);
+      wheel(up ? -120 : 120, W / 2, H / 2);
     }),
   );
 
   // ③ 全图 → 近景：低倍率走总览图，高倍率走分块，两条绘制路径都要测
   report.phases.push(
     await phase('zoom-out-in', 60, (i) => {
-      wheel(i < 30 ? 120 : -120, 640, 400);
+      wheel(i < 30 ? 120 : -120, W / 2, H / 2);
+    }),
+  );
+
+  // ④ 拉到 720% 再横移：细档地形（I7 · 7.5）按预算补烘，量补烘期间的帧间隔
+  report.phases.push(
+    await phase('deep-zoom@720%', 70, (i) => {
+      if (i < 16) wheel(-120, W / 2, H / 2);
+      else moveTo(W * 0.2 + (i * 31) % (W * 0.66), H * 0.22 + (i * 23) % (H * 0.5));
     }),
   );
 
   out.textContent = JSON.stringify(report, null, 2);
+  const paint = paintProfile();
+  report.paint = Object.fromEntries(
+    Object.entries(paint).map(([k, v]) => [
+      k,
+      {
+        frames: v.frames,
+        p50: +v.p50.toFixed(3),
+        p95: +v.p95.toFixed(3),
+        max: +v.max.toFixed(3),
+      },
+    ]),
+  );
   return report;
 }
 
@@ -158,6 +207,7 @@ declare global {
     __bench?: {
       run: () => Promise<BenchReport>;
       probe: () => Promise<Record<string, unknown>>;
+      focus: (cityId: string) => void;
     };
   }
 }
@@ -201,7 +251,7 @@ async function probe(): Promise<Record<string, unknown>> {
   };
 }
 
-window.__bench = { run, probe };
+window.__bench = { run, probe, focus: (id) => focusCity(id) };
 
 if (new URLSearchParams(location.search).get('auto') === '1') {
   window.setTimeout(() => {
