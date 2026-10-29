@@ -5,6 +5,7 @@ import { reduce } from '../core/reducer';
 import { putSave } from '../save/db';
 import { migrateSave } from '../save/migrate';
 import { audio, cuesForAction, playerCityGain, sceneFor } from '../audio';
+import { playtest } from './playtest';
 
 export type Screen = 'menu' | 'select' | 'game';
 export type ToastTone = 'info' | 'good' | 'warn' | 'danger';
@@ -121,6 +122,7 @@ class GameStore {
     this.state = state;
     this.screen = 'game';
     this.toasts = [];
+    playtest.begin(state);
     this.resetClicks(this.monthLabel(state));
     this.syncScene();
     this.emit();
@@ -131,12 +133,14 @@ class GameStore {
     this.state = migrated;
     this.screen = 'game';
     this.toasts = [];
+    playtest.begin(migrated);
     this.resetClicks(this.monthLabel(migrated));
     this.syncScene();
     this.emit();
   }
 
   quit(): void {
+    playtest.end('abandoned');
     this.state = null;
     this.screen = 'menu';
     this.toasts = [];
@@ -174,7 +178,17 @@ class GameStore {
         audio.play('stinger.disaster', { delay: 0.9 });
       }
 
+      // playtest：进入战棋、月点击、幕间选择与朝议采纳都只在这里记一次
+      if (phaseBefore !== 'battle' && state.phase === 'battle') playtest.markBattle();
+      if (action.t === 'AUTO_GOVERN') playtest.councilAdopt();
+      if (action.t === 'RESOLVE_ACT_COUNCIL') {
+        playtest.actStage(state.chapter?.stage ?? 0);
+        playtest.actChoice(action.choiceId, before.chapter?.stage ?? 0);
+      }
+      if (!before.gameOver && state.gameOver) playtest.end(state.gameOver.result);
+
       if (action.t === 'END_TURN') {
+        playtest.month(this.clickStats.total);
         this.lastMonthClicks = {
           ...this.clickStats,
           byAction: { ...this.clickStats.byAction },

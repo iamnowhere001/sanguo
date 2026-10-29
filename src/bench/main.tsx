@@ -21,6 +21,8 @@ import '../styles/global.css';
 
 const stage = document.getElementById('stage')!;
 const out = document.getElementById('out')!;
+/** 首屏口径：模块求值 → 地形 / 关防首次烘焙与预热帧完成 */
+const bootStart = performance.now();
 
 const state = createGame({ playerFactionId: 'liubei', seed: 20261022, aiEnabled: true });
 
@@ -107,6 +109,7 @@ function wheel(deltaY: number, clientX: number, clientY: number): void {
 
 export interface BenchReport {
   phases: PhaseResult[];
+  bootMs: number;
   dpr: number;
   size: { w: number; h: number };
 }
@@ -119,6 +122,7 @@ async function run(): Promise<BenchReport> {
 
   const report: BenchReport = {
     phases: [],
+    bootMs: +(performance.now() - bootStart).toFixed(2),
     dpr: window.devicePixelRatio,
     size: { w: stage.clientWidth, h: stage.clientHeight },
   };

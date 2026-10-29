@@ -194,6 +194,7 @@ async function main() {
 
     const rows = [
       'phase,frames,p50_ms,p95_ms,max_ms,mean_ms,dpr,w,h',
+      `boot-to-ready,0,${report.bootMs},${report.bootMs},${report.bootMs},${report.bootMs},${report.dpr},${report.size.w},${report.size.h}`,
       ...report.phases.map((p) =>
         [
           p.name,
@@ -220,7 +221,8 @@ async function main() {
         ).padStart(7)}ms ${String(p.max).padStart(7)}ms`,
       );
     }
-    console.log(`\nDPR ${report.dpr} · 画布 ${report.size.w}×${report.size.h}`);
+    console.log(`\n首屏到可测量：${report.bootMs} ms`);
+    console.log(`DPR ${report.dpr} · 画布 ${report.size.w}×${report.size.h}`);
     console.log(`· 已写入 ${out}`);
 
     cdp.close();

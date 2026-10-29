@@ -183,3 +183,85 @@ describe('旧存档迁移', () => {
     ).toThrow('更高版本');
   });
 });
+
+describe('存档版本矩阵 v1 → v5', () => {
+  /** 把当前档剥回 v1 形态：没有设置、随机流、地图版本、三幕章节与旬回合 */
+  function asV1(): GameState {
+    const s = createGame({ playerFactionId: 'liubei', seed: 31 });
+    const legacy = s as GameState & Record<string, unknown>;
+    for (const key of ['settings', 'streams', 'chapter', 'policy', 'mapVersion', 'gates', 'xun', 'xunTurn', 'armies', 'armySerial', 'diplomacy']) {
+      delete legacy[key];
+    }
+    s.armies = [legacyArmy(5, 5)];
+    return s;
+  }
+
+  it('v1 档一路补齐到 v5', () => {
+    const file = migrateSaveFile({
+      slot: '1',
+      version: 1,
+      createdAt: 1,
+      label: 'v1 档',
+      state: asV1(),
+    });
+
+    expect(file.schemaVersion).toBe(SAVE_VERSION);
+    expect(file.runSeed).toBe(31);
+    expect(file.turn).toBe(1);
+    expect(file.presets.rules.modernRules).toBe(true);
+    expect(file.state.settings.ruleset).toBe('modern');
+    expect(file.state.mapVersion).toBe(MAP_VERSION);
+    expect(file.state.streams.search).toBeDefined();
+    expect(file.state.chapter?.goals.length).toBe(2);
+    expect(file.state.diplomacy?.relations).toBeDefined();
+    expect(file.state.armies![0]!.at).toEqual({ col: 32, row: 32 });
+    expectStandable(file.state.armies![0]!.at);
+  });
+
+  it('同一档重复迁移是幂等的', () => {
+    const first = migrateSaveFile({
+      slot: '1',
+      version: 1,
+      createdAt: 1,
+      label: 'v1 档',
+      state: asV1(),
+    });
+    const second = migrateSaveFile({
+      slot: '1',
+      schemaVersion: SAVE_VERSION,
+      createdAt: 1,
+      label: 'v1 档',
+      state: first.state,
+    });
+
+    expect(second.state.turn).toBe(first.state.turn);
+    expect(second.state.seed).toBe(first.state.seed);
+    expect(second.state.mapVersion).toBe(MAP_VERSION);
+    expect(second.state.armies![0]!.at).toEqual(first.state.armies![0]!.at);
+    expect(second.state.chapter?.stage).toBe(0);
+  });
+
+  it('损坏档抛明确错误，不静默读入', () => {
+    expect(() =>
+      migrateSaveFile({
+        slot: '1',
+        schemaVersion: SAVE_VERSION,
+        createdAt: 1,
+        label: '坏档',
+        state: {} as GameState,
+      }),
+    ).toThrow('存档数据损坏');
+  });
+
+  it('版本号为 0 的未知档拒绝读取', () => {
+    expect(() =>
+      migrateSaveFile({
+        slot: '1',
+        schemaVersion: 0,
+        createdAt: 1,
+        label: '未知档',
+        state: createGame({ playerFactionId: 'liubei', seed: 32 }),
+      }),
+    ).toThrow('缺少 v0');
+  });
+});

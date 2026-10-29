@@ -322,24 +322,35 @@ describe('现代重制：战棋军令与夹击', () => {
 });
 
 describe('现代重制：章节目标', () => {
-  it('章节目标可读，达成后推进并发放奖励', () => {
+  it('每一幕两项退出条件，任一达成即挂起幕间朝议', () => {
     const s = fresh();
     expect(s.chapter?.stage).toBe(0);
-    expect(s.chapter?.goals.length).toBe(3);
+    // E7：每一幕只描述本幕退出条件（城池 + 守城），不再是 E5 时代的三项目标
+    expect(s.chapter?.goals.length).toBe(2);
     expect(chapterAllDone(s)).toBe(false);
 
     for (const c of Object.values(s.cities)) c.ownerId = s.playerFactionId;
     for (const g of Object.values(s.generals)) {
       if (g.status === 'active') g.troops = 20000;
     }
-    for (const goal of s.chapter!.goals) {
-      expect(chapterGoalValue(s, goal)).toBeGreaterThanOrEqual(goal.target);
-    }
+    const cityGoal = s.chapter!.goals.find((g) => g.kind === 'cities')!;
+    expect(chapterGoalValue(s, cityGoal)).toBeGreaterThanOrEqual(cityGoal.target);
     expect(chapterAllDone(s)).toBe(true);
 
     expect(refreshChapter(s)).toBe(true);
-    expect(s.chapter?.stage).toBe(1);
-    expect(s.log.some((l) => l.text.includes('第 1 章目标达成'))).toBe(true);
+    // 目标达成后先挂起幕间朝议，stage 由玩家完成选择后才推进
+    expect(s.chapter?.pendingCouncil?.toAct).toBe(1);
+    expect(s.chapter?.stage).toBe(0);
+    expect(s.log.some((l) => l.text.includes('第一幕 · 立足目标达成'))).toBe(true);
+
+    const r = reduce(s, {
+      t: 'RESOLVE_ACT_COUNCIL',
+      choiceId: 'recuperate',
+      identityId: 'farming',
+    });
+    expect(r.result.ok).toBe(true);
+    expect(r.state.chapter?.stage).toBe(1);
+    expect(r.state.chapter?.identity).toBe('farming');
   });
 
   it('经典模式不推进章节', () => {
@@ -372,7 +383,7 @@ describe('现代重制：存档迁移', () => {
 
     expect(s.settings.ruleset).toBe('modern');
     expect(s.policy).toEqual({ offer: [] });
-    expect(s.chapter?.goals.length).toBe(3);
+    expect(s.chapter?.goals.length).toBe(2);
     for (const c of Object.values(s.cities)) expect(c.domesticUsed).toBe(0);
     expect(battle!.commandPoints).toBe(3);
     expect(battle!.tacticBonus).toBe(0);

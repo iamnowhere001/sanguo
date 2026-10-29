@@ -7,6 +7,7 @@ import { nextFloat, restoreRng } from '../src/core/rng';
 import { checkGameOver } from '../src/systems/battle';
 import { collapseEliminatedFactions } from '../src/systems/elimination';
 import { doPersuadeCity, persuadePlan } from '../src/systems/diplomacy';
+import { createChapterAtStage } from '../src/systems/chapter';
 import { SPAWN_CANDIDATES } from '../src/data/tables/spawn';
 
 function spawnCities(s: GameState, refId: string): string[] {
@@ -151,7 +152,10 @@ describe('大势已定（§4.4）', () => {
     for (const c of cities.slice(0, need)) c.ownerId = s.playerFactionId;
     for (const f of Object.values(s.factions)) syncFactionCities(s, f.id);
     for (const g of Object.values(s.generals)) g.troops = 0;
+    for (const c of cities) c.troops = 0;
     s.generals.guanyu!.troops = 10000;
+    // E7：现代模式的“大势已定”只在第三幕开放，这里直接落到定鼎幕
+    s.chapter = createChapterAtStage(s, 2);
     return s;
   }
 
@@ -164,6 +168,13 @@ describe('大势已定（§4.4）', () => {
     expect(r.result.ok).toBe(true);
     expect(r.state.gameOver?.result).toBe('victory');
     expect(r.state.gameOver?.reason).toContain('大势已定');
+  });
+
+  it('现代模式未进入第三幕时不提示统一', () => {
+    const s = nearVictory();
+    s.chapter = createChapterAtStage(s, 1);
+    checkGameOver(s);
+    expect(s.unifyReady).toBe(false);
   });
 
   it('选择继续亲征后 3 回合内不再提示', () => {
@@ -194,12 +205,14 @@ describe('大势已定（§4.4）', () => {
       }
       for (const f of Object.values(s.factions)) syncFactionCities(s, f.id);
       for (const g of Object.values(s.generals)) g.troops = 0;
+      for (const c of cityList) c.troops = 0;
       const capital = Object.values(s.cities).find(
         (c) => c.ownerId === s.playerFactionId,
       )!;
       s.generals.guanyu!.status = 'active';
       s.generals.guanyu!.locationId = capital.id;
       s.generals.guanyu!.troops = 10000;
+      s.chapter = createChapterAtStage(s, 2);
 
       checkGameOver(s);
       expect(s.gameOver, scenarioId).toBeUndefined();

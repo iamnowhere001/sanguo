@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { GameState } from '../core/state';
 import {
   COUNCIL_PROFILES,
@@ -9,6 +9,7 @@ import {
   type CouncilProfile,
 } from '../systems/council';
 import { gameStore } from '../store/gameStore';
+import { playtest } from '../store/playtest';
 import { fmt, useEscape } from './common';
 
 interface CityGroup {
@@ -53,6 +54,10 @@ export function CouncilModal({
   onSelectCity: (cityId: string) => void;
 }) {
   useEscape(onClose);
+  // playtest：每次打开朝议算一次“给出建议”，一键执行算一次“采纳”
+  useEffect(() => {
+    playtest.councilOffer();
+  }, []);
 
   const [profile, setProfile] = useState<CouncilProfile>('balanced');
   const brief = useMemo(() => buildCouncilBrief(state), [state]);

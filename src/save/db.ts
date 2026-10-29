@@ -47,11 +47,16 @@ export function defaultPresets(state: GameState): SavePresets {
 
 /**
  * 版本迁移链：每个函数只负责“上一版 → 下一版”，失败时抛明确错误。
+ * v1 → v2：仅补版本号（设置 / 随机流 / 地图版本由 migrateSave 补齐）；
  * v2 → v3：随机数分流 + 顶层 runSeed / presets；
  * v3 → v4：大地图 192×144 与关防字段（具体补齐在 migrateSave）；
  * v4 → v5：大地图 576×432 与全图战斗（具体补齐在 migrateSave）。
  */
 const migrations: Record<number, (file: StoredSaveFile) => StoredSaveFile> = {
+  1: (file) => ({
+    ...file,
+    schemaVersion: 2,
+  }),
   2: (file) => ({
     ...file,
     schemaVersion: 3,
@@ -73,6 +78,10 @@ export function migrateSaveFile(row: StoredSaveFile): SaveFile {
   const from = row.schemaVersion ?? row.version ?? 0;
   if (from > SAVE_VERSION) {
     throw new Error('存档来自更高版本，请更新游戏后再读取');
+  }
+  // 损坏档（缺 state / 缺城池武将表）在迁移前就拦下，避免抛出难懂的 TypeError
+  if (!row.state || typeof row.state !== 'object' || !row.state.cities || !row.state.generals) {
+    throw new Error('存档数据损坏，无法读取');
   }
 
   let file = row;
