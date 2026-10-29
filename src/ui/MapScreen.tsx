@@ -18,7 +18,8 @@ import { Bar } from './atoms';
 import { ConfirmDialog, cityTroops, factionColor, factionName, fmt } from './common';
 import { activePolicy } from '../systems/policy';
 import { buildCouncilBrief } from '../systems/council';
-import { armyEtaXun, reachableTargets } from '../systems/army';
+import { armyEtaXun, armyMp, armyMaxMp, openGateCount, reachableTargets, sortieBlocked } from '../systems/army';
+import { gatesOf, siegeTargetOf } from '../systems/cityGrid';
 
 const XUN_LABEL = ['上旬', '中旬', '下旬'];
 
@@ -48,6 +49,7 @@ export function MapScreen() {
       'jiangxia',
   );
   const [marchFrom, setMarchFrom] = useState<string | null>(null);
+  const [selectedArmyId, setSelectedArmyId] = useState<string | null>(null);
   const [saveOpen, setSaveOpen] = useState(false);
   const [rosterOpen, setRosterOpen] = useState(false);
   const [factionDipOpen, setFactionDipOpen] = useState(false);
@@ -97,6 +99,42 @@ export function MapScreen() {
     () => (state.armies ?? []).filter((a) => a.factionId === state.playerFactionId),
     [state],
   );
+
+  const selectedArmy = useMemo(
+    () => (state.armies ?? []).find((a) => a.id === selectedArmyId) ?? null,
+    [state.armies, selectedArmyId],
+  );
+
+  /** 选中部队脚下的围城目标 */
+  const armySiegeCityId = useMemo(
+    () => (selectedArmy ? siegeTargetOf(state, selectedArmy) : null),
+    [state, selectedArmy],
+  );
+
+  /** 选中城池的四门状态 */
+  const selectedGates = useMemo(
+    () => (selectedCityId ? gatesOf(state, selectedCityId) : []),
+    [state, selectedCityId],
+  );
+  const selectedBlocked = selectedGates.filter((g) => g.blockedBy);
+  const selectedSortieBlocked =
+    state.cities[selectedCityId]?.ownerId === state.playerFactionId &&
+    sortieBlocked(state, selectedCityId);
+
+  const handleMoveArmy = (armyId: string, to: { col: number; row: number }) => {
+    const res = store.dispatch({ t: 'MOVE_ARMY', armyId, to });
+    if (!res.ok) gameStore.notify(res.message, 'warn');
+    else if (res.message) gameStore.notify(res.message, 'info');
+  };
+
+  const handleAssault = (armyId: string) => {
+    const res = store.dispatch({ t: 'ASSAULT', armyId });
+    if (!res.ok) gameStore.notify(res.message, 'warn');
+    else {
+      gameStore.notify(res.message, 'good');
+      setSelectedArmyId(null);
+    }
+  };
 
   const totalGold = mine.reduce((s, c) => s + c.gold, 0);
   const totalFood = mine.reduce((s, c) => s + c.food, 0);
@@ -160,6 +198,10 @@ export function MapScreen() {
         setMarchFrom(null);
         return;
       }
+      if (e.key === 'Escape' && selectedArmyId) {
+        setSelectedArmyId(null);
+        return;
+      }
       if (e.key === '?') {
         if (!otherModal) {
           e.preventDefault();
@@ -187,6 +229,7 @@ export function MapScreen() {
   }, [
     helpOpen,
     marchFrom,
+    selectedArmyId,
     saveOpen,
     rosterOpen,
     quitOpen,
@@ -433,12 +476,16 @@ export function MapScreen() {
                 {myArmies.map((a) => (
                   <button
                     key={a.id}
-                    className="city-row"
-                    onClick={() => setSelectedCityId(a.targetCityId)}
+                    className={`city-row${a.id === selectedArmyId ? ' on' : ''}`}
+                    onClick={() => {
+                      setSelectedArmyId(a.id);
+                      setMarchFrom(null);
+                      audio.play('ui.select');
+                    }}
                     title={`${a.generalIds
                       .map((id) => state.generals[id]?.name)
                       .filter(Boolean)
-                      .join('、')} → ${state.cities[a.targetCityId]?.name ?? a.targetCityId}`}
+                      .join('、')} → ${state.cities[a.targetCityId]?.name ?? a.targetCityId}（点击调度）`}
                   >
                     <i
                       className="fdot"
@@ -489,15 +536,54 @@ export function MapScreen() {
             attackRoutes={visibleRoutes}
             marchTargets={marchFrom ? attackFromSelected : undefined}
             marchFrom={marchFrom}
+            selectedArmyId={selectedArmyId}
             onMarchTarget={handleMarchTarget}
+            onSelectArmy={(id) => {
+              setSelectedArmyId(id);
+              if (id) {
+                audio.play('ui.select');
+                setMarchFrom(null);
+              }
+            }}
+            onMoveArmy={handleMoveArmy}
             onSelect={(id) => {
               // 地图点选走画布，不经过按钮委托，这里单独补声
               if (id !== selectedCityId) audio.play('ui.select');
               setSelectedCityId(id);
+              setSelectedArmyId(null);
               // 出征模式下点了非目标城池：退出出征，避免路线锁定与右栏脱节
               if (marchFrom) setMarchFrom(null);
             }}
           />
+          {selectedArmy ? (
+            <div className="army-hud" role="status">
+              <span className="army-hud-flag" />
+              <b>{selectedArmy.generalIds.map((id) => state.generals[id]?.name).filter(Boolean).join('、')}</b>
+              <span className="army-hud-meta">
+                {fmt(selectedArmy.troops)} 兵 · 移动力 {Math.round(armyMp(selectedArmy))}/
+                {armyMaxMp(selectedArmy)}
+              </span>
+              {selectedArmy.path.length > 0 ? (
+                <span className="army-hud-meta">
+                  余 {Math.ceil(selectedArmy.path.length)} 格 · 约 {armyEtaXun(state, selectedArmy)} 旬
+                </span>
+              ) : (
+                <span className="army-hud-meta">待命</span>
+              )}
+              {armySiegeCityId ? (
+                <button
+                  type="button"
+                  className="btn accent sm"
+                  onClick={() => handleAssault(selectedArmy.id)}
+                >
+                  攻城 {state.cities[armySiegeCityId]?.name}
+                </button>
+              ) : null}
+              <button type="button" className="btn ghost sm" onClick={() => setSelectedArmyId(null)}>
+                取消
+              </button>
+            </div>
+          ) : null}
           {marchFrom ? (
             <div className="march-banner" role="status">
               <b>出征</b>
@@ -512,16 +598,22 @@ export function MapScreen() {
           ) : null}
           <div
             className={`map-hint${
-              attackFromSelected.length > 0 || marchFrom ? ' accent' : ''
+              attackFromSelected.length > 0 || marchFrom || selectedArmy ? ' accent' : ''
             }`}
           >
-            {marchFrom
-              ? '金色虚线为实际行军路线 · 山岭与水域不可通行 · Esc 取消出征'
-              : state.cities[selectedCityId]?.ownerId === state.playerFactionId
-                ? attackFromSelected.length > 0
-                  ? `${attackFromSelected.length} 座敌城可达 · 点「出征」后在地图上选目标`
-                  : '此城暂无出征路线 · 山岭水域阻隔或需先取道'
-                : '点击己方城池经营 · 点击敌城查看守军'}
+            {selectedArmy
+              ? '点地图任意格移动（亮色为移动力范围）· 走到敌城门外可下令攻城 · Esc 取消选中'
+              : marchFrom
+                ? '金色虚线为实际行军路线 · 山岭与水域不可通行 · Esc 取消出征'
+                : selectedSortieBlocked
+                  ? '四门皆被堵死，守军出不了城 · 先击退门外敌军'
+                  : selectedBlocked.length > 0
+                    ? `${selectedBlocked.length} 座城门被堵 · 剩余 ${openGateCount(state, selectedCityId)} 门可出`
+                    : state.cities[selectedCityId]?.ownerId === state.playerFactionId
+                      ? attackFromSelected.length > 0
+                        ? `${attackFromSelected.length} 座敌城可达 · 点「出征」后在地图上选目标 · 点部队可手动调度`
+                        : '此城暂无出征路线 · 山岭水域阻隔或需先取道'
+                      : '点击己方城池经营 · 点击敌城查看守军 · 点部队调度行军'}
           </div>
         </main>
 
@@ -555,10 +647,15 @@ export function MapScreen() {
               本月点击 {store.clickStats.total}
             </span>
           ) : null}
+          {selectedBlocked.length > 0 ? (
+            <span className="sb-flag sb-flag-danger">
+              围城 {selectedBlocked.length}/4 门
+            </span>
+          ) : null}
           {attackFromSelected.length > 0 ? (
             <span className="sb-flag">可出征 {attackFromSelected.length} 城</span>
           ) : (
-            <span>点击地图切换城池</span>
+            <span>点地图切换城池 · 点部队调度</span>
           )}
           <span className="sb-sep" />
           <span>v0.1</span>
@@ -638,8 +735,10 @@ export function MapScreen() {
                 ['Enter / Space', '触发当前按钮'],
                 ['G', '打开朝议 / 军师奏折'],
                 ['E', '结束本旬'],
+                ['点部队', '选中部队，再点地图格行军'],
+                ['点城门外', '围城；围住后按「攻城」开战'],
                 ['?', '打开 / 关闭快捷键'],
-                ['Esc', '关闭弹窗 / 取消战棋指令'],
+                ['Esc', '关闭弹窗 / 取消选中部队 / 取消出征'],
                 ['战棋 Tab', '切换待行动部队'],
                 ['战棋 Space', '结束战术回合'],
                 ['战棋 Esc', '取消选择 / 计策 / 突击'],

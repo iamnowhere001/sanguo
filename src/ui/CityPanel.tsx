@@ -12,6 +12,7 @@ import { MOVE_RANGE, TERRAIN_LABEL } from '../data/tables/unitClasses';
 import type { DomesticCmd, GameState, General } from '../core/state';
 import { effForce, effIntellect, neighborsOf } from '../core/state';
 import { reachableTargets } from '../systems/army';
+import { gatesOf, sortieBlocked, sortieBlockedReason } from '../systems/cityGrid';
 import {
   cityDamageMultiplier,
   foodOutput,
@@ -208,6 +209,15 @@ export function CityPanel({
         : [],
     [state, city],
   );
+  /** 四门状态：水门 / 封死 / 被敌军堵住 */
+  const cityGates = useMemo(
+    () => (city ? gatesOf(state, city.id) : []),
+    [state, city],
+  );
+  const blockedGateCount = cityGates.filter((g) => g.blockedBy).length;
+  const gateLocked =
+    Boolean(city) && city!.ownerId === state.playerFactionId && sortieBlocked(state, city!.id);
+  const gateLockReason = city ? sortieBlockedReason(state, city.id) : '';
   const abandonCheck =
     city && isMine
       ? canAbandonCity(state, city.id, state.playerFactionId)
@@ -1413,21 +1423,57 @@ export function CityPanel({
       </div>
 
       {isMine ? (
+        <div className={`cp-gates${gateLocked ? ' locked' : ''}`} aria-label="四门状态">
+          <span className="cp-gates-label">四门</span>
+          {cityGates.map((g) => (
+            <span
+              key={g.side}
+              className={`cp-gate${g.blockedBy ? ' blocked' : g.usable ? ' on' : ' closed'}`}
+              title={
+                g.blockedBy
+                  ? `${g.label}：门外有敌军，出不去`
+                  : g.sealed
+                    ? `${g.label}：被邻城城墙封死`
+                    : g.water
+                      ? `${g.label}：临水，陆军不可通行`
+                      : `${g.label}：可出城`
+              }
+            >
+              {g.label.slice(0, 1)}
+              {g.blockedBy ? '✕' : g.usable ? '○' : '－'}
+            </span>
+          ))}
+          {gateLocked ? (
+            <span className="cp-gates-warn">{gateLockReason}</span>
+          ) : blockedGateCount > 0 ? (
+            <span className="cp-gates-warn soft">{blockedGateCount} 门被堵</span>
+          ) : null}
+        </div>
+      ) : null}
+
+      {isMine ? (
         <footer className="panel-foot">
           <button
             className="btn hero"
             disabled={
               enemyTargets.length === 0 ||
+              gateLocked ||
               (gens.filter((g) => g.troops > 0).length === 0 && pool <= 0)
             }
             title={
-              enemyTargets.length > 0
-                ? `出征：在地图上点选目标（可达 ${enemyTargets.length} 城）`
-                : '暂无可行军路线：山岭与水域不可通行'
+              gateLocked
+                ? gateLockReason
+                : enemyTargets.length > 0
+                  ? `出征：在地图上点选目标（可达 ${enemyTargets.length} 城）`
+                  : '暂无可行军路线：山岭与水域不可通行'
             }
             onClick={() => onMarch(city.id)}
           >
-            {enemyTargets.length > 0 ? `出征 · 选择目标（${enemyTargets.length}）` : '暂无出征路线'}
+            {gateLocked
+              ? '城门被堵 · 无法出城'
+              : enemyTargets.length > 0
+                ? `出征 · 选择目标（${enemyTargets.length}）`
+                : '暂无出征路线'}
           </button>
           <button
             className="btn"

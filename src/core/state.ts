@@ -299,6 +299,11 @@ export interface Army {
   path: GridPoint[];
   /** 走向下一格已走的天数（0 ≤ legDays < 下一格耗时） */
   legDays: number;
+  /**
+   * 本旬剩余移动力（天）。玩家手动逐格移动时扣减，`END_TURN` 时清零并补满。
+   * 旧存档缺省视为满额（`armyMaxMp()`）。
+   */
+  mp?: number;
   /** 行军速度倍率：烽燧提速等加成，缺省为 1 */
   speed?: number;
   /** 行经关隘 / 渡口时累积的攻城城防加成与水战标记 */

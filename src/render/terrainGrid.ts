@@ -301,56 +301,181 @@ export function nearestLandTile(col: number, row: number, maxRadius = 6): { col:
   return { col, row };
 }
 
+// ── 城池占地（L 档 · 3×3 + 四门） ──────────────────────────
+/**
+ * 城门方位。`n` = 北门（屏幕上方）。
+ * 城墙占 3×3 = 9 格，四门位于城墙四边中点；
+ * 每座门外面还有一格「门外」，是出城列阵 / 敌军围城的落位。
+ */
+export type GateSide = 'n' | 'e' | 's' | 'w';
+export const GATE_SIDES: GateSide[] = ['n', 'e', 's', 'w'];
+export const GATE_LABEL: Record<GateSide, string> = {
+  n: '北门',
+  e: '东门',
+  s: '南门',
+  w: '西门',
+};
+/** 四门相对城心的格偏移（门本身在城墙上） */
+const GATE_OFFSET: Record<GateSide, [number, number]> = {
+  n: [0, -1],
+  e: [1, 0],
+  s: [0, 1],
+  w: [-1, 0],
+};
+/** 门外格相对城心的偏移 */
+const APPROACH_OFFSET: Record<GateSide, [number, number]> = {
+  n: [0, -2],
+  e: [2, 0],
+  s: [0, 2],
+  w: [-2, 0],
+};
+
 export interface CityAnchor {
   cityId: string;
+  /** 城心格（3×3 的中心） */
   col: number;
   row: number;
-  /** 世界坐标（格心） */
+  /** 世界坐标（城心） */
   x: number;
   y: number;
   kind: TileKind;
 }
 
+export interface CityBlock extends CityAnchor {
+  /** 城墙 9 格（含四门），顺序为行优先 */
+  tiles: Array<{ col: number; row: number }>;
+  /** 四座城门所在的城墙格 */
+  gateTiles: Record<GateSide, { col: number; row: number }>;
+  /** 四座门外的格子：出城列阵 / 围城落位 */
+  approaches: Record<GateSide, { col: number; row: number }>;
+  /** 被邻城城墙压死、开不出去的门（仍画出来，但不可通行） */
+  sealed: GateSide[];
+}
+
+let blockCache: Record<string, CityBlock> | null = null;
 let anchorCache: Record<string, CityAnchor> | null = null;
+
+const keyOfTile = (col: number, row: number): string => `${col},${row}`;
+
+/** 城墙 9 格 */
+function wallOf(col: number, row: number): Array<{ col: number; row: number }> {
+  const out: Array<{ col: number; row: number }> = [];
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) out.push({ col: col + dx, row: row + dy });
+  }
+  return out;
+}
+
+/** 四个门外格 */
+function approachesOf(col: number, row: number): Array<{ col: number; row: number }> {
+  return GATE_SIDES.map((side) => {
+    const [ax, ay] = APPROACH_OFFSET[side];
+    return { col: col + ax, row: row + ay };
+  });
+}
+
+const inBounds = (t: { col: number; row: number }): boolean =>
+  t.col >= 0 && t.row >= 0 && t.col < MAP.cols && t.row < MAP.rows;
+
+/**
+ * 能否落城：城墙 9 格不得与他人城墙重叠。
+ * 门外格压到他人城墙时不阻止落城，而是把那一门记为「封死」（`sealed`）——
+ * 中原 / 江东几座城挨得太近，强行外推会把它们推到地理上完全错误的位置。
+ */
+function footprintFits(
+  col: number,
+  row: number,
+  walls: Map<string, string>,
+): boolean {
+  if (isWaterKind(tileKindAt(col, row))) return false;
+  for (const t of wallOf(col, row)) {
+    if (!inBounds(t)) return false;
+    if (walls.has(keyOfTile(t.col, t.row))) return false;
+  }
+  for (const t of approachesOf(col, row)) {
+    if (!inBounds(t)) return false;
+  }
+  return true;
+}
+
+/** 有几座门被邻城城墙压死 */
+function sealedCount(
+  col: number,
+  row: number,
+  walls: Map<string, string>,
+): number {
+  let n = 0;
+  for (const t of approachesOf(col, row)) {
+    if (walls.has(keyOfTile(t.col, t.row))) n += 1;
+  }
+  return n;
+}
 
 /**
  * 61 座城的落格结果。
- * 顺序固定（按 CITY_COORDS 的书写顺序），保证同一配表永远得到同一布局；
- * 落点冲突时按固定顺序把后来的城推向最近的空格，避免两城叠在一个格里。
+ * 顺序固定（按 CITY_COORDS 的书写顺序），保证同一配表永远得到同一布局。
+ *
+ * L 档改动：每城占 3×3 城墙 + 4 个门外格，落点冲突时按固定顺序把后来的城
+ * 推向最近的可容纳位置（螺旋搜索，同半径按固定扫描顺序），避免城墙互相压住。
  */
-export function cityAnchors(): Record<string, CityAnchor> {
-  if (anchorCache) return anchorCache;
+export function cityBlocks(): Record<string, CityBlock> {
+  if (blockCache) return blockCache;
 
   const used = new Map<string, string>();
-  const out: Record<string, CityAnchor> = {};
+  const out: Record<string, CityBlock> = {};
 
   for (const [cityId, [lon, lat]] of Object.entries(CITY_COORDS)) {
     const projected = lonLatToTile(lon, lat);
-    let { col, row } = nearestLandTile(Math.round(projected.col), Math.round(projected.row));
+    const seed = nearestLandTile(Math.round(projected.col), Math.round(projected.row));
+    let { col, row } = seed;
 
-    // 落点已被占用：向外找最近空位
-    let guard = 0;
-    while (used.has(`${col},${row}`) && guard++ < 40) {
-      let moved = false;
-      for (let radius = 1; radius <= 4 && !moved; radius++) {
-        for (let dy = -radius; dy <= radius && !moved; dy++) {
-          for (let dx = -radius; dx <= radius && !moved; dx++) {
+    // 候选打分：距离 + 封死门数 × 3。让「原地封一门」胜过「外推五格」。
+    if (sealedCount(col, row, used) > 0 || !footprintFits(col, row, used)) {
+      const best = { col: seed.col, row: seed.row, score: Number.POSITIVE_INFINITY };
+      for (let radius = 0; radius <= 7; radius++) {
+        for (let dy = -radius; dy <= radius; dy++) {
+          for (let dx = -radius; dx <= radius; dx++) {
             if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
-            const c = col + dx;
-            const r = row + dy;
-            if (used.has(`${c},${r}`)) continue;
-            if (isWaterKind(tileKindAt(c, r))) continue;
-            col = c;
-            row = r;
-            moved = true;
+            const c = seed.col + dx;
+            const r = seed.row + dy;
+            if (!footprintFits(c, r, used)) continue;
+            const score = radius + sealedCount(c, r, used) * 3;
+            if (score < best.score) {
+              best.col = c;
+              best.row = r;
+              best.score = score;
+            }
           }
         }
+        // 已找到的解不可能被更外圈以「封死 0 门」反超（每圈至少 +1，封门罚 3）
+        if (best.score <= radius) break;
       }
-      if (!moved) break;
+      col = best.col;
+      row = best.row;
     }
 
-    used.set(`${col},${row}`, cityId);
+    // 封死门必须在写入本城城墙之前判定，否则会把自己算成邻城
+    const sealed: GateSide[] = [];
+    for (const side of GATE_SIDES) {
+      const [ax, ay] = APPROACH_OFFSET[side];
+      if (used.has(keyOfTile(col + ax, row + ay))) sealed.push(side);
+    }
+    for (const t of wallOf(col, row)) used.set(keyOfTile(t.col, t.row), cityId);
+
     const center = tileCenter(col, row);
+    const tiles: CityBlock['tiles'] = [];
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) tiles.push({ col: col + dx, row: row + dy });
+    }
+    const gateTiles = {} as CityBlock['gateTiles'];
+    const approaches = {} as CityBlock['approaches'];
+    for (const side of GATE_SIDES) {
+      const [gx, gy] = GATE_OFFSET[side];
+      const [ax, ay] = APPROACH_OFFSET[side];
+      gateTiles[side] = { col: col + gx, row: row + gy };
+      approaches[side] = { col: col + ax, row: row + ay };
+    }
+
     out[cityId] = {
       cityId,
       col,
@@ -358,11 +483,93 @@ export function cityAnchors(): Record<string, CityAnchor> {
       x: center.x,
       y: center.y,
       kind: tileKindAt(col, row),
+      tiles,
+      gateTiles,
+      approaches,
+      sealed,
     };
   }
 
+  blockCache = out;
+  return out;
+}
+
+/** 城心格（与 `cityBlocks()` 同一套落位，保证坐标只有一个真值源） */
+export function cityAnchors(): Record<string, CityAnchor> {
+  if (anchorCache) return anchorCache;
+  const blocks = cityBlocks();
+  const out: Record<string, CityAnchor> = {};
+  for (const [id, b] of Object.entries(blocks)) {
+    out[id] = { cityId: b.cityId, col: b.col, row: b.row, x: b.x, y: b.y, kind: b.kind };
+  }
   anchorCache = out;
   return out;
+}
+
+/** 城池占位索引：格 → 城；`wall` 是城墙 9 格，`approach` 是门外格 */
+export type WallRole = 'center' | 'gate' | 'corner';
+
+let cityTileCache: {
+  wall: Map<string, { cityId: string; side?: GateSide; role: WallRole }>;
+  approach: Map<string, { cityId: string; side: GateSide }>;
+} | null = null;
+
+export function cityTileIndex(): {
+  wall: Map<string, { cityId: string; side?: GateSide; role: WallRole }>;
+  approach: Map<string, { cityId: string; side: GateSide }>;
+} {
+  if (cityTileCache) return cityTileCache;
+  const wall = new Map<string, { cityId: string; side?: GateSide; role: WallRole }>();
+  const approach = new Map<string, { cityId: string; side: GateSide }>();
+  for (const block of Object.values(cityBlocks())) {
+    for (const t of block.tiles) {
+      const isCenter = t.col === block.col && t.row === block.row;
+      const isCorner = !isCenter && t.col !== block.col && t.row !== block.row;
+      wall.set(keyOfTile(t.col, t.row), {
+        cityId: block.cityId,
+        role: isCenter ? 'center' : isCorner ? 'corner' : 'gate',
+      });
+    }
+    for (const side of GATE_SIDES) {
+      const g = block.gateTiles[side];
+      wall.set(keyOfTile(g.col, g.row), { cityId: block.cityId, side, role: 'gate' });
+      const a = block.approaches[side];
+      // 门外格可能被两座城共用：先到先得，保证结果确定
+      if (!approach.has(keyOfTile(a.col, a.row))) {
+        approach.set(keyOfTile(a.col, a.row), { cityId: block.cityId, side });
+      }
+    }
+  }
+  cityTileCache = { wall, approach };
+  return cityTileCache;
+}
+
+/** 该格属于哪座城的城墙（含城门）；不是城墙返回 null */
+export function wallTileAt(
+  col: number,
+  row: number,
+): { cityId: string; side?: GateSide; role: WallRole } | null {
+  return cityTileIndex().wall.get(keyOfTile(col, row)) ?? null;
+}
+
+/** 该格是否是某座城的门外格（出城列阵 / 围城落位） */
+export function approachTileAt(
+  col: number,
+  row: number,
+): { cityId: string; side: GateSide } | null {
+  return cityTileIndex().approach.get(keyOfTile(col, row)) ?? null;
+}
+
+/** 城心格 → 城 id */
+let centerIndexCache: Map<string, string> | null = null;
+export function cityAtCenter(col: number, row: number): string | null {
+  if (!centerIndexCache) {
+    centerIndexCache = new Map();
+    for (const block of Object.values(cityBlocks())) {
+      centerIndexCache.set(keyOfTile(block.col, block.row), block.cityId);
+    }
+  }
+  return centerIndexCache.get(keyOfTile(col, row)) ?? null;
 }
 
 /** 城池世界坐标：优先地理配表，缺失时退回旧 `City.x/y` */

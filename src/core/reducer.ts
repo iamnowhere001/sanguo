@@ -5,6 +5,7 @@ import type {
   ExploreDirection,
   FacilityKind,
   GameState,
+  GridPoint,
   InterActChoiceId,
   PolicyId,
   ProjectKind,
@@ -55,7 +56,7 @@ import {
 } from '../systems/battle';
 import { continueAiPhase, startAiPhase, aiFactionIds } from '../systems/ai';
 import { tickDiplomacy } from '../systems/factionDiplomacy';
-import { playArmyTurn, sortieArmy } from '../systems/army';
+import { assaultCity, moveArmyTo, playArmyTurn, runSiegeAttrition, sortieArmy } from '../systems/army';
 import { doDiplomacy, doPersuadeCity, type DiplomacyKind } from '../systems/diplomacy';
 import {
   doFactionDiplomacy,
@@ -106,6 +107,8 @@ export type Action =
   | { t: 'PRISONER'; prisonerId: string; action: PrisonerAction; agentId?: string }
   | { t: 'DEPLOY'; fromCityId: string; targetCityId: string; generalIds: string[] }
   | { t: 'SORTIE'; fromCityId: string; targetCityId: string; generalIds?: string[] }
+  | { t: 'MOVE_ARMY'; armyId: string; to: GridPoint }
+  | { t: 'ASSAULT'; armyId: string }
   | { t: 'BATTLE_MOVE'; unitId: string; x: number; y: number }
   | { t: 'BATTLE_UNDO_MOVE'; unitId: string }
   | { t: 'BATTLE_ATTACK'; attackerId: string; targetId: string }
@@ -163,6 +166,8 @@ export function runMonthStages(s: GameState, facts = emptyMonthFacts()): string[
   runExplorations(s, facts);
   // 城墙修缮：有主城池按月回补耐久（城墙工程完工后上限提高，这里一起结算）
   runCityRepair(s);
+  // 围城：四面陆门全被堵死的城，守军月结逃散
+  runSiegeAttrition(s);
   checkGameOver(s);
   return clampResources(s);
 }
@@ -420,6 +425,29 @@ export function reduce(
     case 'SORTIE': {
       if (s.phase !== 'map') return { state, result: { ok: false, message: '当前不在大地图阶段' } };
       const r = sortieArmy(s, action.fromCityId, action.targetCityId, action.generalIds);
+      return { state: r.ok ? s : state, result: r };
+    }
+    case 'MOVE_ARMY': {
+      if (s.phase !== 'map') return { state, result: { ok: false, message: '当前不在大地图阶段' } };
+      const army = (s.armies ?? []).find((a) => a.id === action.armyId);
+      if (!army) return { state, result: { ok: false, message: '部队不存在' } };
+      if (army.factionId !== s.playerFactionId) {
+        return { state, result: { ok: false, message: '只能调度己方部队' } };
+      }
+      const r = moveArmyTo(s, action.armyId, action.to);
+      return {
+        state: r.ok ? s : state,
+        result: { ok: r.ok, message: r.message },
+      };
+    }
+    case 'ASSAULT': {
+      if (s.phase !== 'map') return { state, result: { ok: false, message: '当前不在大地图阶段' } };
+      const army = (s.armies ?? []).find((a) => a.id === action.armyId);
+      if (!army) return { state, result: { ok: false, message: '部队不存在' } };
+      if (army.factionId !== s.playerFactionId) {
+        return { state, result: { ok: false, message: '只能指挥己方部队攻城' } };
+      }
+      const r = assaultCity(s, action.armyId);
       return { state: r.ok ? s : state, result: r };
     }
     case 'BATTLE_MOVE': {

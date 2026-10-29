@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createGame } from '../src/data/tables/scenarios';
 import { continueAiPhase, runAiFaction } from '../src/systems/ai';
+import { playArmyTurn } from '../src/systems/army';
 import { resolveBattle } from '../src/systems/battle';
 import { playerSnapshot } from '../src/systems/report';
 import type { GameState } from '../src/core/state';
@@ -18,6 +19,18 @@ function strongCaoCao(): GameState {
   s.generals.caocao!.troops = 3000;
   s.generals.zhangfei!.troops = 100;
   return s;
+}
+
+/**
+ * L 档：AI 不再凭空开战，而是先派兵上路。
+ * 这里把行军推到底，直到部队走到城下自动攻城、进入战棋。
+ */
+function marchToBattle(s: GameState): boolean {
+  for (let i = 0; i < 16; i++) {
+    playArmyTurn(s);
+    if (s.phase === 'battle') return true;
+  }
+  return false;
 }
 
 describe('AI 出兵', () => {
@@ -41,12 +54,18 @@ describe('AI 出兵', () => {
     expect(captured.length).toBeGreaterThan(0);
   });
 
-  it('曹操兵力占优时进攻玩家，玩家进入防守战', () => {
+  it('曹操兵力占优时先派兵上路，走到城下才开战', () => {
     const s = strongCaoCao();
     const r = runAiFaction(s, 'caocao');
-    expect(r).toBe('battle');
-    expect(s.phase).toBe('battle');
-    expect(s.battle).toBeDefined();
+    expect(r).toBe('done');
+    // 部队已经上路，但还没开打：玩家看得见威胁
+    const column = (s.armies ?? []).find(
+      (a) => a.factionId === 'caocao' && a.targetCityId === 'xinye',
+    );
+    expect(column, '曹操没有派出进攻部队').toBeDefined();
+    expect(s.phase).toBe('map');
+
+    expect(marchToBattle(s)).toBe(true);
     expect(s.battle!.playerSide).toBe('defender');
     expect(s.battle!.defenderFactionId).toBe('liubei');
     expect(s.battle!.attackerFactionId).toBe('caocao');
@@ -55,6 +74,7 @@ describe('AI 出兵', () => {
   it('防守成功：击退攻方后城池保留', () => {
     const s = strongCaoCao();
     runAiFaction(s, 'caocao');
+    expect(marchToBattle(s)).toBe(true);
     const b = s.battle!;
     for (const u of Object.values(b.units)) {
       if (u.side === 'attacker') {
@@ -72,6 +92,7 @@ describe('AI 出兵', () => {
   it('城池失守：守军全灭后城池归攻方', () => {
     const s = strongCaoCao();
     runAiFaction(s, 'caocao');
+    expect(marchToBattle(s)).toBe(true);
     const b = s.battle!;
     for (const u of Object.values(b.units)) {
       if (u.side === 'defender') {
@@ -138,28 +159,17 @@ describe('AI 月度队列', () => {
     expect(s.log.some((l) => l.text.includes('马腾'))).toBe(true);
   });
 
-  it('AI 进攻玩家时暂停队列，战报关闭后继续', () => {
+  it('AI 出兵不再中断队列：部队上路后本月照常收尾出月报', () => {
     const s = strongCaoCao();
     s.pendingMonth = { before: playerSnapshot(s), logStart: s.log.length, warnings: [] };
     s.aiQueue = ['caocao', 'mateng'];
     continueAiPhase(s);
-    expect(s.phase).toBe('battle');
-    expect(s.aiQueue).toEqual(['mateng']);
-
-    const b = s.battle!;
-    for (const u of Object.values(b.units)) {
-      if (u.side === 'attacker') {
-        u.routed = true;
-        u.troops = 0;
-      }
-    }
-    resolveBattle(s, b, 'defeat');
-    delete s.report;
-
-    continueAiPhase(s);
-    const after = structuredClone(s);
-    expect(after.phase).toBe('map');
-    expect(after.report?.kind).toBe('month');
-    expect(after.aiQueue).toBeUndefined();
+    // 派兵只是「上路」，不开战，所以队列不该被打断
+    expect(s.phase).toBe('map');
+    expect(s.aiQueue).toBeUndefined();
+    expect(s.report?.kind).toBe('month');
+    expect(
+      (s.armies ?? []).some((a) => a.factionId === 'caocao' && a.targetCityId === 'xinye'),
+    ).toBe(true);
   });
 });

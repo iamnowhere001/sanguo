@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { City, CitySize, GameState, GridPoint } from '../core/state';
+import type { Army, City, CitySize, GameState, GridPoint } from '../core/state';
 import { cityTroops } from '../core/selectors';
 import { BALANCE } from '../data/tables/balance';
 import { CITY_SIZE_LABEL, fortificationLabel } from '../data/tables/cities';
@@ -18,15 +18,38 @@ import {
   projectLonLat,
 } from '../data/tables/geography';
 import { GATES } from '../data/tables/gates';
-import { armyWorldPos } from '../systems/army';
+import {
+  armyMaxMp,
+  armyMp,
+  armyPreviewPath as armyPreviewPathTiles,
+  armyReach as armyReachTiles,
+  armyWorldPos,
+} from '../systems/army';
+import { gatesOf, siegeTargetOf } from '../systems/cityGrid';
 import { TERRAIN_LABEL } from '../data/tables/unitClasses';
-import { cityWorldPos, tileCenter } from './terrainGrid';
+import {
+  GATE_SIDES,
+  cityBlocks,
+  cityWorldPos,
+  tileCenter,
+  wallTileAt,
+  worldToTile,
+  type CityBlock,
+  type GateSide,
+} from './terrainGrid';
 import { drawFactionPattern, factionPattern, PATTERN_LABEL } from './factionPattern';
 
 interface ProjectedCity {
   city: City;
+  block: CityBlock;
+  /** 城心屏幕坐标 */
   x: number;
   y: number;
+  /** 3×3 城墙的屏幕矩形 */
+  bx: number;
+  by: number;
+  bw: number;
+  bh: number;
 }
 
 interface MapView {
@@ -42,12 +65,11 @@ interface Layout {
 }
 
 const MIN_ZOOM = 1;
-const MAX_ZOOM = 3.2;
+const MAX_ZOOM = 3.6;
 
 /**
  * 宣纸绘本地图配色。
- * 参照《三国志11》：暖纸底、墨线勾边、青绿水系、赭黄山脊、城墙城池。
- * 与深色 UI 面板形成"卷轴铺在案上"的对比，而不是让地图继续沉在暗色里。
+ * 参照《三国志11》：暖纸底、墨线勾边、青绿水系、赭黄山脊、砖石城墙。
  */
 const PALETTE = {
   sea0: '#33484f',
@@ -72,7 +94,12 @@ const PALETTE = {
   mountain2: '#675839',
   wall: '#eadfc3',
   wallShade: '#c3b391',
+  wallDeep: '#a4936f',
+  roof: '#7d5b3f',
+  roofDark: '#5b4029',
+  courtyard: '#cbbb90',
   chip: 'rgba(243,235,214,0.94)',
+  token: 'rgba(247,240,222,0.97)',
 } as const;
 
 /** #rrggbb → rgba()，用于给势力色叠透明度 */
@@ -83,13 +110,6 @@ function hexA(hex: string, alpha: number): string {
   return `rgba(${(v >> 16) & 255},${(v >> 8) & 255},${v & 255},${alpha})`;
 }
 
-/** 规模直接映射到城郭尺寸：都城最大、小城最小，一眼能分出主次 */
-const NODE_RADIUS: Record<CitySize, number> = {
-  capital: 12.4,
-  large: 10.6,
-  medium: 9.2,
-  small: 7.6,
-};
 const SIZE_RANK: Record<CitySize, number> = {
   capital: 0,
   large: 1,
@@ -110,14 +130,8 @@ function clampPan(view: MapView, w: number, h: number): MapView {
   };
 }
 
-/**
- * 世界坐标 → 画布坐标。
- * 世界矩形固定为 MAP.width × MAP.height（96×72 格 × 12），
- * 不再像旧版那样按 61 城的包围盒自适应 —— 地形底图需要一个稳定的画幅，
- * 否则换剧本（城池集合不同）时海岸线会跟着缩放。
- */
+/** 世界矩形固定为 MAP.width × MAP.height，换剧本时海岸线不会跟着缩放 */
 function layoutOf(w: number, h: number): Layout {
-  // 手机地图只有 200px 高：收窄留白，把纵向空间还给地形与城池
   const padX = w < 560 ? 6 : 12;
   const padY = h < 300 ? 5 : 10;
   const scale = Math.min(
@@ -156,21 +170,42 @@ function project(
   view: MapView = { zoom: 1, x: 0, y: 0 },
 ): ProjectedCity[] {
   const layout = layoutOf(w, h);
+  const blocks = cityBlocks();
   return Object.values(state.cities).map((c) => {
+    const block = blocks[c.id];
     const world = cityWorldPos(c);
     const p = worldToScreen(world.x, world.y, w, h, view, layout);
-    return { city: c, x: p.x, y: p.y };
+    const col = block?.col ?? Math.floor(world.x / MAP.tile);
+    const row = block?.row ?? Math.floor(world.y / MAP.tile);
+    const a = worldToScreen((col - 1) * MAP.tile, (row - 1) * MAP.tile, w, h, view, layout);
+    const b = worldToScreen((col + 2) * MAP.tile, (row + 2) * MAP.tile, w, h, view, layout);
+    return {
+      city: c,
+      block: block ?? {
+        cityId: c.id,
+        col,
+        row,
+        x: world.x,
+        y: world.y,
+        kind: 'plain',
+        tiles: [],
+        gateTiles: {} as Record<GateSide, GridPoint>,
+        approaches: {} as Record<GateSide, GridPoint>,
+        sealed: [],
+      },
+      x: p.x,
+      y: p.y,
+      bx: a.x,
+      by: a.y,
+      bw: b.x - a.x,
+      bh: b.y - a.y,
+    };
   });
 }
 
 // ── 地形底图（离屏缓存） ────────────────────────────────────
-/**
- * 地形是静态的，但每帧重画 6,912 格不划算，而且鼠标悬停会触发重绘。
- * 这里把整张地形画到一张离屏画布（2× 分辨率），之后每帧只做一次 drawImage。
- */
 let terrainCache: HTMLCanvasElement | null = null;
 
-/** 把经纬度折线写进当前路径（调用方负责 beginPath / stroke） */
 function pathFromLonLat(
   ctx: CanvasRenderingContext2D,
   pts: Array<[number, number]>,
@@ -182,11 +217,7 @@ function pathFromLonLat(
   });
 }
 
-/**
- * 山脊符号：水墨"斧劈皴"笔触。
- * 每座峰用两笔完成 —— 左面受光、右面背光，再压一道墨线勾边，
- * 比整齐的小三角更接近《三国志11》那种手绘地图上的山峦。
- */
+/** 山脊符号：水墨"斧劈皴"笔触 */
 function drawRidgeSymbols(ctx: CanvasRenderingContext2D): void {
   for (const ridge of RIDGES) {
     const size = 5.5 + ridge.height * 6;
@@ -196,7 +227,6 @@ function drawRidgeSymbols(ctx: CanvasRenderingContext2D): void {
       const steps = Math.max(2, Math.round(Math.hypot(b.x - a.x, b.y - a.y) / (size * 1.3)));
       for (let s = 0; s < steps; s++) {
         const t = (s + 0.5) / steps;
-        // 沿脊线左右交替偏移，避免所有山峰排成一条直线
         const nx = -(b.y - a.y);
         const ny = b.x - a.x;
         const len = Math.hypot(nx, ny) || 1;
@@ -210,7 +240,6 @@ function drawRidgeSymbols(ctx: CanvasRenderingContext2D): void {
   }
 }
 
-/** 单座山峰：左受光面 + 右背光面 + 墨线 + 侧脊高光 */
 function drawBrushPeak(
   ctx: CanvasRenderingContext2D,
   px: number,
@@ -220,7 +249,6 @@ function drawBrushPeak(
 ): void {
   const base = py + size * 0.5;
 
-  // 受光面（左）
   ctx.beginPath();
   ctx.moveTo(px, py - h);
   ctx.quadraticCurveTo(px - size * 0.5, py - h * 0.15, px - size, base);
@@ -229,7 +257,6 @@ function drawBrushPeak(
   ctx.fillStyle = PALETTE.mountain0;
   ctx.fill();
 
-  // 背光面（右）
   ctx.beginPath();
   ctx.moveTo(px, py - h);
   ctx.quadraticCurveTo(px + size * 0.45, py - h * 0.1, px + size, base);
@@ -238,7 +265,6 @@ function drawBrushPeak(
   ctx.fillStyle = PALETTE.mountain1;
   ctx.fill();
 
-  // 轮廓与侧脊
   ctx.beginPath();
   ctx.moveTo(px - size, base);
   ctx.quadraticCurveTo(px - size * 0.5, py - h * 0.15, px, py - h);
@@ -255,11 +281,9 @@ function drawBrushPeak(
   ctx.stroke();
 }
 
-/** 画一整张地形底图（世界坐标 1:1，调用方负责缩放） */
 function paintTerrain(ctx: CanvasRenderingContext2D): void {
   const { width: W, height: H } = MAP;
 
-  // 海：青灰的绢色水面，东南略深，避免一整片死色
   const sea = ctx.createLinearGradient(0, 0, W, H);
   sea.addColorStop(0, PALETTE.sea0);
   sea.addColorStop(0.55, PALETTE.sea1);
@@ -271,10 +295,6 @@ function paintTerrain(ctx: CanvasRenderingContext2D): void {
   drawLandShape(ctx, W, H);
 }
 
-/**
- * 大陆形状：先填陆地色，再按地形上色。
- * 与 `terrainGrid.isLand()` 共用同一份海岸线数据，只是这里画矢量、那边算栅格。
- */
 function drawLandShape(ctx: CanvasRenderingContext2D, W: number, H: number): void {
   const landPath = new Path2D();
   let first = true;
@@ -287,7 +307,6 @@ function drawLandShape(ctx: CanvasRenderingContext2D, W: number, H: number): voi
       landPath.lineTo(p.x, p.y);
     }
   }
-  // 闭合到图外框：西 → 北 → 东，回到海岸线起点
   const frame: Array<[number, number]> = [
     [LON0, LAT0],
     [LON0, LAT1],
@@ -300,7 +319,6 @@ function drawLandShape(ctx: CanvasRenderingContext2D, W: number, H: number): voi
   }
   landPath.closePath();
 
-  // 陆地：宣纸底色，西北略暖、东南略冷
   const landGrad = ctx.createLinearGradient(0, 0, W * 0.7, H);
   landGrad.addColorStop(0, PALETTE.paper0);
   landGrad.addColorStop(0.55, PALETTE.paper1);
@@ -308,13 +326,11 @@ function drawLandShape(ctx: CanvasRenderingContext2D, W: number, H: number): voi
   ctx.fillStyle = landGrad;
   ctx.fill(landPath);
 
-  // 纸纹：先铺一层暖白颗粒，再叠几道极淡的等高线，做出"印在纸上"的层次
   ctx.save();
   ctx.clip(landPath);
   drawLandGrain(ctx, W, H);
   drawContours(ctx);
 
-  // 荒漠
   for (const blob of DESERTS) {
     const p = projectLonLat(blob.lon, blob.lat);
     const r = blob.r * (MAP.width / 25.5);
@@ -328,7 +344,6 @@ function drawLandShape(ctx: CanvasRenderingContext2D, W: number, H: number): voi
     ctx.fill();
   }
 
-  // 丘陵带 → 山地核心：用粗细三层描边模拟"山体两侧渐高"
   for (const ridge of RIDGES) {
     const draw = (widthScale: number, color: string, alpha: number) => {
       ctx.beginPath();
@@ -346,7 +361,6 @@ function drawLandShape(ctx: CanvasRenderingContext2D, W: number, H: number): voi
     draw(0.42, 'rgba(101,86,55,0.42)', 1);
   }
 
-  // 林地
   for (const blob of FORESTS) {
     const p = projectLonLat(blob.lon, blob.lat);
     const r = blob.r * (MAP.width / 25.5);
@@ -360,7 +374,6 @@ function drawLandShape(ctx: CanvasRenderingContext2D, W: number, H: number): voi
     ctx.fill();
   }
 
-  // 沼泽
   for (const blob of MARSHES) {
     const p = projectLonLat(blob.lon, blob.lat);
     const r = blob.r * (MAP.width / 25.5);
@@ -376,7 +389,6 @@ function drawLandShape(ctx: CanvasRenderingContext2D, W: number, H: number): voi
   drawRidgeSymbols(ctx);
   ctx.restore();
 
-  // 湖泊：青绿水面 + 墨线岸 + 内侧高光，跟河流同一种"水"的语言
   for (const lake of LAKES) {
     const p = projectLonLat(lake.lon, lake.lat);
     const rx = lake.rx * (MAP.width / 25.5);
@@ -391,7 +403,6 @@ function drawLandShape(ctx: CanvasRenderingContext2D, W: number, H: number): voi
     ctx.strokeStyle = 'rgba(48,64,58,0.55)';
     ctx.lineWidth = 1;
     ctx.stroke();
-    // 两道波纹，让湖面有"水"的反光
     ctx.strokeStyle = 'rgba(214,236,230,0.22)';
     for (let i = 1; i <= 2; i++) {
       ctx.beginPath();
@@ -400,8 +411,6 @@ function drawLandShape(ctx: CanvasRenderingContext2D, W: number, H: number): voi
     }
   }
 
-  // 河流：先墨线定岸，再铺青绿水面，最后压一道浅色水芯
-  // M 档放大了河宽，让"水战"在地图上看得见：干流宽到约 1 格，支流也不低于半格
   const rivers = [...RIVERS].sort((a, b) => a.scale - b.scale);
   for (const river of rivers) {
     const base = river.scale >= 1 ? 4.2 : 2.8;
@@ -420,7 +429,6 @@ function drawLandShape(ctx: CanvasRenderingContext2D, W: number, H: number): voi
     }
   }
 
-  // 海岸线：墨线压一道，内侧再亮一道纸白，像木刻版画的双勾
   ctx.beginPath();
   pathFromLonLat(ctx, COASTLINE_PTS);
   ctx.strokeStyle = 'rgba(44,38,22,0.55)';
@@ -449,7 +457,6 @@ function ensureTerrainCache(): HTMLCanvasElement {
   return canvas;
 }
 
-/** 地形图例：五种最有辨识度的地形，帮玩家把色块和含义对上 */
 const LEGEND: Array<{ label: string; color: string }> = [
   { label: '山地', color: '#8c7a56' },
   { label: '丘陵', color: '#b6a37a' },
@@ -458,7 +465,6 @@ const LEGEND: Array<{ label: string; color: string }> = [
   { label: '荒漠', color: '#c1a368' },
 ];
 
-/** 海面波纹：十几条极淡的横向曲线，让海"是水"而不是"是背景" */
 function drawSeaTexture(ctx: CanvasRenderingContext2D, W: number, H: number): void {
   ctx.strokeStyle = 'rgba(206,228,224,0.07)';
   ctx.lineWidth = 1.2;
@@ -474,10 +480,6 @@ function drawSeaTexture(ctx: CanvasRenderingContext2D, W: number, H: number): vo
   }
 }
 
-/**
- * 等高线带：沿山脊外扩两道极淡的虚线，给山脉"海拔层次"。
- * 比真画一圈圈闭合等高线克制得多，96×72 的格网下也不会糊成噪点。
- */
 function drawContours(ctx: CanvasRenderingContext2D): void {
   ctx.save();
   ctx.setLineDash([9, 11]);
@@ -493,10 +495,8 @@ function drawContours(ctx: CanvasRenderingContext2D): void {
   ctx.restore();
 }
 
-/** 纸纹：确定性散点，一半墨点一半纸纤维，避免大块平涂的"塑料感" */
 function drawLandGrain(ctx: CanvasRenderingContext2D, W: number, H: number): void {
   for (let i = 0; i < 3600; i++) {
-    // 线性同余，保证每次生成的点完全一致
     const a = (i * 2654435761) % 4294967296;
     const b = (i * 1103515245 + 12345) % 4294967296;
     const x = (a / 4294967296) * W;
@@ -506,14 +506,495 @@ function drawLandGrain(ctx: CanvasRenderingContext2D, W: number, H: number): voi
   }
 }
 
+// ── 城池绘制（3×3 城墙 + 四门） ─────────────────────────────
+/** 门楼：一座带歇山顶的小门楼，宽度随城郭缩放 */
+function drawGateHouse(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  w: number,
+  h: number,
+  blocked: boolean,
+): void {
+  // 门洞
+  ctx.beginPath();
+  ctx.roundRect(cx - w * 0.34, cy - h * 0.5, w * 0.68, h, [h * 0.42, h * 0.42, 0, 0]);
+  ctx.fillStyle = blocked ? 'rgba(84,32,24,0.95)' : 'rgba(56,44,30,0.92)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(38,31,20,0.75)';
+  ctx.lineWidth = 0.6;
+  ctx.stroke();
+  // 门楼顶（梯形 + 檐线）
+  ctx.beginPath();
+  ctx.moveTo(cx - w * 0.58, cy - h * 0.5);
+  ctx.lineTo(cx - w * 0.34, cy - h * 1.05);
+  ctx.lineTo(cx + w * 0.34, cy - h * 1.05);
+  ctx.lineTo(cx + w * 0.58, cy - h * 0.5);
+  ctx.closePath();
+  ctx.fillStyle = blocked ? '#8d3a2b' : PALETTE.roof;
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(38,31,20,0.7)';
+  ctx.lineWidth = 0.7;
+  ctx.stroke();
+  // 檐口高光
+  ctx.beginPath();
+  ctx.moveTo(cx - w * 0.5, cy - h * 0.56);
+  ctx.lineTo(cx + w * 0.5, cy - h * 0.56);
+  ctx.strokeStyle = 'rgba(246,236,208,0.5)';
+  ctx.lineWidth = 0.7;
+  ctx.stroke();
+}
+
+/** 敌楼 / 角楼：方形塔基 + 四坡顶 */
+function drawTower(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  s: number,
+  color: string,
+): void {
+  ctx.beginPath();
+  ctx.rect(cx - s * 0.5, cy - s * 0.4, s, s * 0.9);
+  ctx.fillStyle = PALETTE.wall;
+  ctx.fill();
+  ctx.strokeStyle = PALETTE.inkStrong;
+  ctx.lineWidth = 0.7;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx - s * 0.62, cy - s * 0.4);
+  ctx.lineTo(cx, cy - s * 0.95);
+  ctx.lineTo(cx + s * 0.62, cy - s * 0.4);
+  ctx.closePath();
+  ctx.fillStyle = PALETTE.roofDark;
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(38,31,20,0.6)';
+  ctx.lineWidth = 0.6;
+  ctx.stroke();
+  // 旗
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - s * 0.95);
+  ctx.lineTo(cx, cy - s * 1.5);
+  ctx.strokeStyle = 'rgba(46,40,24,0.8)';
+  ctx.lineWidth = 0.7;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - s * 1.5);
+  ctx.lineTo(cx + s * 0.6, cy - s * 1.32);
+  ctx.lineTo(cx, cy - s * 1.14);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+}
+
+/**
+ * 画一座城：3×3 城墙 + 四门 + 城内官署。
+ * `detail` 由屏幕尺寸决定：缩到很小时只留城墙轮廓与势力色，避免糊成一团。
+ */
+function drawCityBlock(
+  ctx: CanvasRenderingContext2D,
+  rect: { x: number; y: number; w: number; h: number },
+  city: City,
+  color: string,
+  opts: {
+    selected: boolean;
+    hovered: boolean;
+    target: boolean;
+    marchFrom: boolean;
+    gates: ReturnType<typeof gatesOf>;
+    nearCap: boolean;
+    detail: boolean;
+  },
+): void {
+  const { x, y, w, h } = rect;
+  const cell = Math.min(w, h) / 3;
+  const wallT = Math.max(1.2, cell * 0.36);
+
+  // 落影：城郭"立"在纸面上
+  ctx.beginPath();
+  ctx.ellipse(x + w / 2 + cell * 0.2, y + h + cell * 0.12, w * 0.52, cell * 0.32, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(52,42,26,0.26)';
+  ctx.fill();
+
+  // 外墙底面（略下移，做出厚度）
+  const dy = cell * 0.16;
+  ctx.beginPath();
+  ctx.roundRect(x, y + dy, w, h - dy, cell * 0.14);
+  ctx.fillStyle = PALETTE.wallDeep;
+  ctx.fill();
+
+  // 城墙顶面
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h - dy, cell * 0.14);
+  ctx.fillStyle = PALETTE.wall;
+  ctx.fill();
+  ctx.strokeStyle = PALETTE.inkStrong;
+  ctx.lineWidth = Math.max(0.8, cell * 0.055);
+  ctx.stroke();
+
+  // 城内地面
+  const ix = x + wallT;
+  const iy = y + wallT;
+  const iw = w - wallT * 2;
+  const ih = h - dy - wallT * 2;
+  if (iw > 2 && ih > 2) {
+    ctx.beginPath();
+    ctx.rect(ix, iy, iw, ih);
+    ctx.fillStyle = PALETTE.courtyard;
+    ctx.fill();
+    ctx.fillStyle = hexA(color, 0.26);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(48,40,26,0.55)';
+    ctx.lineWidth = 0.7;
+    ctx.stroke();
+  }
+
+  // 砖缝：只在足够大时画，否则变成噪点
+  if (opts.detail && cell > 9) {
+    ctx.strokeStyle = 'rgba(120,104,72,0.35)';
+    ctx.lineWidth = 0.5;
+    const step = cell * 0.34;
+    for (let i = 1; i * step < w; i++) {
+      const px = x + i * step;
+      ctx.beginPath();
+      ctx.moveTo(px, y);
+      ctx.lineTo(px, y + wallT * 0.8);
+      ctx.moveTo(px, y + h - dy - wallT * 0.8);
+      ctx.lineTo(px, y + h - dy);
+      ctx.stroke();
+    }
+    for (let i = 1; i * step < h - dy; i++) {
+      const py = y + i * step;
+      ctx.beginPath();
+      ctx.moveTo(x, py);
+      ctx.lineTo(x + wallT * 0.8, py);
+      ctx.moveTo(x + w - wallT * 0.8, py);
+      ctx.lineTo(x + w, py);
+      ctx.stroke();
+    }
+  }
+
+  // 女墙垛口：沿上沿一排小方块
+  if (cell > 8) {
+    const merlonW = Math.max(1, cell * 0.15);
+    const step = merlonW * 1.2;
+    ctx.fillStyle = PALETTE.wallShade;
+    for (let px = x + step; px < x + w - step; px += step) {
+      ctx.fillRect(px, y - merlonW * 0.55, merlonW, merlonW * 0.6);
+    }
+    ctx.strokeStyle = 'rgba(58,49,32,0.3)';
+    ctx.lineWidth = 0.4;
+    for (let px = x + step; px < x + w - step; px += step) {
+      ctx.strokeRect(px, y - merlonW * 0.55, merlonW, merlonW * 0.6);
+    }
+  }
+
+  // 四角敌楼
+  const towerS = Math.max(2.2, cell * 0.46);
+  if (cell > 9) {
+    for (const [sx, sy] of [
+      [-1, -1],
+      [1, -1],
+      [-1, 1],
+      [1, 1],
+    ] as const) {
+      drawTower(
+        ctx,
+        x + w / 2 + (sx * (w - towerS)) / 2,
+        y + h / 2 - dy / 2 + (sy * (h - dy - towerS)) / 2,
+        towerS,
+        color,
+      );
+    }
+  }
+
+  // 四门
+  if (cell > 5.5) {
+    for (const side of GATE_SIDES) {
+      const gate = opts.gates.find((g) => g.side === side);
+      const blocked = Boolean(gate?.blockedBy);
+      const gw = cell * 0.62;
+      const gh = Math.max(1.4, wallT * 0.95);
+      if (side === 'n') drawGateHouse(ctx, x + w / 2, y + wallT * 0.55, gw, gh, blocked);
+      else if (side === 's') {
+        ctx.save();
+        ctx.translate(x + w / 2, y + h - dy - wallT * 0.55);
+        ctx.scale(1, -1);
+        drawGateHouse(ctx, 0, 0, gw, gh, blocked);
+        ctx.restore();
+      } else if (side === 'w' || side === 'e') {
+        // 门楼必须朝外：西门的屋檐指向 -x，东门指向 +x
+        const dir = side === 'w' ? -1 : 1;
+        ctx.save();
+        ctx.translate(x + (side === 'w' ? wallT * 0.55 : w - wallT * 0.55), y + h / 2 - dy / 2);
+        ctx.rotate(dir * Math.PI * 0.5);
+        drawGateHouse(ctx, 0, 0, gw, gh, blocked);
+        ctx.restore();
+      }
+      // 门被封死 / 门外的敌军：门上打一道朱砂斜杠
+      if (blocked) {
+        const cxp = side === 'n' || side === 's' ? x + w / 2 : side === 'w' ? x + wallT * 0.5 : x + w - wallT * 0.5;
+        const cyp = side === 'n' ? y + wallT * 0.5 : side === 's' ? y + h - wallT * 0.5 : y + h / 2 - dy / 2;
+        ctx.beginPath();
+        ctx.moveTo(cxp - cell * 0.2, cyp - cell * 0.2);
+        ctx.lineTo(cxp + cell * 0.2, cyp + cell * 0.2);
+        ctx.moveTo(cxp + cell * 0.2, cyp - cell * 0.2);
+        ctx.lineTo(cxp - cell * 0.2, cyp + cell * 0.2);
+        ctx.strokeStyle = 'rgba(178,54,38,0.95)';
+        ctx.lineWidth = Math.max(1, cell * 0.09);
+        ctx.stroke();
+      }
+    }
+  }
+
+  // 城内官署 + 两间厢房
+  if (cell > 10 && iw > 8 && ih > 8) {
+    const hw = Math.min(iw * 0.46, cell * 1.1);
+    const hh = Math.min(ih * 0.4, cell * 0.9);
+    const hx = x + w / 2;
+    const hy = y + (h - dy) / 2 + hh * 0.18;
+    // 屋身
+    ctx.fillStyle = '#e8dcc0';
+    ctx.fillRect(hx - hw * 0.5, hy - hh * 0.45, hw, hh * 0.45);
+    ctx.strokeStyle = 'rgba(48,40,26,0.6)';
+    ctx.lineWidth = 0.6;
+    ctx.strokeRect(hx - hw * 0.5, hy - hh * 0.45, hw, hh * 0.45);
+    // 歇山顶
+    ctx.beginPath();
+    ctx.moveTo(hx - hw * 0.62, hy - hh * 0.45);
+    ctx.lineTo(hx - hw * 0.3, hy - hh * 0.95);
+    ctx.lineTo(hx + hw * 0.3, hy - hh * 0.95);
+    ctx.lineTo(hx + hw * 0.62, hy - hh * 0.45);
+    ctx.closePath();
+    ctx.fillStyle = PALETTE.roof;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(48,40,26,0.7)';
+    ctx.stroke();
+    // 正脊
+    ctx.beginPath();
+    ctx.moveTo(hx - hw * 0.3, hy - hh * 0.95);
+    ctx.lineTo(hx + hw * 0.3, hy - hh * 0.95);
+    ctx.strokeStyle = 'rgba(246,236,208,0.55)';
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+    // 厢房
+    ctx.fillStyle = 'rgba(206,190,158,0.9)';
+    for (const [ox, oy, sw, sh] of [
+      [-iw * 0.3, ih * 0.22, iw * 0.2, ih * 0.16],
+      [iw * 0.3, ih * 0.22, iw * 0.2, ih * 0.16],
+    ] as const) {
+      ctx.fillRect(hx + ox - sw / 2, y + (h - dy) / 2 + oy, sw, sh);
+      ctx.strokeStyle = 'rgba(58,49,32,0.45)';
+      ctx.lineWidth = 0.5;
+      ctx.strokeRect(hx + ox - sw / 2, y + (h - dy) / 2 + oy, sw, sh);
+    }
+  }
+
+  // 城头大旗：势力色 + 纹样双编码
+  if (cell > 7) {
+    const fx = x + w - cell * 0.34;
+    const fy = y + cell * 0.1;
+    ctx.beginPath();
+    ctx.moveTo(fx, fy);
+    ctx.lineTo(fx, fy - cell * 0.95);
+    ctx.strokeStyle = PALETTE.inkStrong;
+    ctx.lineWidth = Math.max(0.8, cell * 0.07);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(fx, fy - cell * 0.95);
+    ctx.lineTo(fx - cell * 0.62, fy - cell * 0.72);
+    ctx.lineTo(fx, fy - cell * 0.48);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(48,40,26,0.55)';
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+  }
+
+  // 选中 / 悬停 / 出征目标：三圈不同语义的框
+  if (opts.target) {
+    ctx.beginPath();
+    ctx.roundRect(x - cell * 0.16, y - cell * 0.16, w + cell * 0.32, h + cell * 0.32, cell * 0.2);
+    ctx.strokeStyle = opts.marchFrom ? 'rgba(214,178,96,0.95)' : 'rgba(150,54,40,0.85)';
+    ctx.lineWidth = opts.marchFrom ? 2 : 1.2;
+    ctx.setLineDash(opts.marchFrom ? [] : [4, 3]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  if (opts.selected) {
+    ctx.beginPath();
+    ctx.roundRect(x - cell * 0.22, y - cell * 0.22, w + cell * 0.44, h + cell * 0.44, cell * 0.22);
+    ctx.strokeStyle = 'rgba(196,158,86,0.95)';
+    ctx.lineWidth = 1.8;
+    ctx.setLineDash([6, 3]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  if (opts.hovered) {
+    ctx.beginPath();
+    ctx.roundRect(x - 1, y - 1, w + 2, h + 2, cell * 0.18);
+    ctx.fillStyle = 'rgba(255,248,228,0.22)';
+    ctx.fill();
+  }
+
+  // 粮草近上限：右下角朱印
+  if (opts.nearCap && cell > 6) {
+    const bx = x + w - cell * 0.12;
+    const by = y + h - cell * 0.1;
+    ctx.beginPath();
+    ctx.arc(bx, by, Math.max(4.5, cell * 0.34), 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(28,22,14,0.95)';
+    ctx.fill();
+    ctx.strokeStyle = '#d8a54a';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = '#f0d79a';
+    ctx.font = `700 ${Math.max(7, cell * 0.5)}px "PingFang SC", "Noto Sans SC", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('!', bx, by + 0.5);
+  }
+}
+
+// ── 部队棋子 ───────────────────────────────────────────────
+/**
+ * 部队棋子：纸底圆牌 + 势力色描边 + 军旗。
+ * 与城池的方形城郭形成形状区分，一眼分得清「城」与「军」。
+ */
+function drawArmyToken(
+  ctx: CanvasRenderingContext2D,
+  px: number,
+  py: number,
+  opts: {
+    color: string;
+    selected: boolean;
+    hovered: boolean;
+    troops: number;
+    r: number;
+    zoom: number;
+    name: string;
+    mp: number;
+    maxMp: number;
+  },
+): void {
+  const r = opts.r;
+
+  // 落影
+  ctx.beginPath();
+  ctx.ellipse(px + r * 0.16, py + r * 0.62, r * 0.95, r * 0.5, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(46,38,24,0.3)';
+  ctx.fill();
+
+  // 选中环
+  if (opts.selected) {
+    ctx.beginPath();
+    ctx.arc(px, py, r * 1.55, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(232,196,110,0.95)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 3]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // 底盘
+  ctx.beginPath();
+  ctx.arc(px, py, r, 0, Math.PI * 2);
+  ctx.fillStyle = PALETTE.token;
+  ctx.fill();
+  ctx.strokeStyle = opts.color;
+  ctx.lineWidth = Math.max(1.6, r * 0.24);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(px, py, r * 0.72, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(48,40,26,0.35)';
+  ctx.lineWidth = 0.7;
+  ctx.stroke();
+
+  // 兵种符号：一杆枪 + 一面小旗（简笔，任何缩放都读得出）
+  ctx.beginPath();
+  ctx.moveTo(px - r * 0.34, py + r * 0.36);
+  ctx.lineTo(px + r * 0.22, py - r * 0.4);
+  ctx.strokeStyle = 'rgba(58,48,30,0.85)';
+  ctx.lineWidth = Math.max(0.8, r * 0.12);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(px + r * 0.22, py - r * 0.4);
+  ctx.lineTo(px + r * 0.2, py - r * 0.8);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(px + r * 0.2, py - r * 0.8);
+  ctx.lineTo(px + r * 0.62, py - r * 0.64);
+  ctx.lineTo(px + r * 0.2, py - r * 0.46);
+  ctx.closePath();
+  ctx.fillStyle = opts.color;
+  ctx.fill();
+
+  // 悬停光圈
+  if (opts.hovered && !opts.selected) {
+    ctx.beginPath();
+    ctx.arc(px, py, r * 1.28, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(246,232,196,0.8)';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+  }
+
+  // 兵力：棋子下方小牌
+  const label = opts.troops >= 1000 ? `${(opts.troops / 1000).toFixed(1)}k` : `${opts.troops}`;
+  ctx.font = `700 ${Math.max(8, r * 0.72)}px "PingFang SC", "Noto Sans SC", sans-serif`;
+  const tw = ctx.measureText(label).width + 6;
+  ctx.beginPath();
+  ctx.roundRect(px - tw / 2, py + r * 1.05, tw, Math.max(10, r * 0.85), 2);
+  ctx.fillStyle = 'rgba(28,24,16,0.82)';
+  ctx.fill();
+  ctx.fillStyle = '#f0e4c8';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, px, py + r * 1.05 + Math.max(5, r * 0.44));
+
+  // 移动力：选中时在棋子左上角显示剩余天数
+  if (opts.selected) {
+    const mx = px - r * 1.1;
+    const my = py - r * 1.1;
+    ctx.beginPath();
+    ctx.arc(mx, my, Math.max(5, r * 0.46), 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(28,24,16,0.9)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(232,196,110,0.9)';
+    ctx.lineWidth = 0.9;
+    ctx.stroke();
+    ctx.fillStyle = '#f0e4c8';
+    ctx.font = `700 ${Math.max(7, r * 0.5)}px "PingFang SC", "Noto Sans SC", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${Math.round(opts.mp)}`, mx, my + 0.5);
+  }
+
+  // 将名：只在放大后显示，避免全图糊成一片
+  if (opts.zoom >= 1.6) {
+    ctx.font = '600 9px "PingFang SC", "Noto Sans SC", sans-serif';
+    const nw = ctx.measureText(opts.name).width + 6;
+    ctx.beginPath();
+    ctx.roundRect(px - nw / 2, py - r * 1.9, nw, 11, 2);
+    ctx.fillStyle = 'rgba(246,238,218,0.9)';
+    ctx.fill();
+    ctx.fillStyle = PALETTE.text;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(opts.name, px, py - r * 1.9 + 5.5);
+  }
+}
+
 export function MapCanvas({
   state,
   selectedCityId,
   attackRoutes,
   marchFrom,
   marchTargets,
+  selectedArmyId,
   onSelect,
   onMarchTarget,
+  onSelectArmy,
+  onMoveArmy,
 }: {
   state: GameState;
   selectedCityId: string;
@@ -523,14 +1004,21 @@ export function MapCanvas({
   marchFrom?: string | null;
   /** 出征模式下的全部可选目标（路线过多时只画一部分，但全部可点） */
   marchTargets?: string[];
+  /** 选中的部队 id：非空时进入「部队调度」模式 */
+  selectedArmyId?: string | null;
   onSelect: (id: string) => void;
   onMarchTarget?: (cityId: string) => void;
+  onSelectArmy?: (id: string | null) => void;
+  onMoveArmy?: (armyId: string, to: GridPoint) => void;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const pointsRef = useRef<ProjectedCity[]>([]);
+  const armyHitsRef = useRef<Array<{ id: string; x: number; y: number; r: number }>>([]);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [hover, setHover] = useState<string | null>(null);
+  const [hoverArmy, setHoverArmy] = useState<string | null>(null);
+  const [hoverTile, setHoverTile] = useState<GridPoint | null>(null);
   const [view, setView] = useState<MapView>({ zoom: 1, x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
   const dragRef = useRef<{
@@ -541,10 +1029,29 @@ export function MapCanvas({
     moved: boolean;
   } | null>(null);
   const mobileInit = useRef(false);
+
   const attackSet = useMemo(
     () => new Set(marchTargets ?? attackRoutes.map((r) => r.targetId)),
     [marchTargets, attackRoutes],
   );
+
+  const selectedArmy = useMemo(
+    () => (state.armies ?? []).find((a) => a.id === selectedArmyId) ?? null,
+    [state.armies, selectedArmyId],
+  );
+
+  /** 选中部队可走到的格子（移动力范围内） */
+  const reach = useMemo(() => {
+    if (!selectedArmy) return null;
+    return armyReachTiles(state, selectedArmy);
+  }, [state, selectedArmy]);
+
+  /** 鼠标悬停格 → 预览路径 */
+  const previewPath = useMemo(() => {
+    if (!selectedArmy || !hoverTile) return null;
+    if (hoverTile.col === selectedArmy.at.col && hoverTile.row === selectedArmy.at.row) return null;
+    return armyPreviewPathTiles(state, selectedArmy, hoverTile);
+  }, [state, selectedArmy, hoverTile]);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -557,7 +1064,7 @@ export function MapCanvas({
     return () => ro.disconnect();
   }, []);
 
-  /** 以某座城为中心缩放：手机点城池列表时，地图会跟过去 */
+  /** 以某座城为中心缩放 */
   const centerView = (nextZoom: number, cityId = selectedCityId) => {
     if (size.w < 10 || size.h < 10) return;
     const zoom = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM);
@@ -586,16 +1093,13 @@ export function MapCanvas({
     );
   };
 
-  // 首次进入手机尺寸时默认放大到 2.1×，否则 61 城会挤成一张网
   useEffect(() => {
     if (!size.w || !size.h || mobileInit.current) return;
     mobileInit.current = true;
     if (size.w < 560) centerView(2.1);
-    // 只在首次拿到尺寸时决定初始视野
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [size.w, size.h]);
 
-  // 从城池列表切换选中城时，保持地图跟随（只在放大状态）
   useEffect(() => {
     if (view.zoom <= 1.01 || !size.w || !size.h) return;
     const base = project(state, size.w, size.h);
@@ -613,7 +1117,6 @@ export function MapCanvas({
         ? v
         : { ...v, x: next.x, y: next.y },
     );
-    // 选择变化 / 尺寸变化时跟随；缩放由按钮与滚轮单独处理
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCityId, size.w, size.h]);
 
@@ -631,7 +1134,7 @@ export function MapCanvas({
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, size.w, size.h);
 
-    // 底：海域渐变（地形底图之外留白也应是海色）
+    // 底：海色渐变（地形底图之外留白也应是海色）
     const bg = ctx.createRadialGradient(
       size.w * 0.5,
       size.h * 0.38,
@@ -645,9 +1148,18 @@ export function MapCanvas({
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, size.w, size.h);
 
-    // 地形底图：一次 drawImage，跟着缩放 / 平移走
     const layout = layoutOf(size.w, size.h);
     const cache = ensureTerrainCache();
+    const tileScreen = (p: GridPoint) => {
+      const c = tileCenter(p.col, p.row);
+      return worldToScreen(c.x, c.y, size.w, size.h, view, layout);
+    };
+    const tileRect = (col: number, row: number) => {
+      const a = worldToScreen(col * MAP.tile, row * MAP.tile, size.w, size.h, view, layout);
+      const b = worldToScreen((col + 1) * MAP.tile, (row + 1) * MAP.tile, size.w, size.h, view, layout);
+      return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
+    };
+
     ctx.save();
     ctx.translate(size.w / 2 + view.x, size.h / 2 + view.y);
     ctx.scale(view.zoom, view.zoom);
@@ -656,7 +1168,6 @@ export function MapCanvas({
     ctx.scale(layout.scale, layout.scale);
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(cache, 0, 0, MAP.width, MAP.height);
-    // 行军网格：放大后显出 96×72 的格子，提示"部队在格上走"
     if (view.zoom >= 1.2) {
       ctx.strokeStyle = `rgba(58,48,32,${0.14 * Math.min(1, (view.zoom - 1.2) / 0.45)})`;
       ctx.lineWidth = 0.4;
@@ -677,14 +1188,14 @@ export function MapCanvas({
     pointsRef.current = pts;
     const byId = new Map(pts.map((p) => [p.city.id, p]));
 
-    // 势力色晕：每座城脚下洇开一圈淡淡的本方颜色，形成"势力范围"的第一眼印象
+    // 势力色晕
     for (const p of pts) {
       if (!p.city.ownerId) continue;
       const color = state.factions[p.city.ownerId]?.color ?? '#8a8274';
-      const halo = (NODE_RADIUS[p.city.size] + 12) * (p.city.size === 'capital' ? 1.9 : 1.45);
+      const halo = Math.max(p.bw, p.bh) * 0.78;
       const g = ctx.createRadialGradient(p.x, p.y, halo * 0.35, p.x, p.y, halo);
-      g.addColorStop(0, hexA(color, 0.16));
-      g.addColorStop(0.65, hexA(color, 0.07));
+      g.addColorStop(0, hexA(color, 0.15));
+      g.addColorStop(0.65, hexA(color, 0.06));
       g.addColorStop(1, hexA(color, 0));
       ctx.fillStyle = g;
       ctx.beginPath();
@@ -692,7 +1203,6 @@ export function MapCanvas({
       ctx.fill();
     }
 
-    // 已证实 / 已证伪的传闻：按传闻声称的城池挂标记
     const rumorMarks = new Map<string, 'true' | 'false'>();
     for (const r of state.rumors ?? []) {
       if (r.verified === undefined) continue;
@@ -702,13 +1212,7 @@ export function MapCanvas({
       else rumorMarks.set(r.claimedCityId, 'false');
     }
 
-    const drawBadge = (
-      bx: number,
-      by: number,
-      text: string,
-      stroke: string,
-      fill: string,
-    ) => {
+    const drawBadge = (bx: number, by: number, text: string, stroke: string, fill: string) => {
       ctx.beginPath();
       ctx.arc(bx, by, 5.2, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(20,19,15,0.95)';
@@ -723,7 +1227,7 @@ export function MapCanvas({
       ctx.fillText(text, bx, by + 0.5);
     };
 
-    // 道路：浅赭色虚线，先压一道浅底再走线，像地图上印出来的驿道
+    // 道路
     for (const e of state.edges) {
       const a = byId.get(e.a);
       const b = byId.get(e.b);
@@ -744,53 +1248,43 @@ export function MapCanvas({
       ctx.setLineDash([]);
     }
 
-    // 出征路线：沿网格逐格画出真实行军路径
-    const tileScreen = (p: GridPoint) => {
-      const c = tileCenter(p.col, p.row);
-      return worldToScreen(c.x, c.y, size.w, size.h, view, layout);
-    };
+    // 出征路线
     for (const route of attackRoutes) {
       const start = byId.get(marchFrom ?? selectedCityId);
       if (!start) continue;
       const points = [start, ...route.path.map(tileScreen)];
       if (points.length < 2) continue;
-      ctx.beginPath();
-      ctx.setLineDash([4, 4]);
-      ctx.lineWidth = 2.6;
-      ctx.strokeStyle = 'rgba(246,236,214,0.5)';
-      points.forEach((p, i) => {
-        if (i === 0) ctx.moveTo(p.x, p.y);
-        else ctx.lineTo(p.x, p.y);
-      });
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.setLineDash([4, 4]);
-      ctx.lineWidth = 1.6;
-      ctx.strokeStyle = marchFrom
-        ? 'rgba(246,214,122,0.9)'
-        : 'rgba(150,54,40,0.75)';
-      points.forEach((p, i) => {
-        if (i === 0) ctx.moveTo(p.x, p.y);
-        else ctx.lineTo(p.x, p.y);
-      });
-      ctx.stroke();
+      const stroke = marchFrom ? 'rgba(246,214,122,0.9)' : 'rgba(150,54,40,0.7)';
+      for (const [lw, color] of [
+        [2.6, 'rgba(246,236,214,0.45)'],
+        [1.5, stroke],
+      ] as const) {
+        ctx.beginPath();
+        ctx.setLineDash([4, 4]);
+        ctx.lineWidth = lw;
+        ctx.strokeStyle = color;
+        points.forEach((p, i) => {
+          if (i === 0) ctx.moveTo(p.x, p.y);
+          else ctx.lineTo(p.x, p.y);
+        });
+        ctx.stroke();
+      }
       ctx.setLineDash([]);
-      // 箭头落在目标城外侧，点明行军方向
       const last = points[points.length - 1]!;
       const prev = points[points.length - 2]!;
       const angle = Math.atan2(last.y - prev.y, last.x - prev.x);
-      const tipX = last.x - Math.cos(angle) * 14;
-      const tipY = last.y - Math.sin(angle) * 14;
+      const tipX = last.x - Math.cos(angle) * 12;
+      const tipY = last.y - Math.sin(angle) * 12;
       ctx.beginPath();
       ctx.moveTo(tipX, tipY);
       ctx.lineTo(tipX - Math.cos(angle - 0.4) * 6, tipY - Math.sin(angle - 0.4) * 6);
       ctx.lineTo(tipX - Math.cos(angle + 0.4) * 6, tipY - Math.sin(angle + 0.4) * 6);
       ctx.closePath();
-      ctx.fillStyle = marchFrom ? 'rgba(246,214,122,0.95)' : 'rgba(150,54,40,0.85)';
+      ctx.fillStyle = marchFrom ? 'rgba(246,214,122,0.95)' : 'rgba(150,54,40,0.8)';
       ctx.fill();
     }
 
-    // 关卡 / 渡口：画在道路中点，关隘用菱形，渡口用波纹圆点
+    // 关卡 / 渡口
     const gateOwnerColor = (gate: (typeof GATES)[number]): string => {
       const owner = gate.guardCityId ? state.cities[gate.guardCityId]?.ownerId : null;
       return owner ? state.factions[owner]?.color ?? '#8a8274' : '#8a8274';
@@ -807,7 +1301,6 @@ export function MapCanvas({
       ctx.save();
       ctx.translate(sp.x, sp.y);
       if (gate.kind === 'pass') {
-        // 关隘：两侧敌楼 + 中间门洞，缩到最小也要像"一座关城"
         const hw = r * 1.15;
         ctx.beginPath();
         ctx.moveTo(-hw, r * 0.85);
@@ -822,7 +1315,6 @@ export function MapCanvas({
         ctx.strokeStyle = 'rgba(52,45,30,0.8)';
         ctx.lineWidth = 1;
         ctx.stroke();
-        // 门洞
         ctx.beginPath();
         ctx.moveTo(-r * 0.36, r * 0.85);
         ctx.lineTo(-r * 0.36, r * 0.05);
@@ -831,7 +1323,6 @@ export function MapCanvas({
         ctx.closePath();
         ctx.fillStyle = 'rgba(66,56,36,0.9)';
         ctx.fill();
-        // 关城旗
         ctx.beginPath();
         ctx.moveTo(0, -r * 0.95);
         ctx.lineTo(0, -r * 1.8);
@@ -846,7 +1337,6 @@ export function MapCanvas({
         ctx.fillStyle = color;
         ctx.fill();
       } else {
-        // 渡口：青绿水面 + 一叶小舟
         ctx.beginPath();
         ctx.arc(0, 0, r, 0, Math.PI * 2);
         ctx.fillStyle = 'rgba(72,120,122,0.95)';
@@ -861,17 +1351,11 @@ export function MapCanvas({
         ctx.strokeStyle = 'rgba(214,240,234,0.95)';
         ctx.lineWidth = 1.1;
         ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(-r * 0.42, r * 0.45);
-        ctx.quadraticCurveTo(0, r * 0.9, r * 0.42, r * 0.45);
-        ctx.strokeStyle = 'rgba(40,62,56,0.8)';
-        ctx.lineWidth = 1;
-        ctx.stroke();
       }
       ctx.restore();
     }
 
-    // 设施：占一格的农田 / 市场 / 箭楼 / 烽燧，按格子中心绘制
+    // 设施
     for (const f of state.facilities ?? []) {
       const center = tileCenter(f.col, f.row);
       const sp = worldToScreen(center.x, center.y, size.w, size.h, view, layout);
@@ -879,7 +1363,6 @@ export function MapCanvas({
       const color = ownerId ? state.factions[ownerId]?.color ?? '#8a8274' : '#8a8274';
       ctx.save();
       ctx.translate(sp.x, sp.y);
-      // 底：纸色圆牌，保证任何地形上都读得出来
       ctx.beginPath();
       ctx.arc(0, 0, 5, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(243,235,214,0.95)';
@@ -888,7 +1371,6 @@ export function MapCanvas({
       ctx.lineWidth = 1.4;
       ctx.stroke();
       if (f.kind === 'farm') {
-        // 农田：三道垄
         ctx.strokeStyle = 'rgba(96,120,64,0.95)';
         ctx.lineWidth = 1.1;
         for (let i = -1; i <= 1; i++) {
@@ -898,7 +1380,6 @@ export function MapCanvas({
           ctx.stroke();
         }
       } else if (f.kind === 'market') {
-        // 市场：方孔铜钱
         ctx.fillStyle = 'rgba(168,124,62,0.95)';
         ctx.beginPath();
         ctx.arc(0, 0, 2.6, 0, Math.PI * 2);
@@ -906,14 +1387,12 @@ export function MapCanvas({
         ctx.fillStyle = 'rgba(243,235,214,0.95)';
         ctx.fillRect(-0.8, -0.8, 1.6, 1.6);
       } else if (f.kind === 'tower') {
-        // 箭楼：城门状小塔
         ctx.fillStyle = 'rgba(70,58,40,0.92)';
         ctx.fillRect(-2.4, -1.6, 4.8, 4.2);
         ctx.fillRect(-3.2, -2.6, 6.4, 1.4);
         ctx.fillRect(-1.6, 0.2, 1.4, 2.4);
         ctx.fillRect(0.6, 0.2, 1.4, 2.4);
       } else {
-        // 烽燧：一簇火苗
         ctx.fillStyle = 'rgba(196,96,44,0.95)';
         ctx.beginPath();
         ctx.moveTo(0, -3.2);
@@ -925,237 +1404,173 @@ export function MapCanvas({
       ctx.restore();
     }
 
-    // 城池节点
+    // ── 行军预览 ──
+    if (selectedArmy && previewPath && previewPath.length > 0) {
+      const points = [tileScreen(selectedArmy.at), ...previewPath.map(tileScreen)];
+      ctx.beginPath();
+      ctx.setLineDash([5, 4]);
+      ctx.lineWidth = 2.4;
+      ctx.strokeStyle = 'rgba(246,238,214,0.6)';
+      points.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.setLineDash([5, 4]);
+      ctx.lineWidth = 1.4;
+      ctx.strokeStyle = 'rgba(232,196,110,0.95)';
+      points.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+      ctx.stroke();
+      ctx.setLineDash([]);
+      const last = points[points.length - 1]!;
+      const prev = points[points.length - 2]!;
+      const angle = Math.atan2(last.y - prev.y, last.x - prev.x);
+      ctx.beginPath();
+      ctx.moveTo(last.x, last.y);
+      ctx.lineTo(last.x - Math.cos(angle - 0.42) * 7, last.y - Math.sin(angle - 0.42) * 7);
+      ctx.lineTo(last.x - Math.cos(angle + 0.42) * 7, last.y - Math.sin(angle + 0.42) * 7);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(232,196,110,0.95)';
+      ctx.fill();
+    }
+
+    // 悬停格高亮
+    if (selectedArmy && hoverTile) {
+      const r = tileRect(hoverTile.col, hoverTile.row);
+      ctx.beginPath();
+      ctx.roundRect(r.x, r.y, r.w, r.h, 2);
+      ctx.strokeStyle = 'rgba(246,232,196,0.85)';
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+    }
+
+    // ── 城池 ──
     for (const p of pts) {
       const c = p.city;
       const color = c.ownerId ? state.factions[c.ownerId]?.color ?? '#8a8274' : '#8a8274';
-      const isSel = c.id === selectedCityId;
-      const isHover = c.id === hover;
-      const isTarget = attackSet.has(c.id);
-      const r = NODE_RADIUS[c.size];
+      const cell = Math.min(p.bw, p.bh) / 3;
+      drawCityBlock(
+        ctx,
+        { x: p.bx, y: p.by, w: p.bw, h: p.bh },
+        c,
+        color,
+        {
+          selected: c.id === selectedCityId,
+          hovered: c.id === hover,
+          target: Boolean(marchFrom) && attackSet.has(c.id),
+          marchFrom: Boolean(marchFrom),
+          gates: gatesOf(state, c.id),
+          nearCap:
+            c.ownerId === state.playerFactionId &&
+            c.food >= BALANCE.FOOD_CAP * BALANCE.FOOD_WARN_RATIO,
+          detail: cell >= 8,
+        },
+      );
 
-      // 城郭尺寸：宽略大于高，接近《三国志11》那种带角楼的方形城
-      const w = r * 2.15;
-      const h = r * 1.55;
-      const x0 = p.x - w / 2;
-      const y0 = p.y - h / 2;
-
-      // 投影：城郭"立"在纸面上，而不是浮着
-      ctx.beginPath();
-      ctx.ellipse(p.x + 2.5, p.y + h * 0.66, w * 0.56, h * 0.32, 0, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(52,42,26,0.26)';
-      ctx.fill();
-
-      // 目标 / 选中 / 悬停：三圈不同语义的框
-      const outline = (pad: number, stroke: string, width: number, dash: number[]) => {
-        ctx.beginPath();
-        ctx.roundRect(x0 - pad, y0 - pad, w + pad * 2, h + pad * 2, 3 + pad * 0.5);
-        ctx.strokeStyle = stroke;
-        ctx.lineWidth = width;
-        ctx.setLineDash(dash);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      };
-      if (isTarget) {
-        // 出征模式下目标城用实线金框，明确"点这里就出兵"
-        if (marchFrom) outline(5, 'rgba(214,178,96,0.95)', 2, []);
-        else outline(4.5, 'rgba(150,54,40,0.85)', 1.2, [4, 3]);
-      }
-      if (isSel) outline(3, 'rgba(196,158,86,0.95)', 1.6, [5, 3]);
-      if (isHover) {
-        ctx.beginPath();
-        ctx.roundRect(x0 - 2, y0 - 2, w + 4, h + 4, 4);
-        ctx.fillStyle = 'rgba(255,248,228,0.32)';
-        ctx.fill();
-      }
-
-      // 墙体
-      ctx.beginPath();
-      ctx.roundRect(x0, y0, w, h, 2.5);
-      ctx.fillStyle = PALETTE.wall;
-      ctx.fill();
-      ctx.strokeStyle = PALETTE.inkStrong;
-      ctx.lineWidth = 1.1;
-      ctx.stroke();
-
-      // 势力色内衬：一眼看出归属，又不遮掉纸色
-      ctx.beginPath();
-      ctx.roundRect(x0 + 2.4, y0 + 2.4, w - 4.8, h - 4.8, 1.5);
-      ctx.fillStyle = hexA(color, 0.24);
-      ctx.fill();
-
-      // 女墙垛口：都城 4 段、小城 3 段
-      const merlons = c.size === 'small' ? 3 : 4;
-      const mw = (w - 2) / (merlons * 2 - 1);
-      ctx.fillStyle = PALETTE.wallShade;
-      for (let m = 0; m < merlons; m++) {
-        ctx.fillRect(x0 + 1 + m * 2 * mw, y0 - h * 0.14, mw, h * 0.16);
-      }
-
-      // 四角敌楼
-      const tw = Math.max(3, r * 0.46);
-      for (const [sx, sy] of [
-        [-1, -1],
-        [1, -1],
-        [-1, 1],
-        [1, 1],
-      ] as const) {
-        ctx.beginPath();
-        ctx.rect(p.x + sx * (w / 2) - tw / 2, p.y + sy * (h / 2) - tw / 2, tw, tw);
-        ctx.fillStyle = PALETTE.wall;
-        ctx.fill();
-        ctx.strokeStyle = PALETTE.ink;
-        ctx.lineWidth = 0.9;
-        ctx.stroke();
-      }
-
-      // 南门门洞
-      ctx.beginPath();
-      ctx.moveTo(p.x - r * 0.3, y0 + h);
-      ctx.lineTo(p.x - r * 0.3, y0 + h * 0.58);
-      ctx.quadraticCurveTo(p.x, y0 + h * 0.34, p.x + r * 0.3, y0 + h * 0.58);
-      ctx.lineTo(p.x + r * 0.3, y0 + h);
-      ctx.closePath();
-      ctx.fillStyle = 'rgba(64,54,36,0.85)';
-      ctx.fill();
-
-      // 城头旗：势力色三角旗，是地图上最直接的归属信号
-      const fx = x0 + w - 2.5;
-      const fy = y0 - h * 0.14;
-      ctx.beginPath();
-      ctx.moveTo(fx, fy);
-      ctx.lineTo(fx, fy - r * 1.05);
-      ctx.strokeStyle = PALETTE.inkStrong;
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(fx, fy - r * 1.05);
-      ctx.lineTo(fx - r * 0.82, fy - r * 0.82);
-      ctx.lineTo(fx, fy - r * 0.56);
-      ctx.closePath();
-      ctx.fillStyle = color;
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(52,45,30,0.6)';
-      ctx.lineWidth = 0.6;
-      ctx.stroke();
-
-      // 【优化】§5.5 颜色 + 纹样双编码，灰度下仍能区分势力
-      const dotR = Math.max(3.4, r * 0.4);
-      ctx.beginPath();
-      ctx.arc(p.x, p.y + h * 0.08, dotR, 0, Math.PI * 2);
-      ctx.fillStyle = hexA(color, 0.94);
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(52,45,30,0.6)';
-      ctx.lineWidth = 0.8;
-      ctx.stroke();
-      drawFactionPattern(ctx, p.x, p.y + h * 0.08, factionPattern(c.ownerId), dotR);
-
-      // 【优化】§2.2 95% 上限预警：地图徽标用“斜纹 + !”双编码，灰度下也可辨
-      const nearCap =
-        c.ownerId === state.playerFactionId &&
-        c.food >= BALANCE.FOOD_CAP * BALANCE.FOOD_WARN_RATIO;
-      if (nearCap) {
-        const bx = p.x + w / 2;
-        const by = p.y + h / 2;
-        ctx.beginPath();
-        ctx.arc(bx, by, 5.5, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(28,22,14,0.95)';
-        ctx.fill();
-        ctx.strokeStyle = '#d8a54a';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(bx, by, 4.2, 0, Math.PI * 2);
-        ctx.clip();
-        ctx.strokeStyle = 'rgba(216,165,74,0.5)';
-        ctx.lineWidth = 1;
-        for (let off = -7; off <= 7; off += 3) {
-          ctx.beginPath();
-          ctx.moveTo(bx + off, by - 6);
-          ctx.lineTo(bx + off + 6, by + 6);
-          ctx.stroke();
-        }
-        ctx.restore();
-
-        ctx.fillStyle = '#f0d79a';
-        ctx.font = '700 8px "PingFang SC", "Noto Sans SC", sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('!', bx, by + 0.5);
-      }
-
-      // 探索中：左下角「探」；传闻验证结果：左上角 ✓ / ×
-      if (c.exploration) {
-        drawBadge(p.x - w / 2, p.y + h / 2, '探', '#5d9a8b', '#d7efe8');
-      }
+      if (c.exploration) drawBadge(p.bx, p.by + p.bh, '探', '#5d9a8b', '#d7efe8');
       const mark = rumorMarks.get(c.id);
-      if (mark === 'true') {
-        drawBadge(p.x - w / 2, y0 - 4, '✓', '#d8a54a', '#f0d79a');
-      } else if (mark === 'false') {
-        drawBadge(p.x - w / 2, y0 - 4, '×', '#c14a3a', '#e3a79c');
-      }
+      if (mark === 'true') drawBadge(p.bx, p.by - 4, '✓', '#d8a54a', '#f0d79a');
+      else if (mark === 'false') drawBadge(p.bx, p.by - 4, '×', '#c14a3a', '#e3a79c');
     }
 
-    // 在途部队：沿剩余网格路线画虚线，标记用势力色小旗
-    const armyTileScreen = (p: GridPoint) => {
-      const c = tileCenter(p.col, p.row);
-      return worldToScreen(c.x, c.y, size.w, size.h, view, layout);
-    };
+    // ── 部队移动范围 ──
+    // 只铺一层极淡的亮色，真正的可读性靠「边界线」：战棋式移动力范围
+    if (selectedArmy && reach && reach.size > 0) {
+      for (const key of reach.keys()) {
+        const [col, row] = key.split(',').map(Number) as [number, number];
+        const r = tileRect(col, row);
+        ctx.fillStyle = 'rgba(255,248,226,0.3)';
+        ctx.fillRect(r.x, r.y, r.w, r.h);
+      }
+      const has = (c: number, r: number): boolean => reach.has(`${c},${r}`);
+      ctx.beginPath();
+      for (const key of reach.keys()) {
+        const [col, row] = key.split(',').map(Number) as [number, number];
+        const r = tileRect(col, row);
+        if (!has(col, row - 1)) {
+          ctx.moveTo(r.x, r.y);
+          ctx.lineTo(r.x + r.w, r.y);
+        }
+        if (!has(col, row + 1)) {
+          ctx.moveTo(r.x, r.y + r.h);
+          ctx.lineTo(r.x + r.w, r.y + r.h);
+        }
+        if (!has(col - 1, row)) {
+          ctx.moveTo(r.x, r.y);
+          ctx.lineTo(r.x, r.y + r.h);
+        }
+        if (!has(col + 1, row)) {
+          ctx.moveTo(r.x + r.w, r.y);
+          ctx.lineTo(r.x + r.w, r.y + r.h);
+        }
+      }
+      // 双描边：先铺一层浅色晕，再压一道琥珀线，压在城郭上也读得清
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = 'rgba(252,246,226,0.55)';
+      ctx.lineWidth = 3.4;
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(184,134,48,0.95)';
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+    }
+
+    // ── 部队 ──
+    const armyHits: Array<{ id: string; x: number; y: number; r: number }> = [];
     for (const army of state.armies ?? []) {
       const pos = armyWorldPos(state, army);
       if (!pos) continue;
       const cur = worldToScreen(pos.x, pos.y, size.w, size.h, view, layout);
       const color = state.factions[army.factionId]?.color ?? '#8a8274';
-      const routePts = [cur, ...army.path.map(armyTileScreen)];
-      if (routePts.length > 1) {
+      const cellPx = MAP.tile * layout.scale * view.zoom;
+      const r = clamp(cellPx * 0.46, 6.5, 16);
+
+      // 剩余路线：虚线
+      if (army.path.length > 0) {
+        const routePts = [cur, ...army.path.map(tileScreen)];
         ctx.beginPath();
-        ctx.setLineDash([5, 5]);
-        ctx.lineWidth = 2;
-        ctx.strokeStyle = hexA(color, 0.55);
-        routePts.forEach((p, i) => {
-          if (i === 0) ctx.moveTo(p.x, p.y);
-          else ctx.lineTo(p.x, p.y);
-        });
+        ctx.setLineDash([4, 4]);
+        ctx.lineWidth = 1.6;
+        ctx.strokeStyle = hexA(color, 0.5);
+        routePts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
         ctx.stroke();
         ctx.setLineDash([]);
       }
-      // 行军标记：纸底圆牌 + 势力色描边 + 一根挑起的军旗
-      ctx.beginPath();
-      ctx.ellipse(cur.x + 1.5, cur.y + 4.5, 7, 4.5, 0, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(52,42,26,0.28)';
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(cur.x, cur.y, 6.2, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(246,238,218,0.96)';
-      ctx.fill();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 2;
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(cur.x, cur.y - 5.5);
-      ctx.lineTo(cur.x, cur.y - 13);
-      ctx.strokeStyle = PALETTE.inkStrong;
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(cur.x, cur.y - 13);
-      ctx.lineTo(cur.x + 8, cur.y - 10.5);
-      ctx.lineTo(cur.x, cur.y - 8);
-      ctx.closePath();
-      ctx.fillStyle = color;
-      ctx.fill();
-      if (view.zoom >= 1.35) {
-        ctx.font = '600 9px "PingFang SC", "Noto Sans SC", sans-serif';
-        ctx.textAlign = 'left';
+
+      const gens = army.generalIds
+        .map((id) => state.generals[id]?.name)
+        .filter((n): n is string => Boolean(n));
+      drawArmyToken(ctx, cur.x, cur.y, {
+        color,
+        selected: army.id === selectedArmyId,
+        hovered: army.id === hoverArmy,
+        troops: army.troops,
+        r,
+        zoom: view.zoom,
+        name: gens.slice(0, 2).join('·'),
+        mp: armyMp(army),
+        maxMp: armyMaxMp(army),
+      });
+      armyHits.push({ id: army.id, x: cur.x, y: cur.y, r: r * 1.35 });
+
+      // 围城：棋子旁挂一面「围」旗
+      const siege = siegeTargetOf(state, army);
+      if (siege) {
+        const label = '围';
+        ctx.font = '700 9px "PingFang SC", "Noto Sans SC", sans-serif';
+        ctx.beginPath();
+        ctx.roundRect(cur.x + r * 0.7, cur.y - r * 1.9, 13, 13, 2);
+        ctx.fillStyle = 'rgba(150,54,40,0.94)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(246,232,196,0.8)';
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+        ctx.fillStyle = '#f6ecd4';
+        ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillStyle = PALETTE.text;
-        ctx.fillText(`${army.troops}`, cur.x + 9, cur.y + 1);
+        ctx.fillText(label, cur.x + r * 0.7 + 6.5, cur.y - r * 1.9 + 7);
       }
     }
+    armyHitsRef.current = armyHits;
 
-    // 标签：按优先级绘制，碰撞则隐藏（悬停有 tooltip 兜底）
+    // ── 城池名牌 ──
     type Box = { x1: number; y1: number; x2: number; y2: number };
     const placed: Box[] = [];
     const overlaps = (b: Box): boolean =>
@@ -1189,23 +1604,20 @@ export function MapCanvas({
     for (const p of ordered) {
       const c = p.city;
       const pri = priority(c);
-      const r = NODE_RADIUS[c.size];
       ctx.font = nameFont;
       const nameW = ctx.measureText(c.name).width + 10;
-      // 让出城郭与城头旗的高度：名牌贴在城墙外沿，不压住图标
-      const topOffset = r * 2.02 + 3;
-      const bottomOffset = r * 0.8 + 4;
+      // 留出门楼的位置：上下各让开 ~7px，否则名牌会盖住北门的屋檐
       const above: Box = {
         x1: p.x - nameW / 2,
-        y1: p.y - topOffset - 15,
+        y1: p.by - 25,
         x2: p.x + nameW / 2,
-        y2: p.y - topOffset,
+        y2: p.by - 10,
       };
       const below: Box = {
         x1: p.x - nameW / 2,
-        y1: p.y + bottomOffset,
+        y1: p.by + p.bh + 8,
         x2: p.x + nameW / 2,
-        y2: p.y + bottomOffset + 15,
+        y2: p.by + p.bh + 23,
       };
 
       let nameBox: Box | null = !overlaps(above) ? above : !overlaps(below) ? below : null;
@@ -1220,10 +1632,11 @@ export function MapCanvas({
         const sub = `${owner} · ${cityTroops(state, c.id)}`;
         ctx.font = subFont;
         const subW = ctx.measureText(sub).width + 8;
-        const nameAbove = nameBox ? nameBox.y1 < p.y : true;
-        const candidate: Box = nameAbove
-          ? { x1: p.x - subW / 2, y1: (nameBox ?? above).y1 - 14, x2: p.x + subW / 2, y2: (nameBox ?? above).y1 - 1 }
-          : { x1: p.x - subW / 2, y1: (nameBox ?? below).y2 + 1, x2: p.x + subW / 2, y2: (nameBox ?? below).y2 + 14 };
+        const base = nameBox ?? above;
+        const candidate: Box =
+          base.y1 < p.y
+            ? { x1: p.x - subW / 2, y1: base.y1 - 13, x2: p.x + subW / 2, y2: base.y1 - 1 }
+            : { x1: p.x - subW / 2, y1: base.y2 + 1, x2: p.x + subW / 2, y2: base.y2 + 13 };
         if (!overlaps(candidate)) {
           drawChip(candidate, sub, 'rgba(43,36,21,0.7)', 'rgba(243,235,214,0.78)', subFont);
           placed.push(candidate);
@@ -1231,7 +1644,7 @@ export function MapCanvas({
       }
     }
 
-    // 关卡 / 渡口名称：缩放到一定倍数才显示，避免全图过密
+    // 关卡名
     if (view.zoom >= 1.25) {
       const gateFont = '600 9px "PingFang SC", "Noto Sans SC", sans-serif';
       for (const gate of GATES) {
@@ -1243,12 +1656,7 @@ export function MapCanvas({
         const sp = worldToScreen(world.x, world.y, size.w, size.h, view, layout);
         ctx.font = gateFont;
         const tw = ctx.measureText(gate.name).width + 7;
-        const box: Box = {
-          x1: sp.x - tw / 2,
-          y1: sp.y + 6,
-          x2: sp.x + tw / 2,
-          y2: sp.y + 18,
-        };
+        const box: Box = { x1: sp.x - tw / 2, y1: sp.y + 6, x2: sp.x + tw / 2, y2: sp.y + 18 };
         if (overlaps(box)) continue;
         drawChip(
           box,
@@ -1262,7 +1670,8 @@ export function MapCanvas({
     }
 
     // 悬停 tooltip
-    const hoverPoint = hover ? pts.find((p) => p.city.id === hover) : null;
+    // 调度部队时不弹城池 tooltip：它会挡住移动范围与路径预览
+    const hoverPoint = hover && !selectedArmyId ? pts.find((p) => p.city.id === hover) : null;
     if (hoverPoint) {
       const c = hoverPoint.city;
       const gens = Object.values(state.generals)
@@ -1273,8 +1682,10 @@ export function MapCanvas({
         c.ownerId === state.playerFactionId &&
         c.food >= BALANCE.FOOD_CAP * BALANCE.FOOD_WARN_RATIO;
       const hasSkill = Boolean(c.skill);
-      const w = 196;
-      const h = (hasSkill ? 136 : 120) + (nearCapTooltip ? 16 : 0);
+      const gateInfos = gatesOf(state, c.id);
+      const blockedGates = gateInfos.filter((g) => g.blockedBy);
+      const w = 210;
+      const h = (hasSkill ? 152 : 136) + (nearCapTooltip ? 16 : 0) + (blockedGates.length ? 16 : 0);
       let x = hoverPoint.x + 14;
       let y = hoverPoint.y - 44;
       if (x + w > size.w - 8) x = hoverPoint.x - w - 14;
@@ -1310,9 +1721,8 @@ export function MapCanvas({
       );
 
       ctx.fillStyle = '#c8a45e';
-      ctx.font = '10px "PingFang SC", "Noto Sans SC", sans-serif';
       ctx.fillText(
-        `${CITY_SIZE_LABEL[c.size]} · 城防 ${c.fortification}（${fortificationLabel(c.fortification)}）`,
+        `${CITY_SIZE_LABEL[c.size]} · 城防 ${c.fortification}（${fortificationLabel(c.fortification)}）· 城墙 3×3`,
         x + 12,
         y + 52,
       );
@@ -1331,36 +1741,96 @@ export function MapCanvas({
         y + 86,
       );
       ctx.fillText(`金 ${c.gold} · 粮 ${c.food}`, x + 12, y + 103);
+
+      // 四门状态：可用 / 水门 / 被堵
+      const gateText = gateInfos
+        .map((g) => {
+          const mark = g.blockedBy ? '✕' : g.usable ? '○' : '－';
+          return `${g.label.slice(0, 1)}${mark}`;
+        })
+        .join(' ');
+      ctx.fillStyle = blockedGates.length > 0 ? '#d98a72' : '#8fb8a4';
+      ctx.fillText(`四门 ${gateText}`, x + 12, y + 120);
+
       if (c.skill) {
         ctx.fillStyle = '#c8a45e';
-        ctx.fillText(`专属 ${c.skill.name}`, x + 12, y + 120);
+        ctx.fillText(`专属 ${c.skill.name}`, x + 12, y + 137);
       }
-      if (
-        c.ownerId === state.playerFactionId &&
-        c.food >= BALANCE.FOOD_CAP * BALANCE.FOOD_WARN_RATIO
-      ) {
+      if (nearCapTooltip) {
         ctx.fillStyle = '#d8a54a';
-        ctx.fillText('! 粮草已达上限 95%：征兵 / 卖粮 / 分城', x + 12, y + (hasSkill ? 136 : 120));
+        ctx.fillText('! 粮草已达上限 95%：征兵 / 卖粮 / 分城', x + 12, y + (hasSkill ? 154 : 137));
+      }
+      if (blockedGates.length > 0) {
+        ctx.fillStyle = '#d98a72';
+        ctx.fillText(
+          `围城：${blockedGates.length} 门被堵，守军无法出城`,
+          x + 12,
+          y + (hasSkill ? 171 : 154),
+        );
       }
     }
-  }, [state, selectedCityId, attackRoutes, hover, size, view, marchFrom, attackSet]);
+  }, [
+    state,
+    selectedCityId,
+    attackRoutes,
+    hover,
+    hoverArmy,
+    hoverTile,
+    size,
+    view,
+    marchFrom,
+    attackSet,
+    selectedArmy,
+    reach,
+    previewPath,
+    selectedArmyId,
+  ]);
 
-  const hit = (clientX: number, clientY: number): string | null => {
-    const canvas = canvasRef.current;
-    if (!canvas) return null;
-    const rect = canvas.getBoundingClientRect();
-    const x = clientX - rect.left;
-    const y = clientY - rect.top;
+  /** 屏幕坐标 → 城池（用城墙矩形做命中，比圆心距离更准） */
+  const hitCity = (x: number, y: number): string | null => {
     let best: { id: string; d: number } | null = null;
     for (const p of pointsRef.current) {
-      const d = Math.hypot(p.x - x, p.y - y);
-      // 出征模式下高亮目标画了更大的实线框，命中范围同比放大，点选更稳
-      const rr =
-        Math.max(14, NODE_RADIUS[p.city.size] * 1.12 + 2) +
-        (marchFrom && attackSet.has(p.city.id) ? 8 : 0);
-      if (d <= rr && (!best || d < best.d)) best = { id: p.city.id, d };
+      const pad = 6;
+      if (
+        x >= p.bx - pad &&
+        x <= p.bx + p.bw + pad &&
+        y >= p.by - pad &&
+        y <= p.by + p.bh + pad
+      ) {
+        const d = Math.hypot(p.x - x, p.y - y);
+        if (!best || d < best.d) best = { id: p.city.id, d };
+      }
     }
     return best?.id ?? null;
+  };
+
+  const hitArmy = (x: number, y: number): string | null => {
+    let best: { id: string; d: number } | null = null;
+    for (const a of armyHitsRef.current) {
+      const d = Math.hypot(a.x - x, a.y - y);
+      if (d <= a.r && (!best || d < best.d)) best = { id: a.id, d };
+    }
+    return best?.id ?? null;
+  };
+
+  /** 屏幕坐标 → 格 */
+  const tileAtScreen = (clientX: number, clientY: number): GridPoint | null => {
+    const canvas = canvasRef.current;
+    if (!canvas || size.w < 10) return null;
+    const rect = canvas.getBoundingClientRect();
+    const sx = clientX - rect.left;
+    const sy = clientY - rect.top;
+    const layout = layoutOf(size.w, size.h);
+    // 反向：屏幕 → 世界
+    const cx = size.w / 2;
+    const cy = size.h / 2;
+    const bx = (sx - cx - view.x) / view.zoom + cx;
+    const by = (sy - cy - view.y) / view.zoom + cy;
+    const wx = (bx - layout.ox) / layout.scale;
+    const wy = (by - layout.oy) / layout.scale;
+    const t = worldToTile(wx, wy);
+    if (t.col < 0 || t.row < 0 || t.col >= MAP.cols || t.row >= MAP.rows) return null;
+    return t;
   };
 
   return (
@@ -1371,17 +1841,20 @@ export function MapCanvas({
         style={{
           cursor: dragging
             ? 'grabbing'
-            : view.zoom > 1.01
-              ? 'grab'
-              : hover
-                ? 'pointer'
-                : 'default',
+            : selectedArmyId
+              ? 'crosshair'
+              : view.zoom > 1.01
+                ? 'grab'
+                : hover || hoverArmy
+                  ? 'pointer'
+                  : 'default',
         }}
         onWheel={(e) => {
           centerView(view.zoom + (e.deltaY < 0 ? 0.28 : -0.28));
         }}
         onPointerDown={(e) => {
-          if (e.button !== 0 || size.w < 10 || view.zoom <= 1.01) return;
+          if (e.button !== 0 || size.w < 10) return;
+          // 未放大时也允许拖动，全图浏览更顺手
           dragRef.current = {
             startX: e.clientX,
             startY: e.clientY,
@@ -1398,7 +1871,7 @@ export function MapCanvas({
             const dx = e.clientX - drag.startX;
             const dy = e.clientY - drag.startY;
             if (Math.hypot(dx, dy) > 4) drag.moved = true;
-            if (drag.moved) {
+            if (drag.moved && view.zoom > 1.01) {
               setView(
                 clampPan(
                   { zoom: view.zoom, x: drag.originX + dx, y: drag.originY + dy },
@@ -1407,30 +1880,69 @@ export function MapCanvas({
                 ),
               );
               setHover(null);
+              setHoverArmy(null);
             }
             return;
           }
-          const id = hit(e.clientX, e.clientY);
+          const box = e.currentTarget.getBoundingClientRect();
+          const sx = e.clientX - box.left;
+          const sy = e.clientY - box.top;
+          const armyId = hitArmy(sx, sy);
+          setHoverArmy(armyId);
+          const id = armyId ? null : hitCity(sx, sy);
           if (id !== hover) setHover(id);
+          if (selectedArmyId) setHoverTile(tileAtScreen(e.clientX, e.clientY));
+          else if (hoverTile) setHoverTile(null);
         }}
         onPointerUp={(e) => {
           const drag = dragRef.current;
           dragRef.current = null;
           setDragging(false);
           if (drag?.moved) return;
-          const id = hit(e.clientX, e.clientY);
+
+          const rect = e.currentTarget.getBoundingClientRect();
+          const sx = e.clientX - rect.left;
+          const sy = e.clientY - rect.top;
+
+          // ① 点部队 → 选中调度
+          const armyId = hitArmy(sx, sy);
+          if (armyId) {
+            if (onSelectArmy) onSelectArmy(armyId === selectedArmyId ? null : armyId);
+            return;
+          }
+
+          // ② 部队调度模式：点格子即行军；点到城墙则视为选城（城墙不可进入）
+          if (selectedArmyId && onMoveArmy) {
+            const tile = tileAtScreen(e.clientX, e.clientY);
+            if (tile && !wallTileAt(tile.col, tile.row)) {
+              onMoveArmy(selectedArmyId, tile);
+              return;
+            }
+          }
+
+          // ③ 点城池
+          const id = hitCity(sx, sy);
           if (id) {
             if (marchFrom && onMarchTarget && attackSet.has(id)) onMarchTarget(id);
             else onSelect(id);
+          } else if (onSelectArmy) {
+            onSelectArmy(null);
           }
-          if (e.pointerType !== 'mouse') setHover(null);
+          if (e.pointerType !== 'mouse') {
+            setHover(null);
+            setHoverArmy(null);
+          }
         }}
         onPointerCancel={() => {
           dragRef.current = null;
           setDragging(false);
         }}
         onPointerLeave={() => {
-          if (!dragRef.current) setHover(null);
+          if (!dragRef.current) {
+            setHover(null);
+            setHoverArmy(null);
+            setHoverTile(null);
+          }
         }}
       />
 

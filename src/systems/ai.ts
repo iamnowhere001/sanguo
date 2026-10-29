@@ -19,6 +19,7 @@ import {
   type StrategicMove,
 } from './aiStrategy';
 import { aiDiplomacyTick, tickDiplomacy } from './factionDiplomacy';
+import { sortieArmy } from './army';
 import { abandonCity, planAbandonment } from './abandon';
 import { log } from './economy';
 import { buildMonthReport } from './report';
@@ -222,10 +223,18 @@ export function runAiFaction(state: GameState, factionId: string): 'battle' | 'd
     if (!from || !target) break;
 
     const attackerName = state.factions[factionId]?.name ?? factionId;
-    log(state, 'warn', `${attackerName} 自 ${from.name} 出兵 ${target.name}`, 'ai');
 
-    // 玩家防守：进入战棋，暂停 AI 队列
+    // 玩家防守：AI 也走「派兵上路」而不是凭空开战 ——
+    // 全地图模式下玩家必须看得见威胁、来得及堵门或半路截击。
     if (target.ownerId === state.playerFactionId) {
+      const startLog = state.log.length;
+      const march = sortieArmy(state, plan.fromId, plan.targetId, plan.generalIds, factionId);
+      if (march.ok) {
+        tagAiLogs(state, startLog);
+        continue;
+      }
+      // 兜底：出不了城（四门被堵）或没有路线时，仍按旧流程直接开战
+      log(state, 'warn', `${attackerName} 自 ${from.name} 出兵 ${target.name}`, 'ai');
       const { result } = createBattle(
         state,
         plan.fromId,
@@ -237,6 +246,7 @@ export function runAiFaction(state: GameState, factionId: string): 'battle' | 'd
       break;
     }
 
+    log(state, 'warn', `${attackerName} 自 ${from.name} 出兵 ${target.name}`, 'ai');
     const startLog = state.log.length;
     autoResolveBattle(
       state,

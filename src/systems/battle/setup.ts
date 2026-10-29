@@ -149,7 +149,15 @@ export function createBattle(
   targetCityId: string,
   generalIds: string[],
   attackerFactionId: string = state.playerFactionId,
-  opts?: { waterCrossing?: boolean; fortificationBonus?: number },
+  opts?: {
+    waterCrossing?: boolean;
+    fortificationBonus?: number;
+    /**
+     * 跳过「出发城与目标城必须相邻」的校验。
+     * 网格大地图下部队是走到城门外才攻城的，出发城可能并不在邻接表里。
+     */
+    skipAdjacency?: boolean;
+  },
 ): { result: OpResult; battle?: BattleState } {
   const from = state.cities[fromCityId];
   const target = state.cities[targetCityId];
@@ -163,7 +171,7 @@ export function createBattle(
       : '该势力';
     return { result: fail(`与 ${name} 处于停战/同盟期，需先宣战`) };
   }
-  if (!neighborsOf(state, fromCityId).includes(targetCityId)) {
+  if (!opts?.skipAdjacency && !neighborsOf(state, fromCityId).includes(targetCityId)) {
     return { result: fail('目标城池与出发城池不相邻') };
   }
   if (generalIds.length === 0) return { result: fail('至少选择一名武将') };

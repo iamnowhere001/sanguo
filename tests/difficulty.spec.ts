@@ -39,13 +39,17 @@ describe('AI 难度', () => {
   it('同一兵力比：易/中不出兵，难会出兵', () => {
     const easy = setup('easy');
     expect(runAiFaction(easy, 'caocao')).toBe('done');
+    expect(easy.armies?.length ?? 0).toBe(0);
 
     const normal = setup('normal');
     expect(runAiFaction(normal, 'caocao')).toBe('done');
+    expect(normal.armies?.length ?? 0).toBe(0);
 
+    // 难：会出兵，但走的是「派兵上路」，到城下才开战
     const hard = setup('hard');
-    expect(runAiFaction(hard, 'caocao')).toBe('battle');
-    expect(hard.battle?.playerSide).toBe('defender');
+    expect(runAiFaction(hard, 'caocao')).toBe('done');
+    expect(hard.armies?.length ?? 0).toBeGreaterThan(0);
+    expect(hard.armies!.every((a) => a.factionId === 'caocao')).toBe(true);
   });
 
   it('难度写入开局设置', () => {
