@@ -8,7 +8,6 @@ import {
   garrisonCapOf,
   monthlyFoodUpkeep,
   recruitCap,
-  safeOverflowFood,
   statGain,
   tacticSuccess,
   taxIncome,
@@ -229,11 +228,6 @@ describe('边界与裁决值', () => {
     expect(garrisonCapOf('large')).toBe(9500);
     expect(garrisonCapOf('medium')).toBe(6800);
     expect(garrisonCapOf('small')).toBe(4200);
-  });
-
-  it('安全溢出：上限 65536、当前 70000 → 63304（不清零）', () => {
-    expect(safeOverflowFood(70000, 65536, 0.5)).toBe(63304);
-    expect(safeOverflowFood(65536, 65536, 0.5)).toBe(65536);
   });
 
   it('极兵额外军粮：2000 兵含 700 极兵 → 100 + 7', () => {

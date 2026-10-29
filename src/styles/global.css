@@ -29,7 +29,7 @@
   --sp-6: 24px;
   --sp-8: 32px;
 
-  --topbar-h: 60px;
+  --topbar-h: 54px;
   --status-h: 32px;
   --rail-l: 252px;
   --rail-r: 356px;
@@ -1065,6 +1065,65 @@ input[type='number'] {
   grid-template-columns: var(--rail-l) minmax(0, 1fr) var(--rail-r);
   background: var(--bg);
 }
+/* 左右栏可收起：把整条侧栏让给地图，地图边缘保留窄拉手 */
+.game-grid.left-collapsed {
+  grid-template-columns: 0 minmax(0, 1fr) var(--rail-r);
+}
+.game-grid.left-collapsed > .left-panel {
+  display: none;
+}
+.game-grid.right-collapsed {
+  grid-template-columns: var(--rail-l) minmax(0, 1fr) 0;
+}
+.game-grid.right-collapsed > .city-panel {
+  display: none;
+}
+.game-grid.left-collapsed.right-collapsed {
+  grid-template-columns: 0 minmax(0, 1fr) 0;
+}
+.rail-toggle {
+  position: absolute;
+  top: 50%;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  width: 19px;
+  padding: 10px 0 8px;
+  border: 1px solid var(--line2);
+  background: rgba(20, 18, 14, 0.86);
+  color: var(--muted);
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: color 0.15s, background 0.15s;
+}
+.rail-toggle:hover {
+  color: var(--paper);
+  background: rgba(38, 34, 25, 0.94);
+}
+.rail-toggle-left {
+  left: 0;
+  transform: translateY(-50%);
+  border-left: 0;
+  border-radius: 0 6px 6px 0;
+}
+.rail-toggle-right {
+  right: 0;
+  transform: translateY(-50%);
+  border-right: 0;
+  border-radius: 6px 0 0 6px;
+}
+.rail-toggle i {
+  font-style: normal;
+  font-size: 12px;
+  line-height: 1;
+}
+.rail-toggle span {
+  writing-mode: vertical-rl;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+}
 .side-panel {
   min-height: 0;
   overflow-y: auto;
@@ -2002,6 +2061,24 @@ input[type='number'] {
 .cp-metric .bar-track {
   height: 3px;
   margin-top: 3px;
+}
+.cp-metric .food-net {
+  display: block;
+  margin-top: 1px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-style: normal;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cp-metric .food-net.pos {
+  color: var(--teal);
+}
+.cp-metric .food-net.neg {
+  color: var(--red-text);
 }
 .cp-metric.danger {
   border-color: rgba(193, 74, 58, 0.55);
@@ -3009,12 +3086,38 @@ input[type='number'] {
   flex: none;
   display: flex;
   align-items: center;
-  gap: var(--sp-5);
-  min-height: 38px;
+  gap: var(--sp-4);
+  min-height: 32px;
   padding: 0 var(--panel-pad);
   border-bottom: 1px solid var(--line);
   background: rgba(13, 12, 9, 0.72);
   z-index: 19;
+}
+/* 幕目标与军师条并成一行，给地图让出一整行高度 */
+.top-deck {
+  flex: none;
+  display: flex;
+  align-items: stretch;
+  min-height: 32px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(13, 12, 9, 0.78);
+  z-index: 19;
+}
+.top-deck .chapter-bar {
+  flex: 1 1 auto;
+  min-width: 0;
+  border-bottom: 0;
+  background: transparent;
+}
+.top-deck .advisor-strip {
+  flex: 0 1 430px;
+  width: auto;
+  min-width: 270px;
+  border-bottom: 0;
+  border-left: 1px solid var(--line);
+}
+.top-deck > .advisor-strip:only-child {
+  flex: 1 1 auto;
 }
 .chapter-bar.complete {
   border-bottom-color: rgba(200, 164, 92, 0.55);
@@ -3305,10 +3408,24 @@ input[type='number'] {
 }
 @media (max-width: 900px) {
   .chapter-bar {
-    flex-wrap: wrap;
-    gap: 4px var(--sp-3);
-    padding-top: 5px;
-    padding-bottom: 5px;
+    flex-wrap: nowrap;
+    gap: var(--sp-2);
+    padding-top: 0;
+    padding-bottom: 0;
+    overflow: hidden;
+  }
+  .chapter-title {
+    min-width: 0;
+  }
+  .chapter-title .muted {
+    display: none;
+  }
+  .chapter-goals {
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .chapter-goals::-webkit-scrollbar {
+    display: none;
   }
   .chapter-progress {
     display: none;
@@ -4682,6 +4799,12 @@ input[type='number'] {
   .topbar {
     gap: var(--sp-4);
   }
+  .top-deck .advisor-strip {
+    flex-basis: 360px;
+  }
+  .advisor-meta {
+    display: none;
+  }
 }
 
 /* 1081–1199：紧凑三栏，侧栏优先让位给地图 */
@@ -4753,6 +4876,31 @@ input[type='number'] {
       'rail rail'
       'map city';
     min-height: 0;
+  }
+  /* 平板：收起左栏时只留地图 + 右栏，收起右栏时只留上面城池条 + 地图 */
+  .game-grid.left-collapsed {
+    grid-template-columns: minmax(0, 1fr) 320px;
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: 'map city';
+  }
+  .game-grid.right-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas:
+      'rail'
+      'map';
+  }
+  .game-grid.left-collapsed.right-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: 'map';
+  }
+  .top-deck .advisor-strip {
+    flex-basis: 300px;
+    min-width: 0;
+  }
+  .advisor-cta {
+    display: none;
   }
 
   /* 左侧栏 → 横向城池条：保留切换能力，不再整块隐藏 */
@@ -4963,6 +5111,29 @@ input[type='number'] {
       'rail'
       'map'
       'city';
+  }
+  .game-grid.left-collapsed {
+    grid-template-rows: minmax(170px, 1fr) minmax(240px, 46vh);
+    grid-template-areas:
+      'map'
+      'city';
+  }
+  .game-grid.right-collapsed {
+    grid-template-rows: auto minmax(170px, 1fr);
+    grid-template-areas:
+      'rail'
+      'map';
+  }
+  .game-grid.left-collapsed.right-collapsed {
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: 'map';
+  }
+  .rail-toggle span {
+    display: none;
+  }
+  .rail-toggle {
+    width: 17px;
+    padding: 10px 0;
   }
   .city-panel {
     border-left: none;
@@ -5466,7 +5637,7 @@ input[type='number'] {
   align-items: center;
   gap: var(--sp-3);
   width: 100%;
-  min-height: 34px;
+  min-height: 32px;
   padding: 0 var(--panel-pad);
   border: 0;
   border-bottom: 1px solid var(--line);

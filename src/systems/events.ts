@@ -130,7 +130,7 @@ export function resolveEvent(state: GameState, optionId: string): OpResult {
       } else {
         if (city.gold < 300) return fail('金钱不足（邻州购粮需 300 金）');
         city.gold -= 300;
-        city.food = Math.min(BALANCE.FOOD_CAP, city.food + 600);
+        city.food += 600;
         message = `邻州购粮：${city.name} 金 −300，粮 +600`;
       }
       break;

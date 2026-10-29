@@ -62,11 +62,25 @@ export function MapScreen() {
   const [saveOpen, setSaveOpen] = useState(false);
   const [rosterOpen, setRosterOpen] = useState(false);
   const [factionDipOpen, setFactionDipOpen] = useState(false);
-  const [confirmTurn, setConfirmTurn] = useState<string | null>(null);
   const [quitOpen, setQuitOpen] = useState(false);
+  const [leftCollapsed, setLeftCollapsed] = useState(
+    () => typeof localStorage !== 'undefined' && localStorage.getItem('map.leftCollapsed') === '1',
+  );
+  const [rightCollapsed, setRightCollapsed] = useState(
+    () => typeof localStorage !== 'undefined' && localStorage.getItem('map.rightCollapsed') === '1',
+  );
   const [helpOpen, setHelpOpen] = useState(false);
   const [councilOpen, setCouncilOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('map.leftCollapsed', leftCollapsed ? '1' : '0');
+      localStorage.setItem('map.rightCollapsed', rightCollapsed ? '1' : '0');
+    } catch {
+      // 隐私模式下 localStorage 可能不可写，折叠状态不持久也不影响使用
+    }
+  }, [leftCollapsed, rightCollapsed]);
 
   /** 当前规划用的出发城：出征模式下锁定出发城，否则跟随选中城池 */
   const routeFromCityId = marchFrom ?? selectedCityId;
@@ -181,8 +195,6 @@ export function MapScreen() {
 
   const totalGold = mine.reduce((s, c) => s + c.gold, 0);
   const totalFood = mine.reduce((s, c) => s + c.food, 0);
-  const nearCapCities = mine.filter((c) => c.food >= BALANCE.FOOD_CAP * BALANCE.FOOD_WARN_RATIO);
-  const overflowMode = state.settings.overflowMode ?? 'safe';
   const totalTroops = generals.reduce((s, g) => s + g.troops, 0);
   const faction = state.factions[state.playerFactionId];
   const policy = activePolicy(state);
@@ -205,8 +217,7 @@ export function MapScreen() {
     : null;
 
   const endTurn = () => {
-    const res = store.dispatch({ t: 'END_TURN' });
-    if (res.needConfirm) setConfirmTurn(res.message);
+    store.dispatch({ t: 'END_TURN' });
   };
 
   /** 城池直接出征：从地图点选的敌城，按自动点将立即建队行军 */
@@ -311,12 +322,8 @@ export function MapScreen() {
           <div className="kpi">
             <em className="kpi-label">粮食</em>
             <span className="kpi-val">
-              <b className={nearCapCities.length > 0 ? 'warn-text' : ''}>{fmt(totalFood)}</b>
-              <i className="long">
-                {nearCapCities.length > 0
-                  ? `${nearCapCities.length} 城近上限`
-                  : `单城上限 ${fmt(BALANCE.FOOD_CAP)}`}
-              </i>
+              <b>{fmt(totalFood)}</b>
+              <i className="long">各城实储</i>
             </span>
           </div>
           <div className="kpi">
@@ -455,39 +462,45 @@ export function MapScreen() {
         ) : null}
       </header>
 
-      {state.settings.ruleset !== 'classic' ? (
-        <ChapterBar state={state} onSelectCity={selectCity} />
-      ) : null}
+      <div className="top-deck">
+        {state.settings.ruleset !== 'classic' ? (
+          <ChapterBar state={state} onSelectCity={selectCity} />
+        ) : null}
 
-      {modern && councilBrief && topAdvice ? (
-        <button
-          className="advisor-strip"
-          onClick={() => setCouncilOpen(true)}
-          title={`${topAdvice.title}：${topAdvice.text}（G）`}
-        >
-          <span className="advisor-badge">军师</span>
-          <span className={`advisor-lead tone-${topAdvice.tone}`}>
-            <b>{topAdvice.title}</b>
-            <em>{topAdvice.text}</em>
-          </span>
-          <span className="advisor-meta">
-            <span>
-              政令 <b>{councilBrief.stats.edictLeft}</b>
+        {modern && councilBrief && topAdvice ? (
+          <button
+            className="advisor-strip"
+            onClick={() => setCouncilOpen(true)}
+            title={`${topAdvice.title}：${topAdvice.text}（G）`}
+          >
+            <span className="advisor-badge">军师</span>
+            <span className={`advisor-lead tone-${topAdvice.tone}`}>
+              <b>{topAdvice.title}</b>
+              <em>{topAdvice.text}</em>
             </span>
-            <span>
-              可出征 <b>{councilBrief.stats.attackable}</b>
+            <span className="advisor-meta">
+              <span>
+                政令 <b>{councilBrief.stats.edictLeft}</b>
+              </span>
+              <span>
+                可出征 <b>{councilBrief.stats.attackable}</b>
+              </span>
+              <span>
+                府库 <b>{fmt(councilBrief.stats.gold)}</b>
+              </span>
             </span>
-            <span>
-              府库 <b>{fmt(councilBrief.stats.gold)}</b>
+            <span className="advisor-cta">
+              朝议 <kbd>G</kbd>
             </span>
-          </span>
-          <span className="advisor-cta">
-            朝议 <kbd>G</kbd>
-          </span>
-        </button>
-      ) : null}
+          </button>
+        ) : null}
+      </div>
 
-      <div className="game-grid">
+      <div
+        className={`game-grid${leftCollapsed ? ' left-collapsed' : ''}${
+          rightCollapsed ? ' right-collapsed' : ''
+        }`}
+      >
         <aside className="side-panel left-panel">
           <section className="rail-mine">
             <div className="section-title">
@@ -615,6 +628,28 @@ export function MapScreen() {
         </aside>
 
         <main className="map-main">
+          <button
+            type="button"
+            className="rail-toggle rail-toggle-left"
+            aria-expanded={!leftCollapsed}
+            aria-label={leftCollapsed ? '展开左侧城池栏' : '收起左侧城池栏'}
+            title={leftCollapsed ? '展开城池 / 关防 / 军情' : '收起左侧栏，放大战场'}
+            onClick={() => setLeftCollapsed((v) => !v)}
+          >
+            <i>{leftCollapsed ? '›' : '‹'}</i>
+            <span>{leftCollapsed ? '城池' : '收起'}</span>
+          </button>
+          <button
+            type="button"
+            className="rail-toggle rail-toggle-right"
+            aria-expanded={!rightCollapsed}
+            aria-label={rightCollapsed ? '展开右侧详情栏' : '收起右侧详情栏'}
+            title={rightCollapsed ? '展开城池 / 关防详情' : '收起右侧栏，放大战场'}
+            onClick={() => setRightCollapsed((v) => !v)}
+          >
+            <i>{rightCollapsed ? '‹' : '›'}</i>
+            <span>{rightCollapsed ? '详情' : '收起'}</span>
+          </button>
           <MapCanvas
             state={state}
             selectedCityId={routeFromCityId}
@@ -909,21 +944,6 @@ export function MapScreen() {
           onConfirm={() => {
             setQuitOpen(false);
             store.quit();
-          }}
-        />
-      ) : null}
-
-      {confirmTurn ? (
-        <ConfirmDialog
-          title="粮草将溢出"
-          body={confirmTurn}
-          cancelLabel="先处理粮草"
-          confirmLabel="仍然结束本旬"
-          tone="primary"
-          onCancel={() => setConfirmTurn(null)}
-          onConfirm={() => {
-            setConfirmTurn(null);
-            gameStore.dispatch({ t: 'END_TURN', confirmed: true });
           }}
         />
       ) : null}

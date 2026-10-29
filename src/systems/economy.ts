@@ -8,7 +8,6 @@ import {
   foodOutput,
   isTaxMonth,
   monthlyFoodUpkeep,
-  safeOverflowFood,
   taxIncome,
 } from './formulas';
 import {
@@ -257,36 +256,13 @@ export function runTax(s: GameState, facts: MonthFacts): void {
 
 /**
  * ⑦ 资源上限校验。
- * 金钱超上限直接截断；粮食按设置处理：
- * - safe（默认）：按上限截断，并折损超出部分的 50%
- * - classic：原版溢出归零
+ * 金钱超上限直接截断；粮食不设单城上限，直接累积。
  */
 export function clampResources(s: GameState): string[] {
   const warnings: string[] = [];
-  const mode = s.settings.overflowMode ?? BALANCE.FOOD_OVERFLOW_MODE;
   for (const c of Object.values(s.cities)) {
     if (c.gold > BALANCE.GOLD_CAP) c.gold = BALANCE.GOLD_CAP;
-    if (c.food > BALANCE.FOOD_CAP) {
-      const before = c.food;
-      if (mode === 'classic') {
-        c.food = 0;
-        const text = `${c.name} 粮草超过上限 ${BALANCE.FOOD_CAP}，溢出归零！`;
-        log(s, 'danger', text);
-        warnings.push(text);
-      } else {
-        c.food = safeOverflowFood(before, BALANCE.FOOD_CAP, BALANCE.FOOD_OVERFLOW_SAFE_LOSS);
-        const text = `${c.name} 粮草超过上限 ${BALANCE.FOOD_CAP}（${before}），超出部分折损 50%，余 ${c.food}`;
-        log(s, 'warn', text);
-        warnings.push(text);
-      }
-    }
   }
   return warnings;
 }
 
-/** 即将溢出粮食的城池（供 END_TURN 前二次确认用） */
-export function citiesNearFoodCap(s: GameState, factionId: string): string[] {
-  return citiesOf(s, factionId)
-    .filter((c) => c.food >= BALANCE.FOOD_CAP * BALANCE.FOOD_WARN_RATIO)
-    .map((c) => c.name);
-}

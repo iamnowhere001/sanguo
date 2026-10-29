@@ -525,7 +525,7 @@ function resolveRumor(
   const food = draw(s, 'search', (rng) =>
     randInt(rng, BALANCE.EXPLORE.genericFood[0], BALANCE.EXPLORE.genericFood[1]),
   );
-  city.food = Math.min(BALANCE.FOOD_CAP, city.food + food);
+  city.food += food;
   return { text: `传闻证实：查获囤粮 ${food}`, tone: 'good' };
 }
 
@@ -610,10 +610,7 @@ export function runExplorations(s: GameState, facts: MonthFacts): void {
         BALANCE.STAT_CAP.loyalty,
         city.loyalty + BALANCE.EXPLORE.loyaltyGain,
       );
-      city.food = Math.min(
-        BALANCE.FOOD_CAP,
-        city.food + BALANCE.EXPLORE.foodGain,
-      );
+      city.food += BALANCE.EXPLORE.foodGain;
       outcome = {
         text: `民忠 +${BALANCE.EXPLORE.loyaltyGain}、粮草 +${BALANCE.EXPLORE.foodGain}`,
         tone: 'good',

@@ -197,7 +197,7 @@ class GameStore {
       }
     }
 
-    if (!result.ok && !result.needConfirm) {
+    if (!result.ok) {
       this.notify(result.message, 'warn');
     }
 

@@ -28,7 +28,6 @@ function fresh(opts: { ruleset?: 'modern' | 'classic'; aiEnabled?: boolean } = {
     aiEnabled: opts.aiEnabled ?? false,
     ruleset: opts.ruleset ?? 'modern',
   });
-  s.settings.overflowConfirm = false;
   return s;
 }
 

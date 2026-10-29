@@ -195,12 +195,15 @@ function project(
  * 地形分块缓存。
  *
  * 576×432 世界 = 6912×5184；若整图缓存，即使 0.5× 也要 ~72MB，
- * 手机上必然触发 canvas 上限。改为 576×576 世界单位一块、0.6× 分辨率、
- * LRU 40 块（约 16MB），只生成视口附近的块。
+ * 手机上必然触发 canvas 上限。改为 384×384 世界单位一块、1.5× 分辨率、
+ * LRU 32 块（约 42MB），只生成视口附近的块。
+ *
+ * 高倍率（720%）下地形会放大到约 2.2 倍，仍保留手绘颗粒；
+ * 低倍率全图则直接使用单独的总览缓存。
  */
-const TERRAIN_CHUNK_WORLD = 576;
-const TERRAIN_CHUNK_SCALE = 0.6;
-const TERRAIN_CHUNK_LIMIT = 40;
+const TERRAIN_CHUNK_WORLD = 384;
+const TERRAIN_CHUNK_SCALE = 1.5;
+const TERRAIN_CHUNK_LIMIT = 32;
 
 interface TerrainChunk {
   canvas: HTMLCanvasElement;
@@ -578,7 +581,6 @@ function drawCityBlock(
     target: boolean;
     marchFrom: boolean;
     gates: ReturnType<typeof gatesOf>;
-    nearCap: boolean;
     detail: boolean;
   },
 ): void {
@@ -812,24 +814,6 @@ function drawCityBlock(
     ctx.roundRect(x - 1, y - 1, w + 2, h + 2, cell * 0.18);
     ctx.fillStyle = 'rgba(255,248,228,0.22)';
     ctx.fill();
-  }
-
-  // 粮草近上限：右下角朱印
-  if (opts.nearCap && cell > 6) {
-    const bx = x + w - cell * 0.12;
-    const by = y + h - cell * 0.1;
-    ctx.beginPath();
-    ctx.arc(bx, by, Math.max(4.5, cell * 0.34), 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(28,22,14,0.95)';
-    ctx.fill();
-    ctx.strokeStyle = '#d8a54a';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.fillStyle = '#f0d79a';
-    ctx.font = `700 ${Math.max(7, cell * 0.5)}px "PingFang SC", "Noto Sans SC", sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('!', bx, by + 0.5);
   }
 }
 
@@ -1258,7 +1242,9 @@ export function MapCanvas({
       ctx.fillText(text, bx, by + 0.5);
     };
 
-    // 道路：略带弧度的淡色驿道，避免把地图切成坐标纸
+    // 道路：略带弧度的淡色驿道，避免把地图切成坐标纸。
+    // 邻接线在高倍率下会像横跨江面的电线，随缩放淡出，只保留低倍率的大势。
+    const roadAlpha = Math.max(0.14, Math.min(1, 2.1 - view.zoom * 0.36));
     for (const e of state.edges) {
       const a = byId.get(e.a);
       const b = byId.get(e.b);
@@ -1271,10 +1257,10 @@ export function MapCanvas({
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
       ctx.quadraticCurveTo(mx, my, b.x, b.y);
-      ctx.strokeStyle = 'rgba(92,76,48,0.2)';
+      ctx.strokeStyle = `rgba(92,76,48,${0.2 * roadAlpha})`;
       ctx.lineWidth = 3.4;
       ctx.stroke();
-      ctx.strokeStyle = 'rgba(240,229,198,0.46)';
+      ctx.strokeStyle = `rgba(240,229,198,${0.46 * roadAlpha})`;
       ctx.lineWidth = 1.6;
       ctx.stroke();
     }
@@ -1503,9 +1489,6 @@ export function MapCanvas({
           target: Boolean(marchFrom) && attackSet.has(c.id),
           marchFrom: Boolean(marchFrom),
           gates: gatesOf(state, c.id),
-          nearCap:
-            c.ownerId === state.playerFactionId &&
-            c.food >= BALANCE.FOOD_CAP * BALANCE.FOOD_WARN_RATIO,
           detail: cell >= 8,
         },
       );
@@ -1720,14 +1703,11 @@ export function MapCanvas({
         .filter((g) => g.status === 'active' && g.locationId === c.id && !g.armyId)
         .sort((a, b) => b.troops - a.troops);
       const governor = gens[0];
-      const nearCapTooltip =
-        c.ownerId === state.playerFactionId &&
-        c.food >= BALANCE.FOOD_CAP * BALANCE.FOOD_WARN_RATIO;
       const hasSkill = Boolean(c.skill);
       const gateInfos = gatesOf(state, c.id);
       const blockedGates = gateInfos.filter((g) => g.blockedBy);
       const w = 210;
-      const h = (hasSkill ? 152 : 136) + (nearCapTooltip ? 16 : 0) + (blockedGates.length ? 16 : 0);
+      const h = (hasSkill ? 152 : 136) + (blockedGates.length ? 16 : 0);
       let x = hoverPoint.x + 14;
       let y = hoverPoint.y - 44;
       if (x + w > size.w - 8) x = hoverPoint.x - w - 14;
@@ -1798,16 +1778,12 @@ export function MapCanvas({
         ctx.fillStyle = '#c8a45e';
         ctx.fillText(`专属 ${c.skill.name}`, x + 12, y + 137);
       }
-      if (nearCapTooltip) {
-        ctx.fillStyle = '#d8a54a';
-        ctx.fillText('! 粮草已达上限 95%：征兵 / 卖粮 / 分城', x + 12, y + (hasSkill ? 154 : 137));
-      }
       if (blockedGates.length > 0) {
         ctx.fillStyle = '#d98a72';
         ctx.fillText(
           `围城：${blockedGates.length} 门被堵，守军无法出城`,
           x + 12,
-          y + (hasSkill ? 171 : 154),
+          y + (hasSkill ? 154 : 137),
         );
       }
     }

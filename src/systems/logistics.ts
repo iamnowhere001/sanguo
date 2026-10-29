@@ -126,7 +126,7 @@ export function doTransport(s: GameState, order: TransportOrder): OpResult {
   if (check.edictCost > 0) from.domesticUsed = (from.domesticUsed ?? 0) + 1;
 
   to.gold = Math.min(BALANCE.GOLD_CAP, to.gold + gold);
-  to.food = Math.min(BALANCE.FOOD_CAP, to.food + food);
+  to.food += food;
   if (moved > 0) {
     to.troops = poolOf(to) + moved;
     const gens = Object.values(s.generals).filter(

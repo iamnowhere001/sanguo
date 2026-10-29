@@ -78,11 +78,9 @@ export function buildMonthReport(
         .filter(Boolean)
         .join('；') || undefined,
     advice:
-      warnings.length > 0
-        ? '先处理粮草上限预警：征兵、卖粮或分城。'
-        : foodDelta < 0
-          ? '粮食在下降，下月优先开垦或买粮。'
-          : undefined,
+      foodDelta < 0
+        ? '粮食在下降，下月优先开垦或买粮。'
+        : undefined,
   });
 
   const troopDelta = after.troops - before.troops;
@@ -174,21 +172,6 @@ export function buildMonthReport(
     });
   }
 
-  if (warnings.length > 0) {
-    lines.push({
-      label: '上限',
-      text: `${warnings.length} 处粮草已达上限 95% 以上`,
-      tone: 'danger',
-      reason: warnings.join('；'),
-      detail: `上限 ${BALANCE.FOOD_CAP}：${
-        (state.settings.overflowMode ?? 'safe') === 'classic'
-          ? '溢出归零'
-          : '超出部分折损 50%'
-      }`,
-      advice: '本月内征兵、卖粮或分城，三选一。',
-    });
-  }
-
   const newLogs = state.log.slice(logStart);
   const ai = newLogs.filter((l) => l.source === 'ai');
   if (ai.length > 0) {
@@ -227,15 +210,13 @@ export function buildMonthReport(
   }
 
   const advice =
-    warnings.length > 0
-      ? `粮草近上限：优先征兵、卖粮或分城（${warnings.length} 城）。`
-      : facts.starvation.length > 0
-        ? '军粮不足：优先开垦或买粮，避免下月继续逃亡。'
-        : lowLoyalty.length > 0
-          ? '低忠诚武将有叛变风险：全城宴请或调离前线。'
-          : foodDelta < 0
-            ? '粮食在下降：开垦或买粮，保持 2 个月军粮余量。'
-            : '局势平稳：可搜索武将，或出征相邻弱城。';
+    facts.starvation.length > 0
+      ? '军粮不足：优先开垦或买粮，避免下月继续逃亡。'
+      : lowLoyalty.length > 0
+        ? '低忠诚武将有叛变风险：全城宴请或调离前线。'
+        : foodDelta < 0
+          ? '粮食在下降：开垦或买粮，保持 2 个月军粮余量。'
+          : '局势平稳：可搜索武将，或出征相邻弱城。';
   lines.push({ label: '建议', text: advice, tone: 'info' });
 
   return {

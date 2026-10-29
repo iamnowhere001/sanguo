@@ -31,7 +31,7 @@ for (const gate of GATES) {
     problems.push(`${gate.name}：未生成落位`);
     continue;
   }
-  const { center, lane, approaches } = site;
+  const { center, lane, approaches, icon } = site;
 
   if (lane.length === 0) problems.push(`${gate.name}：通行线为空`);
   if (!lane.some((p) => p.col === center.col && p.row === center.row)) {
@@ -57,10 +57,23 @@ for (const gate of GATES) {
     if (kind !== 'mountain' && kind !== 'hill') {
       problems.push(`${gate.name}：关隘中心落在 ${kind}，不是山口`);
     }
+    if (icon.col !== center.col || icon.row !== center.row) {
+      problems.push(`${gate.name}：关隘图标 ${key(icon)} 与中心 ${key(center)} 不一致`);
+    }
   } else {
     const kind = tileKindAt(center.col, center.row);
     if (!isWaterKind(kind)) {
       problems.push(`${gate.name}：港口中心落在 ${kind}，不是水面`);
+    }
+    const iconKind = tileKindAt(icon.col, icon.row);
+    if (isWaterKind(iconKind)) {
+      problems.push(`${gate.name}：港口图标落在水面 ${key(icon)}，应在岸上`);
+    }
+    if (
+      approaches.length === 2 &&
+      !approaches.some((p) => p.col === icon.col && p.row === icon.row)
+    ) {
+      problems.push(`${gate.name}：港口图标 ${key(icon)} 不在两端滩头上`);
     }
   }
 
@@ -94,7 +107,7 @@ for (const gate of GATES) {
       : '无滩头';
   line(
     `  ${site.gate.kind === 'pass' ? '关' : '港'} ${gate.name.padEnd(4, '　')} ` +
-      `中心 ${site.center.col},${site.center.row} · 线 ${site.lane.length} 格 · ${ends}`,
+      `中心 ${site.center.col},${site.center.row} · 图标 ${site.icon.col},${site.icon.row} · 线 ${site.lane.length} 格 · ${ends}`,
   );
 }
 

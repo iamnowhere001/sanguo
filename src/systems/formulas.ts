@@ -111,16 +111,6 @@ export function tradeLimit(commerce: number, multiplier = 1): number {
   );
 }
 
-/**
- * 【优化】E02 安全溢出：按上限截断，并从存量中再折损超出部分的 50%。
- * 例：上限 65536，当前 70000 → 超出 4464，折损 2232 → 63304。
- */
-export function safeOverflowFood(food: number, cap: number, lossRate: number): number {
-  if (food <= cap) return food;
-  const excess = food - cap;
-  return Math.max(0, cap - Math.floor(excess * lossRate));
-}
-
 /** 计策成功率 = clamp(50 + 智差 + 等级差×2, 10, 95) */
 export function tacticSuccess(
   casterIntellect: number,

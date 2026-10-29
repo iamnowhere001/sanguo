@@ -777,10 +777,6 @@ export interface GameState {
     easterEggEnabled: boolean;
     /** 现代默认规则 / 原版规则 */
     ruleset: Ruleset;
-    /** 【裁决】④ 粮食将溢出时的二次确认开关 */
-    overflowConfirm: boolean;
-    /** 【优化】E02 溢出处理：safe = 截断 + 折损 50%；classic = 原版归零 */
-    overflowMode: 'safe' | 'classic';
     /** 【优化】E11 经典点位：稀有物/在野武将沿用固定城池 */
     classicSpawn: boolean;
     /** 战略 AI；调试 / 沙盒模式可关闭 */

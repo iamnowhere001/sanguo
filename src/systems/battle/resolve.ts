@@ -106,7 +106,7 @@ function grantObjectiveReward(
     city.gold = Math.min(BALANCE.GOLD_CAP, city.gold + objective.reward.gold);
   }
   if (objective.reward.food) {
-    city.food = Math.min(BALANCE.FOOD_CAP, city.food + objective.reward.food);
+    city.food += objective.reward.food;
   }
   if (objective.reward.exp) {
     for (const u of Object.values(b.units)) {

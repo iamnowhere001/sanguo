@@ -15,8 +15,6 @@ import { isWaterKind, nearestLandTile, tileKindAt, wallTileAt } from '../render/
 const DEFAULT_SETTINGS: GameState['settings'] = {
   easterEggEnabled: false,
   ruleset: 'modern',
-  overflowConfirm: true,
-  overflowMode: 'safe',
   classicSpawn: false,
   aiEnabled: true,
   difficulty: 'normal',
@@ -112,8 +110,6 @@ export function migrateSave(state: GameState): GameState {
   state.settings ??= { ...DEFAULT_SETTINGS };
   state.settings.easterEggEnabled ??= DEFAULT_SETTINGS.easterEggEnabled;
   state.settings.ruleset ??= DEFAULT_SETTINGS.ruleset;
-  state.settings.overflowConfirm ??= DEFAULT_SETTINGS.overflowConfirm;
-  state.settings.overflowMode ??= DEFAULT_SETTINGS.overflowMode;
   state.settings.classicSpawn ??= DEFAULT_SETTINGS.classicSpawn;
   state.settings.aiEnabled ??= DEFAULT_SETTINGS.aiEnabled;
   state.settings.difficulty ??= DEFAULT_SETTINGS.difficulty;

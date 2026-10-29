@@ -27,6 +27,7 @@ import {
   riverWorldWidth,
 } from '../data/tables/geography';
 import { isLand } from './terrainGrid';
+import { gateSites } from './gateGrid';
 
 export interface Bounds {
   x: number;
@@ -262,30 +263,79 @@ function tracePolyline(
   }
 }
 
-/** 用一次描边同时得到"深色岸线 + 水色江面 + 浅色江心" */
+/**
+ * 河流轮廓：沿中心线生成一条宽度轻微起伏的绢带。
+ * 不再用多层等宽描边，避免江面出现一条条平行的“跑道”。
+ */
+function riverPath(pts: Proj[], width: number, seed: number): Path2D {
+  const dense = densify(pts, 10);
+  const left: Proj[] = [];
+  const right: Proj[] = [];
+  for (let i = 0; i < dense.length; i++) {
+    const p = dense[i]!;
+    const a = dense[Math.max(0, i - 1)]!;
+    const c = dense[Math.min(dense.length - 1, i + 1)]!;
+    const dx = c.x - a.x;
+    const dy = c.y - a.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len;
+    const ny = dx / len;
+    const wobble =
+      1 +
+      smoothNoise(i * 0.17, seed) * 0.05 +
+      smoothNoise(i * 0.051, seed + 3.7) * 0.035;
+    const half = width * 0.5 * wobble;
+    left.push({ x: p.x + nx * half, y: p.y + ny * half });
+    right.push({ x: p.x - nx * half, y: p.y - ny * half });
+  }
+  const path = new Path2D();
+  const traceHalf = (side: Proj[]): void => {
+    path.lineTo(side[0]!.x, side[0]!.y);
+    for (let i = 1; i < side.length - 1; i++) {
+      const p = side[i]!;
+      const n = side[i + 1]!;
+      path.quadraticCurveTo(p.x, p.y, (p.x + n.x) * 0.5, (p.y + n.y) * 0.5);
+    }
+    const last = side[side.length - 1]!;
+    path.lineTo(last.x, last.y);
+  };
+  path.moveTo(left[0]!.x, left[0]!.y);
+  traceHalf(left.slice(1));
+  traceHalf([...right].reverse());
+  path.closePath();
+  return path;
+}
+
+/** 河身：一条有上下游色差的水带 + 一条自然的岸线，返回轮廓供水面纹理裁剪 */
 function strokeRiverBody(
   ctx: CanvasRenderingContext2D,
   pts: Proj[],
   width: number,
-): void {
-  const layers: Array<[number, string]> = [
-    [width * 1.6, 'rgba(150,152,112,0.16)'],
-    [width + Math.max(4, width * 0.1), 'rgba(46,66,62,0.58)'],
-    [width, PALETTE.river1],
-    [width * 0.9, 'rgba(150,192,186,0.5)'],
-    [width * 0.6, '#5a8c8f'],
-    [width * 0.28, '#507d82'],
-  ];
+  seed: number,
+): Path2D {
+  const path = riverPath(pts, width, seed);
+  const first = pts[0]!;
+  const last = pts[pts.length - 1]!;
+  const grad = ctx.createLinearGradient(first.x, first.y, last.x, last.y);
+  grad.addColorStop(0, '#5f9699');
+  grad.addColorStop(0.55, '#558b8f');
+  grad.addColorStop(1, '#48747b');
+
   ctx.save();
-  ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  for (const [w, color] of layers) {
-    tracePolyline(ctx, pts);
-    ctx.strokeStyle = color;
-    ctx.lineWidth = w;
-    ctx.stroke();
-  }
+  // 河岸湿地：只在轮廓外缘轻轻晕一层
+  ctx.strokeStyle = 'rgba(122,134,96,0.2)';
+  ctx.lineWidth = 5;
+  ctx.stroke(path);
+  // 河水本体
+  ctx.fillStyle = grad;
+  ctx.fill(path);
+  // 岸线：一条细墨线，比多层色带干净
+  ctx.strokeStyle = 'rgba(46,66,58,0.62)';
+  ctx.lineWidth = 1.4;
+  ctx.stroke(path);
   ctx.restore();
+  return path;
 }
 
 // ── 海洋 ────────────────────────────────────────────────────
@@ -536,7 +586,7 @@ function massifSkyline(
   ];
 }
 
-function drawMassif(ctx: CanvasRenderingContext2D, m: Massif): void {
+function drawMassif(ctx: CanvasRenderingContext2D, m: Massif, withShadow = true): void {
   const { x, size: S, height: H, tone, lean } = m;
   const baseY = m.y + S * 0.1;
   const rand = rng(m.seed);
@@ -544,10 +594,12 @@ function drawMassif(ctx: CanvasRenderingContext2D, m: Massif): void {
   const apex = skyline[6]!;
 
   // 山脚落影：压在前后山体下面，避免出现一圈"贴纸边"
-  ctx.beginPath();
-  ctx.ellipse(x + S * 0.08, baseY + S * 0.05, S * 1.02, S * 0.16, 0, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(78,64,40,0.1)';
-  ctx.fill();
+  if (withShadow) {
+    ctx.beginPath();
+    ctx.ellipse(x + S * 0.08, baseY + S * 0.05, S * 1.02, S * 0.16, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(78,64,40,0.1)';
+    ctx.fill();
+  }
 
   // 后层山脊：更淡、更小、向左错开，形成山脉纵深
   if (tone > 0.24) {
@@ -795,6 +847,387 @@ function paintMountains(ctx: CanvasRenderingContext2D, b: Bounds): void {
   }
 }
 
+// ── 山林关隘：把关门画成山脊上的窄口，而不是开阔地上一座孤楼 ──
+
+/** 山道：一条踩实的土路，两侧留碎石，强调“只能从这里过” */
+function drawPassTrail(ctx: CanvasRenderingContext2D, site: ReturnType<typeof gateSites>[string]): void {
+  if (site.lane.length === 0) return;
+  const base = densify(
+    site.lane.map((p) => ({
+      x: (p.col + 0.5) * MAP.tile,
+      y: (p.row + 0.5) * MAP.tile,
+    })),
+    7,
+  );
+  if (base.length < 2) return;
+
+  // 让山道在通行线附近轻微摆动，避免像一条笔直的传送带
+  const seed = site.center.col * 13 + site.center.row * 29 + 5;
+  const line: Proj[] = [];
+  for (let i = 0; i < base.length; i++) {
+    const p = base[i]!;
+    const a = base[Math.max(0, i - 1)]!;
+    const c = base[Math.min(base.length - 1, i + 1)]!;
+    const dx = c.x - a.x;
+    const dy = c.y - a.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len;
+    const ny = dx / len;
+    const off =
+      (smoothNoise(i * 0.19, seed) - 0.5) * MAP.tile * 0.34 +
+      Math.sin(i * 0.55 + seed) * MAP.tile * 0.08;
+    line.push({ x: p.x + nx * off, y: p.y + ny * off });
+  }
+
+  const path = new Path2D();
+  traceSmooth(path, line);
+
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  // 外缘：压暗山体，形成一条被踩出来的凹槽
+  ctx.strokeStyle = 'rgba(86,70,44,0.36)';
+  ctx.lineWidth = MAP.tile * 1.02;
+  ctx.stroke(path);
+  // 碎石路肩
+  ctx.strokeStyle = 'rgba(146,126,90,0.36)';
+  ctx.lineWidth = MAP.tile * 0.8;
+  ctx.stroke(path);
+  // 土路本体
+  ctx.strokeStyle = 'rgba(190,166,120,0.9)';
+  ctx.lineWidth = MAP.tile * 0.52;
+  ctx.stroke(path);
+  // 中间被踩亮的一线浮土（只在部分路段出现，不是贯穿全路的亮条）
+  ctx.strokeStyle = 'rgba(218,196,152,0.42)';
+  ctx.lineWidth = MAP.tile * 0.17;
+  ctx.setLineDash([MAP.tile * 1.6, MAP.tile * 2.1]);
+  ctx.lineDashOffset = seed % 17;
+  ctx.stroke(path);
+  ctx.setLineDash([]);
+
+  // 车辙 / 横沟：横向短笔，增加“被车马压过”的质感
+  const r = rng(seed);
+  for (let i = 2; i < line.length - 2; i += 3) {
+    const p = line[i]!;
+    const a = line[i - 1]!;
+    const c = line[i + 1]!;
+    const dx = c.x - a.x;
+    const dy = c.y - a.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len;
+    const ny = dx / len;
+    const half = MAP.tile * (0.17 + r() * 0.1);
+    ctx.beginPath();
+    ctx.moveTo(p.x - nx * half, p.y - ny * half);
+    ctx.quadraticCurveTo(
+      p.x + dx * 0.018,
+      p.y + dy * 0.018,
+      p.x + nx * half,
+      p.y + ny * half,
+    );
+    ctx.strokeStyle = `rgba(112,92,60,${0.12 + r() * 0.12})`;
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+  }
+
+  // 路边碎石：确定性散布，不随分块跳动
+  for (let i = 0; i < line.length - 1; i++) {
+    const a = line[i]!;
+    const c = line[i + 1]!;
+    const dx = c.x - a.x;
+    const dy = c.y - a.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = -dy / len;
+    const ny = dx / len;
+    for (const side of [-1, 1]) {
+      if (r() < 0.3) continue;
+      const off = MAP.tile * (0.45 + r() * 0.3) * side;
+      const x = a.x + nx * off;
+      const y = a.y + ny * off;
+      ctx.beginPath();
+      ctx.arc(x, y, 1.1 + r() * 1.8, 0, Math.PI * 2);
+      ctx.fillStyle = r() > 0.45 ? 'rgba(112,93,62,0.62)' : 'rgba(222,204,166,0.55)';
+      ctx.fill();
+    }
+  }
+  ctx.restore();
+}
+
+/** 一块带棱面的山岩：沿山道方向拉长，落在通行线侧旁 */
+function drawPassRock(
+  ctx: CanvasRenderingContext2D,
+  bx: number,
+  by: number,
+  ux: number,
+  uy: number,
+  nx: number,
+  ny: number,
+  length: number,
+  width: number,
+  r: () => number,
+  alpha: number,
+): void {
+  const corners: Array<[number, number]> = [
+    [-0.52, -0.18],
+    [-0.4, -0.52],
+    [-0.12, -0.62],
+    [0.16, -0.56],
+    [0.44, -0.34],
+    [0.55, 0.06],
+    [0.34, 0.44],
+    [0.02, 0.56],
+    [-0.34, 0.46],
+    [-0.52, 0.16],
+  ];
+  const pts = corners.map(([u, n]) => {
+    const ju = u * length * (0.88 + r() * 0.24);
+    const jn = n * width * (0.86 + r() * 0.28);
+    return {
+      x: bx + ux * ju + nx * jn,
+      y: by + uy * ju + ny * jn,
+    };
+  });
+  const first = pts[0]!;
+  const last = pts[pts.length - 1]!;
+
+  ctx.beginPath();
+  pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+  ctx.closePath();
+
+  // 外缘受光、内缘贴路的背光面
+  const g = ctx.createLinearGradient(
+    bx + nx * width * 0.7,
+    by + ny * width * 0.7,
+    bx - nx * width * 0.7,
+    by - ny * width * 0.7,
+  );
+  g.addColorStop(0, `rgba(171,149,108,${0.95 * alpha})`);
+  g.addColorStop(0.45, `rgba(125,107,76,${0.95 * alpha})`);
+  g.addColorStop(1, `rgba(79,66,44,${0.92 * alpha})`);
+  ctx.fillStyle = g;
+  ctx.fill();
+  ctx.strokeStyle = `rgba(55,45,29,${0.72 * alpha})`;
+  ctx.lineWidth = 1.1;
+  ctx.stroke();
+
+  // 迎光棱面
+  const facet = [pts[1]!, pts[2]!, pts[3]!, pts[8]!];
+  ctx.beginPath();
+  facet.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+  ctx.closePath();
+  ctx.fillStyle = `rgba(214,196,154,${0.34 * alpha})`;
+  ctx.fill();
+
+  // 岩缝
+  const crack = 1 + Math.floor(r() * 2);
+  for (let i = 0; i < crack; i++) {
+    const p = pts[Math.floor(r() * pts.length)]!;
+    const q = pts[Math.floor(r() * pts.length)]!;
+    ctx.beginPath();
+    ctx.moveTo(p.x, p.y);
+    ctx.lineTo(
+      p.x + (q.x - p.x) * (0.22 + r() * 0.24),
+      p.y + (q.y - p.y) * (0.22 + r() * 0.24),
+    );
+    ctx.strokeStyle = `rgba(54,44,28,${0.38 * alpha})`;
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+  }
+
+  // 收尾：两端留一点碎屑
+  ctx.beginPath();
+  ctx.moveTo(first.x, first.y);
+  ctx.lineTo(last.x, last.y);
+  ctx.strokeStyle = `rgba(88,73,48,${0.16 * alpha})`;
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+}
+
+/** 关门两翼的岩壁：让关门嵌进山体，而不是摆在空地上 */
+function drawPassCliffs(
+  ctx: CanvasRenderingContext2D,
+  site: ReturnType<typeof gateSites>[string],
+): void {
+  const cx = (site.center.col + 0.5) * MAP.tile;
+  const cy = (site.center.row + 0.5) * MAP.tile;
+  const first = site.approaches[0] ?? site.lane[0] ?? site.center;
+  const last = site.approaches[1] ?? site.lane[site.lane.length - 1] ?? site.center;
+  let dx = last.col - first.col;
+  let dy = last.row - first.row;
+  const len = Math.hypot(dx, dy) || 1;
+  dx /= len;
+  dy /= len;
+  const nx = -dy;
+  const ny = dx;
+  const r = rng(site.center.col * 53 + site.center.row * 97 + 11);
+  const span = Math.min(3.4, Math.max(1.1, site.lane.length * 0.36));
+
+  ctx.save();
+  ctx.lineJoin = 'round';
+
+  // 先立两座山包，让关门真正卡在山口里；再叠岩壁与碎石
+  for (const side of [-1, 1]) {
+    const mx = cx + nx * MAP.tile * 2.55 * side;
+    const my = cy + ny * MAP.tile * 2.55 * side + MAP.tile * 0.62;
+    drawMassif(ctx, {
+      x: mx,
+      y: my,
+      size: MAP.tile * (1.1 + (side > 0 ? 0.12 : 0)),
+      height: MAP.tile * (1.34 + (side > 0 ? 0.08 : 0)),
+      tone: side > 0 ? 0.34 : 0.62,
+      lean: side * 0.7,
+      seed: site.center.col * 733 + site.center.row * 191 + (side > 0 ? 17 : 5),
+    }, false);
+  }
+
+  for (const side of [-1, 1]) {
+    // 一整条岩壁：内缘贴着山道，外缘参差，像被凿开的山体
+    const steps = Math.max(10, Math.round((span * 2 + MAP.tile * 1.2) / (MAP.tile * 0.32)));
+    const inner: Proj[] = [];
+    const outer: Proj[] = [];
+    for (let i = 0; i <= steps; i++) {
+      const t = -span * 1.1 + ((span * 2.2) / steps) * i;
+      const wobble =
+        smoothNoise(i * 0.31, site.center.col * 17 + site.center.row * 31 + (side > 0 ? 7 : 3)) * 0.24 +
+        (r() - 0.5) * 0.16;
+      const innerOff = MAP.tile * (0.72 + wobble * 0.12) * side;
+      const outerOff =
+        MAP.tile * (1.72 + wobble * 0.5 + (i % 3 === 0 ? 0.16 : 0)) * side;
+      const bx = cx + dx * t;
+      const by = cy + dy * t;
+      inner.push({ x: bx + nx * innerOff, y: by + ny * innerOff });
+      outer.push({ x: bx + nx * outerOff, y: by + ny * outerOff });
+    }
+
+    const wall = new Path2D();
+    wall.moveTo(inner[0]!.x, inner[0]!.y);
+    for (let i = 1; i < inner.length; i++) wall.lineTo(inner[i]!.x, inner[i]!.y);
+    for (let i = outer.length - 1; i >= 0; i--) wall.lineTo(outer[i]!.x, outer[i]!.y);
+    wall.closePath();
+
+    const g = ctx.createLinearGradient(
+      cx + nx * MAP.tile * 0.7 * side,
+      cy + ny * MAP.tile * 0.7 * side,
+      cx + nx * MAP.tile * 2.1 * side,
+      cy + ny * MAP.tile * 2.1 * side,
+    );
+    g.addColorStop(0, 'rgba(98,83,55,0.97)');
+    g.addColorStop(0.52, 'rgba(122,104,71,0.97)');
+    g.addColorStop(1, 'rgba(164,143,104,0.96)');
+    ctx.fillStyle = g;
+    ctx.fill(wall);
+    ctx.strokeStyle = 'rgba(55,45,29,0.6)';
+    ctx.lineWidth = 1.1;
+    ctx.stroke(wall);
+
+    // 内缘暗影：山道像被岩壁夹在中间
+    ctx.beginPath();
+    for (let i = 0; i < inner.length; i++) {
+      const p = inner[i]!;
+      if (i === 0) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x, p.y);
+    }
+    ctx.strokeStyle = 'rgba(52,42,27,0.42)';
+    ctx.lineWidth = MAP.tile * 0.12;
+    ctx.stroke();
+
+    // 岩层：横向短纹，打破整块色带
+    for (let i = 1; i < inner.length - 1; i += 2) {
+      const a = inner[i]!;
+      const b = outer[i]!;
+      const from = 0.18 + r() * 0.2;
+      const to = from + 0.24 + r() * 0.3;
+      ctx.beginPath();
+      ctx.moveTo(a.x + (b.x - a.x) * from, a.y + (b.y - a.y) * from);
+      ctx.lineTo(a.x + (b.x - a.x) * to, a.y + (b.y - a.y) * to);
+      ctx.strokeStyle = `rgba(64,52,33,${0.18 + r() * 0.15})`;
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+    }
+
+    // 外缘受光的一条窄棱
+    ctx.beginPath();
+    for (let i = 0; i < outer.length; i++) {
+      const p = outer[i]!;
+      if (i === 0) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x, p.y);
+    }
+    ctx.strokeStyle = 'rgba(214,196,154,0.3)';
+    ctx.lineWidth = MAP.tile * 0.07;
+    ctx.stroke();
+
+    // 岩壁裂纹：顺着坡面往下切
+    for (let i = 1; i < outer.length - 1; i += 2) {
+      if (r() < 0.4) continue;
+      const a = inner[i]!;
+      const b = outer[i]!;
+      const t = 0.25 + r() * 0.45;
+      ctx.beginPath();
+      ctx.moveTo(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
+      ctx.lineTo(
+        a.x + (b.x - a.x) * (t + 0.25),
+        a.y + (b.y - a.y) * (t + 0.25),
+      );
+      ctx.strokeStyle = 'rgba(56,46,30,0.32)';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+    }
+
+    // 近处大石：压在岩壁上，打破过于整齐的边线
+    for (const [t, scale] of [
+      [-span * 0.56, 1],
+      [span * 0.52, 0.86],
+    ] as const) {
+      const spread = 0.94 + r() * 0.16;
+      const bx = cx + dx * MAP.tile * t + nx * MAP.tile * spread * side;
+      const by = cy + dy * MAP.tile * t + ny * MAP.tile * spread * side;
+      drawPassRock(
+        ctx,
+        bx,
+        by,
+        dx * side,
+        dy * side,
+        nx * side,
+        ny * side,
+        MAP.tile * (0.55 + r() * 0.25) * scale,
+        MAP.tile * (0.44 + r() * 0.22) * scale,
+        r,
+        1,
+      );
+    }
+
+    // 贴近路面的暗影：把山道压进岩壁之间
+    const shadow = new Path2D();
+    for (let i = 0; i <= 8; i++) {
+      const t = (-span + (i / 8) * span * 2) * MAP.tile;
+      const x = cx + dx * t + nx * MAP.tile * 0.68 * side;
+      const y = cy + dy * t + ny * MAP.tile * 0.68 * side;
+      if (i === 0) shadow.moveTo(x, y);
+      else shadow.lineTo(x, y);
+    }
+    ctx.strokeStyle = 'rgba(58,48,31,0.32)';
+    ctx.lineWidth = MAP.tile * 0.14;
+    ctx.stroke(shadow);
+    ctx.strokeStyle = 'rgba(226,208,168,0.16)';
+    ctx.lineWidth = MAP.tile * 0.05;
+    ctx.stroke(shadow);
+  }
+  ctx.restore();
+}
+
+/** 山道 + 岩壁；只处理关隘，港口仍交给水面 / 码头表现 */
+function paintMountainPasses(ctx: CanvasRenderingContext2D, b: Bounds): void {
+  for (const site of Object.values(gateSites())) {
+    if (site.gate.kind !== 'pass') continue;
+    const cx = (site.center.col + 0.5) * MAP.tile;
+    const cy = (site.center.row + 0.5) * MAP.tile;
+    if (!rectHas(b, cx, cy, MAP.tile * 4)) continue;
+    drawPassTrail(ctx, site);
+    drawPassCliffs(ctx, site);
+  }
+}
+
 // ── 林地 / 沼泽 / 荒漠 ──────────────────────────────────────
 
 function paintBiomeWash(
@@ -1023,23 +1456,49 @@ function paintLakes(ctx: CanvasRenderingContext2D, b: Bounds): void {
     ctx.lineWidth = 1.6;
     ctx.stroke(path);
 
-    // 浅水内环
+    // 浅水 / 深水斑块：打散整块纯色湖面
     ctx.save();
     ctx.clip(path);
-    ctx.strokeStyle = 'rgba(186,224,214,0.22)';
-    ctx.lineWidth = 8;
-    ctx.stroke(path);
-
-    // 波纹
     const random = rng(3300 + idx * 31);
-    for (let i = 0; i < 5; i++) {
-      const y = lake.center.y + (random() - 0.5) * lake.ry * 1.4;
-      const x = lake.center.x + (random() - 0.5) * lake.rx * 0.9;
-      const w = lake.rx * (0.1 + random() * 0.22);
+    const patches = clamp(Math.round((lake.rx * lake.ry) / 9000), 10, 42);
+    for (let i = 0; i < patches; i++) {
+      const ang = random() * Math.PI * 2;
+      const dist = Math.sqrt(random()) * 0.86;
+      const x = lake.center.x + Math.cos(ang) * lake.rx * dist;
+      const y = lake.center.y + Math.sin(ang) * lake.ry * dist;
+      const rx = 14 + random() * Math.min(56, lake.rx * 0.2);
+      const ry = 5 + random() * Math.min(24, lake.ry * 0.16);
+      if (!rectHas(b, x, y, rx + 10)) continue;
+      const angle = random() * Math.PI;
+      const deep = random() > 0.45;
+      const color = deep ? '36,82,88' : '176,216,208';
+      const alpha = deep ? 0.08 + random() * 0.07 : 0.065 + random() * 0.055;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(angle);
+      ctx.scale(1, ry / rx);
+      const patch = ctx.createRadialGradient(0, 0, 0, 0, 0, rx);
+      patch.addColorStop(0, `rgba(${color},${alpha})`);
+      patch.addColorStop(0.6, `rgba(${color},${alpha * 0.5})`);
+      patch.addColorStop(1, `rgba(${color},0)`);
+      ctx.fillStyle = patch;
+      ctx.beginPath();
+      ctx.arc(0, 0, rx, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // 波纹：数量随湖面大小变化
+    const ripples = clamp(Math.round(lake.rx / 28), 8, 26);
+    for (let i = 0; i < ripples; i++) {
+      const y = lake.center.y + (random() - 0.5) * lake.ry * 1.5;
+      const x = lake.center.x + (random() - 0.5) * lake.rx * 1.1;
+      const w = lake.rx * (0.06 + random() * 0.18);
+      if (!rectHas(b, x, y, w + 8)) continue;
       ctx.beginPath();
       ctx.moveTo(x - w, y);
       ctx.quadraticCurveTo(x, y - 4, x + w, y);
-      ctx.strokeStyle = 'rgba(214,240,232,0.26)';
+      ctx.strokeStyle = `rgba(214,240,232,${0.16 + random() * 0.14})`;
       ctx.lineWidth = 1.1;
       ctx.stroke();
     }
@@ -1072,11 +1531,12 @@ function paintRivers(ctx: CanvasRenderingContext2D, b: Bounds): void {
   const ordered = [...riverPts].sort((a, c) => a.def.scale - c.def.scale);
   for (let idx = 0; idx < ordered.length; idx++) {
     const river = ordered[idx]!;
-    strokeRiverBody(ctx, river.pts, river.width);
+    const path = strokeRiverBody(ctx, river.pts, river.width, 1700 + idx * 37);
 
     const random = rng(4100 + idx * 59);
     const half = river.width * 0.5;
     ctx.save();
+    ctx.clip(path);
     ctx.lineCap = 'round';
 
     for (let i = 0; i < river.pts.length - 1; i++) {
@@ -1088,6 +1548,36 @@ function paintRivers(ctx: CanvasRenderingContext2D, b: Bounds): void {
       const nx = -dy / len;
       const ny = dx / len;
       const ang = Math.atan2(dy, dx);
+
+      // 深浅水斑：拉长的椭圆顺着水流铺，打散整片纯色江面
+      const patches = Math.max(2, Math.round(len / 105));
+      for (let k = 0; k < patches; k++) {
+        const t = (k + 0.2 + random() * 0.7) / patches;
+        const off = (random() - 0.5) * river.width * 0.66;
+        const px = a.x + dx * t + nx * off;
+        const py = a.y + dy * t + ny * off;
+        if (!rectHas(b, px, py, 90)) continue;
+        const pw = 26 + random() * 72;
+        const ph = river.width * (0.04 + random() * 0.1);
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.rotate(ang + (random() - 0.5) * 0.22);
+        // 用拉伸后的径向渐变画深浅斑：边缘自然淡出，不会出现椭圆硬边
+        ctx.scale(1, ph / pw);
+        const patch = ctx.createRadialGradient(0, 0, 0, 0, 0, pw);
+        const patchColor =
+          random() > 0.48 ? '38,86,92' : '176,216,210';
+        const patchAlpha =
+          patchColor === '38,86,92' ? 0.15 + random() * 0.09 : 0.11 + random() * 0.08;
+        patch.addColorStop(0, `rgba(${patchColor},${patchAlpha})`);
+        patch.addColorStop(0.62, `rgba(${patchColor},${patchAlpha * 0.55})`);
+        patch.addColorStop(1, `rgba(${patchColor},0)`);
+        ctx.fillStyle = patch;
+        ctx.beginPath();
+        ctx.arc(0, 0, pw, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
 
       // 沙洲：只出现在干流，靠内侧滩地，低透明度，不遮住江心航道
       if (river.def.scale > 0.7 && river.width > 120) {
@@ -1119,22 +1609,71 @@ function paintRivers(ctx: CanvasRenderingContext2D, b: Bounds): void {
       }
 
       // 碎波：短而斜的江面反光，取代贯穿全江的"车道线"
-      const glints = Math.max(1, Math.round(len / 95));
+      const glints = Math.max(2, Math.round(len / 46));
       for (let k = 0; k < glints; k++) {
         const t = (k + 0.35 + random() * 0.4) / glints;
-        const off = (random() - 0.5) * river.width * 0.52;
+        const off = (random() - 0.5) * river.width * 0.56;
         const gx = a.x + dx * t + nx * off;
         const gy = a.y + dy * t + ny * off;
         if (!rectHas(b, gx, gy, 20)) continue;
-        const gl = 5 + random() * 10;
+        const gl = 4 + random() * 9;
         const ca = Math.cos(ang);
         const sa = Math.sin(ang);
         ctx.beginPath();
         ctx.moveTo(gx - ca * gl, gy - sa * gl);
-        ctx.quadraticCurveTo(gx + nx * 1.6, gy + ny * 1.6, gx + ca * gl, gy + sa * gl);
-        ctx.strokeStyle = `rgba(228,246,240,${0.1 + random() * 0.1})`;
-        ctx.lineWidth = 0.8 + random() * 0.7;
+        ctx.quadraticCurveTo(gx + nx * 1.4, gy + ny * 1.4, gx + ca * gl, gy + sa * gl);
+        ctx.strokeStyle = `rgba(228,246,240,${0.16 + random() * 0.12})`;
+        ctx.lineWidth = 0.7 + random() * 0.7;
         ctx.stroke();
+        // 给一部分碎波加一道错位细纹，像被风吹皱的水面
+        if (random() < 0.45) {
+          ctx.beginPath();
+          ctx.moveTo(gx - ca * gl * 0.7, gy - sa * gl * 0.7 + 2.2);
+          ctx.quadraticCurveTo(
+            gx + nx * 1.2,
+            gy + ny * 1.2 + 2.2,
+            gx + ca * gl * 0.7,
+            gy + sa * gl * 0.7 + 2.2,
+          );
+          ctx.strokeStyle = `rgba(228,246,240,${0.06 + random() * 0.07})`;
+          ctx.lineWidth = 0.7;
+          ctx.stroke();
+        }
+        // 细碎水屑：近景能看出水在动，远景只是一层很淡的肌理
+        const flecks = 2;
+        for (let j = 0; j < flecks; j++) {
+          const fx = gx + (random() - 0.5) * 26 + nx * (random() - 0.5) * river.width * 0.3;
+          const fy = gy + (random() - 0.5) * 26 + ny * (random() - 0.5) * river.width * 0.3;
+          const fl = 1.6 + random() * 3.2;
+          ctx.beginPath();
+          ctx.moveTo(fx - ca * fl, fy - sa * fl);
+          ctx.lineTo(fx + ca * fl, fy + sa * fl);
+          ctx.strokeStyle = `rgba(220,244,238,${0.045 + random() * 0.05})`;
+          ctx.lineWidth = 0.6;
+          ctx.stroke();
+        }
+      }
+
+      // 岸边泡沫：偶尔在浅滩处点几笔，增加“水在动”的感觉
+      if (random() < 0.35) {
+        const side = random() > 0.5 ? 1 : -1;
+        const t = random();
+        const off = half * (0.84 + random() * 0.1) * side;
+        const fx = a.x + dx * t + nx * off;
+        const fy = a.y + dy * t + ny * off;
+        if (rectHas(b, fx, fy, 16)) {
+          ctx.beginPath();
+          ctx.moveTo(fx - Math.cos(ang) * 7, fy - Math.sin(ang) * 7);
+          ctx.quadraticCurveTo(
+            fx + nx * side * 2.2,
+            fy + ny * side * 2.2,
+            fx + Math.cos(ang) * 7,
+            fy + Math.sin(ang) * 7,
+          );
+          ctx.strokeStyle = 'rgba(236,248,242,0.28)';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
       }
     }
     ctx.restore();
@@ -1172,6 +1711,7 @@ export function paintTerrain(ctx: CanvasRenderingContext2D, bounds: Bounds): voi
   paintForests(ctx, b);
   paintMarshes(ctx, b);
   paintDeserts(ctx, b);
+  paintMountainPasses(ctx, b);
 
   ctx.restore();
 

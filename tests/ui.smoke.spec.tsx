@@ -77,9 +77,6 @@ describe('UI 冒烟', () => {
     expect(el.textContent).toContain('选择君主');
     expect(el.textContent).toContain('刘备');
     expect(el.textContent).toContain('AI 难度');
-    expect(el.textContent).toContain('粮草溢出规则');
-    expect(el.textContent).toContain('安全模式');
-    expect(el.textContent).toContain('经典归零');
     expect(el.textContent).toContain('稀有物点位');
     expect(el.textContent).toContain('随机点位');
   });

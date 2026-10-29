@@ -25,7 +25,6 @@ function fresh(opts: { ruleset?: 'modern' | 'classic' } = {}): GameState {
     aiEnabled: false,
     ruleset: opts.ruleset ?? 'modern',
   });
-  s.settings.overflowConfirm = false;
   return s;
 }
 

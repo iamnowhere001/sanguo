@@ -608,7 +608,6 @@ export interface CreateGameOptions {
   easterEggEnabled?: boolean;
   aiEnabled?: boolean;
   difficulty?: Difficulty;
-  overflowMode?: 'safe' | 'classic';
   /** 【优化】E11 经典点位：true 时稀有物/在野武将沿用固定城池 */
   classicSpawn?: boolean;
   /** 现代重制规则 / 原版规则 */
@@ -759,8 +758,6 @@ export function createGame(opts: CreateGameOptions = {}): GameState {
     settings: {
       easterEggEnabled: opts.easterEggEnabled ?? false,
       ruleset: opts.ruleset ?? 'modern',
-      overflowConfirm: true,
-      overflowMode: opts.overflowMode ?? 'safe',
       classicSpawn: opts.classicSpawn ?? false,
       aiEnabled: opts.aiEnabled ?? true,
       difficulty: opts.difficulty ?? 'normal',

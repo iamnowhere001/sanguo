@@ -307,7 +307,6 @@ export function doTrade(s: GameState, cityId: string, buyFood: boolean, amount: 
   if (buyFood) {
     const cost = amount * BALANCE.TRADE.buyGoldPerFood;
     if (city.gold < cost) return fail(`金钱不足（需 ${cost}）`);
-    if (city.food + amount > BALANCE.FOOD_CAP) return fail('粮食将超过上限，无法买入');
     city.gold -= cost;
     city.food += amount;
     city.tradeVolume = used + amount;
@@ -455,7 +454,7 @@ function resolveEntry(s: GameState, city: City, g: General, e: SearchEntry): OpR
       const v = draw(s, 'search', (rng) =>
         randInt(rng, BALANCE.SEARCH.foodDrop[0], BALANCE.SEARCH.foodDrop[1]),
       );
-      city.food = Math.min(BALANCE.FOOD_CAP, city.food + v);
+      city.food += v;
       log(s, 'good', `${g.name} 在 ${city.name} 搜到粮草 ${v}`);
       return done(`搜到粮草 ${v}`);
     }
@@ -482,7 +481,7 @@ function resolveEntry(s: GameState, city: City, g: General, e: SearchEntry): OpR
       const id = e.refId;
       const target = id ? s.generals[id] : undefined;
       if (!target || target.status === 'active') {
-        city.food = Math.min(BALANCE.FOOD_CAP, city.food + 200);
+        city.food += 200;
         return done('搜到粮草 200');
       }
       if (city.gold < BALANCE.SEARCH.recruitWildGold) return fail('招募在野武将需 200 金');

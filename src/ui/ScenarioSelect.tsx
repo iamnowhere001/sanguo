@@ -24,7 +24,6 @@ export function ScenarioSelect() {
   const [selected, setSelected] = useState('liubei');
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
   const [ruleset, setRuleset] = useState<Ruleset>('modern');
-  const [overflowMode, setOverflowMode] = useState<'safe' | 'classic'>('safe');
   const [classicSpawn, setClassicSpawn] = useState(false);
 
   const scenario = SCENARIOS[scenarioId]!;
@@ -103,7 +102,6 @@ export function ScenarioSelect() {
       playerFactionId: selected,
       seed: arr[0]!,
       difficulty,
-      overflowMode,
       classicSpawn,
       ruleset,
     });
@@ -233,29 +231,6 @@ export function ScenarioSelect() {
                   ))}
                 </div>
                 <span className="muted small">{difficultyOf(difficulty).note}</span>
-              </div>
-
-              <div className="difficulty-pick">
-                <span className="muted small">粮草溢出规则</span>
-                <div className="seg">
-                  <button
-                    className={overflowMode === 'safe' ? 'on' : ''}
-                    onClick={() => setOverflowMode('safe')}
-                  >
-                    安全模式
-                  </button>
-                  <button
-                    className={overflowMode === 'classic' ? 'on' : ''}
-                    onClick={() => setOverflowMode('classic')}
-                  >
-                    经典归零
-                  </button>
-                </div>
-                <span className="muted small">
-                  {overflowMode === 'safe'
-                    ? '超过上限按上限截断，并折损超出部分的 50%'
-                    : '原版规则：粮食超过上限直接归零（高风险）'}
-                </span>
               </div>
 
               <div className="difficulty-pick">

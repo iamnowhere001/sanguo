@@ -92,37 +92,11 @@ describe('月度流水线', () => {
     expect(foodAfter).toBe(foodBefore - 213 + produced);
   });
 
-  it('粮食安全溢出：不归零，按超出部分折损 50%', () => {
+  it('粮食不设单城上限：超过旧上限仍继续累积', () => {
     let s = fresh();
-    s.cities.jiangxia!.food = 65600;
-    s = endXun(endXun(s));
-    const { state, result } = reduce(s, { t: 'END_TURN', confirmed: true });
-    expect(result.warnings?.length).toBeGreaterThan(0);
-    expect(state.cities.jiangxia!.food).toBeGreaterThan(0);
-    expect(state.cities.jiangxia!.food).toBeLessThanOrEqual(BALANCE.FOOD_CAP);
-  });
-
-  it('经典模式仍然溢出归零（可在开局选项中切换）', () => {
-    let s = createGame({
-      playerFactionId: 'liubei',
-      seed: 12345,
-      aiEnabled: false,
-      overflowMode: 'classic',
-    });
-    for (const c of Object.values(s.cities)) c.defense = 100;
-    s.cities.jiangxia!.food = 65600;
-    s = endXun(endXun(s));
-    const { state } = reduce(s, { t: 'END_TURN', confirmed: true });
-    expect(state.cities.jiangxia!.food).toBe(0);
-  });
-
-  it('粮食接近上限时 END_TURN 需要二次确认（【裁决】④）', () => {
-    let s = fresh();
-    s.cities.jiangxia!.food = 63000;
-    const r = reduce(s, { t: 'END_TURN' });
-    expect(r.result.ok).toBe(false);
-    expect(r.result.needConfirm).toBe(true);
-    expect(r.state.month).toBe(1); // 状态未推进
+    s.cities.jiangxia!.food = 70000;
+    s = endTurn(s);
+    expect(s.cities.jiangxia!.food).toBeGreaterThan(65536);
   });
 
   it('金钱截断在 30000', () => {

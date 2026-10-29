@@ -38,7 +38,7 @@ export const COUNCIL_PROFILES: CouncilProfileDef[] = [
     label: '农本',
     short: '仓廪为先',
     desc: '优先开垦与民忠，保证军粮和长期人口。',
-    weights: { reclaim: 28, commerce: 8, patrol: 10, govern: 4, drill: 2 },
+    weights: { reclaim: 60, commerce: 8, patrol: 10, govern: 4, drill: 2 },
   },
   {
     id: 'arms',
@@ -254,7 +254,6 @@ function scoreCommand(input: ScoreInput): ScoredCommand | null {
   if (cmd === 'reclaim') {
     if (months !== Infinity && months < 2) score += 120;
     else if (net < 0) score += 60;
-    else if (city.food < BALANCE.FOOD_CAP * 0.25) score += 28;
   }
   if (cmd === 'patrol') {
     if (city.loyalty < 45) score += (45 - city.loyalty) * 3.5;
@@ -386,30 +385,11 @@ export function buildCouncilBrief(state: GameState): CouncilBrief {
   const risks: CouncilRisk[] = [];
 
   // ── 粮草 ────────────────────────────────────────────────
-  const nearCap = [...cities]
-    .filter((c) => c.food >= BALANCE.FOOD_CAP * BALANCE.FOOD_WARN_RATIO)
-    .sort((a, b) => b.food - a.food)[0];
   const lowFood = [...cities]
     .filter((c) => foodMonths(state, c) !== Infinity)
     .sort((a, b) => foodMonths(state, a) - foodMonths(state, b))[0];
   const worstNet = [...cities].sort((a, b) => cityNetFood(state, a) - cityNetFood(state, b))[0];
-  if (nearCap) {
-    cards.push({
-      id: 'food',
-      label: '粮草',
-      title: '仓廪将溢',
-      text: `${nearCap.name} 粮草 ${Math.round((nearCap.food / BALANCE.FOOD_CAP) * 100)}%，超出上限会折损。建议先征兵或卖粮。`,
-      tone: 'danger',
-      cityId: nearCap.id,
-      action: '去处理',
-    });
-    risks.push({
-      id: 'food-cap',
-      text: `${nearCap.name} 粮草接近上限，将产生折损`,
-      tone: 'warn',
-      cityId: nearCap.id,
-    });
-  } else if (lowFood && foodMonths(state, lowFood) < 2) {
+  if (lowFood && foodMonths(state, lowFood) < 2) {
     cards.push({
       id: 'food',
       label: '粮草',

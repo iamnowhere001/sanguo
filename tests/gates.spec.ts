@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createGame } from '../src/data/tables/scenarios';
 import { GATES } from '../src/data/tables/gates';
 import type { Army, GameState } from '../src/core/state';
-import { gateSiteAt, gateSiteById, isGateLane } from '../src/render/gateGrid';
+import { gateAtCenter, gateSiteAt, gateSiteById, isGateLane } from '../src/render/gateGrid';
 import { routeForArmy } from '../src/systems/army';
 import { isWaterKind, tileKindAt, wallTileAt } from '../src/render/terrainGrid';
 import { marchDaysForArmy } from '../src/data/tables/marchCost';
@@ -94,6 +94,27 @@ describe('关防 · 地图落位', () => {
     expect(names.has('夏口渡')).toBe(true);
     // 绕行整条水系时超过 600 格；真正渡江后应在一百多格内
     expect(route!.path.length).toBeLessThan(200);
+  });
+});
+
+describe('关防 · 图标落点', () => {
+  it('港口图标在岸上滩头，关隘图标与通行中心一致且可点选', () => {
+    for (const gate of GATES) {
+      const site = gateSiteById(gate.id)!;
+      expect(site).toBeTruthy();
+      if (gate.kind === 'port') {
+        expect(isWaterKind(tileKindAt(site.icon.col, site.icon.row))).toBe(false);
+        if (site.approaches.length === 2) {
+          const [a, b] = site.approaches;
+          const same = (p: { col: number; row: number }) =>
+            p.col === site.icon.col && p.row === site.icon.row;
+          expect(same(a) || same(b)).toBe(true);
+        }
+      } else {
+        expect(site.icon).toEqual(site.center);
+      }
+      expect(gateAtCenter(site.icon.col, site.icon.row)?.gate.id).toBe(gate.id);
+    }
   });
 });
 

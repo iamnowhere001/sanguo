@@ -14,7 +14,6 @@ import { buildMonthReport, playerSnapshot } from '../src/systems/report';
 function fresh(): GameState {
   const s = createGame({ playerFactionId: 'liubei', seed: 20261022, aiEnabled: false });
   for (const c of Object.values(s.cities)) c.defense = 100;
-  s.settings.overflowConfirm = false;
   return s;
 }
 

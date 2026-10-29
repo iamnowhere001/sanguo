@@ -50,9 +50,7 @@ describe('旧存档迁移', () => {
     expect(migrated).toBe(s);
     expect(s.settings.difficulty).toBe('normal');
     expect(s.settings.aiEnabled).toBe(true);
-    expect(s.settings.overflowMode).toBe('safe');
     expect(s.settings.easterEggEnabled).toBe(false);
-    expect(s.settings.overflowConfirm).toBe(true);
     expect(s.phase).toBe('map');
     for (const c of Object.values(s.cities)) {
       expect(c.training).toBe(0);

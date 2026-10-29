@@ -7,17 +7,8 @@
  */
 export const BALANCE = {
   // ── 资源上限 【GDD】4.3 硬规则 ─────────────────────────────
+  /** 金钱保留国库上限；粮食不设单城上限，按实际产量累积。 */
   GOLD_CAP: 30000,
-  FOOD_CAP: 65536,
-  /**
-   * 【优化】E02 溢出模式：
-   * - safe：按上限截断，并额外折损超出部分的 50%（有损失、不清零）
-   * - classic：原版溢出归零
-   */
-  FOOD_OVERFLOW_MODE: 'safe' as 'safe' | 'classic',
-  FOOD_OVERFLOW_SAFE_LOSS: 0.5,
-  /** 粮食占上限超过这个比例就预警 */
-  FOOD_WARN_RATIO: 0.95,
 
   // ── 城池规模与城防 【新增】大城市 / 小城市 / 易守难攻 ──────
   /**
@@ -423,4 +414,3 @@ export const BALANCE = {
 } as const;
 
 export type DomesticKey = keyof typeof BALANCE.DOMESTIC;
-export type OverflowMode = typeof BALANCE.FOOD_OVERFLOW_MODE;

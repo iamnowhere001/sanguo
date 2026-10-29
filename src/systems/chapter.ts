@@ -651,7 +651,7 @@ function applyActChoice(
       const food = cfg.recuperate.foodPerCity[idx]!;
       const loyalty = cfg.recuperate.loyalty[idx]!;
       for (const city of cities) {
-        city.food = Math.min(BALANCE.FOOD_CAP, city.food + food);
+        city.food += food;
         city.loyalty = Math.min(100, city.loyalty + loyalty);
       }
       log(state, 'good', `幕间选择「休养生息」：各城粮 +${food}，民忠 +${loyalty}`);

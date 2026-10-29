@@ -272,9 +272,6 @@ export function CityPanel({
       (isMine ? policyUpkeepMult(state) : 1),
   );
   const netFood = foodRate - upkeep;
-  const foodPct = (city.food / BALANCE.FOOD_CAP) * 100;
-  const nearCap = foodPct >= BALANCE.FOOD_WARN_RATIO * 100;
-  const overflowMode = state.settings.overflowMode ?? 'safe';
 
   const capByLoyalty = Math.floor(recruitCap(city.loyalty) * (skill?.recruitCapMult ?? 1));
   const capByGeneral = agent ? Math.max(0, troopCapOf(state, agent) - agent.troops) : 0;
@@ -322,7 +319,6 @@ export function CityPanel({
   );
   const maxBuy = Math.min(
     Math.floor(city.gold / buyRate),
-    Math.max(0, BALANCE.FOOD_CAP - city.food),
     tradeLeft,
   );
   const maxSell = Math.min(
@@ -359,19 +355,6 @@ export function CityPanel({
     action?: { label: string; run: () => void };
   }[] = [];
 
-  if (isMine && nearCap) {
-    alerts.push({
-      key: 'food',
-      tone: 'danger',
-      text: (
-        <>
-          粮草 {foodPct.toFixed(0)}%（上限 {fmt(BALANCE.FOOD_CAP)}），超出
-          {overflowMode === 'classic' ? '归零' : '折损 50%'}
-        </>
-      ),
-      action: { label: '去征兵', run: () => jumpTo('recruit') },
-    });
-  }
   if (isMine && gens.length === 0) {
     alerts.push({
       key: 'empty',
@@ -415,16 +398,15 @@ export function CityPanel({
               <b>{fmt(city.gold)}</b>
             </div>
           </div>
-          <div className={`cp-metric${isMine && nearCap ? ' danger' : ''}`} title={`粮草 ${fmt(city.food)} / 上限 ${fmt(BALANCE.FOOD_CAP)}`}>
-            <span>粮草 {foodPct.toFixed(0)}%</span>
+          <div className="cp-metric" title={`粮草 ${fmt(city.food)} · 每月净收支 ${netFood >= 0 ? '+' : ''}${fmt(netFood)}`}>
+            <span>粮草</span>
             <div className="v">
               <b>{fmt(city.food)}</b>
             </div>
-            <Bar
-              value={city.food}
-              max={BALANCE.FOOD_CAP}
-              color={nearCap ? 'var(--red)' : 'var(--gold)'}
-            />
+            <em className={netFood >= 0 ? 'food-net pos' : 'food-net neg'}>
+              月净 {netFood >= 0 ? '+' : ''}
+              {fmt(netFood)}
+            </em>
           </div>
           <div
             className="cp-metric"

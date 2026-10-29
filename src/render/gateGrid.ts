@@ -33,7 +33,12 @@ import type { GridPoint } from '../core/state';
 
 export interface GateSite {
   gate: GateFeature;
-  /** 关门 / 港口图标所在格（关隘为山口，港口为渡线中点水面） */
+  /** 关门 / 港口图标所在格（关隘为山口；港口为岸上滩头，不画在江心） */
+  icon: GridPoint;
+  /**
+   * 通行线中心格（关隘为山口正中，港口为渡线中点水面）。
+   * 规则层用它判断“是否已到关下 / 是否在渡线上”。
+   */
   center: GridPoint;
   /**
    * 可通行线：关隘是穿过山脊的山道，港口是横渡江面的渡线。
@@ -235,6 +240,7 @@ function buildPassSite(gate: GateFeature, mid: { col: number; row: number }, use
           score,
           site: {
             gate,
+            icon: center,
             center,
             lane: line.lane,
             approaches: line.approaches,
@@ -256,6 +262,7 @@ function buildPassSite(gate: GateFeature, mid: { col: number; row: number }, use
   if (!land) return null;
   return {
     gate,
+    icon: land,
     center: land,
     lane: [land],
     approaches: [],
@@ -353,6 +360,19 @@ function landDetour(a: GridPoint, b: GridPoint, cap: number): number {
   return -1;
 }
 
+/** 港口图标放在靠道路中点的岸上滩头；只有异常落位才退回水面中心 */
+function portIconOf(
+  approaches: [] | [GridPoint, GridPoint],
+  mid: { col: number; row: number },
+  fallback: GridPoint,
+): GridPoint {
+  const [a, b] = approaches;
+  if (!a || !b) return fallback;
+  const da = Math.hypot(a.col - mid.col, a.row - mid.row);
+  const db = Math.hypot(b.col - mid.col, b.row - mid.row);
+  return da <= db ? a : b;
+}
+
 /** 一条渡线是否真的“跨水到对岸”，且在两岸都能走到城 */
 function isRealPortLine(line: { lane: GridPoint[]; approaches: [] | [GridPoint, GridPoint] }): boolean {
   if (line.approaches.length < 2) return false;
@@ -418,6 +438,7 @@ function buildPortSite(gate: GateFeature, mid: { col: number; row: number }, use
         score,
         site: {
           gate,
+          icon: portIconOf(line.approaches, mid, center),
           center,
           lane: line.lane,
           approaches: line.approaches,
@@ -446,7 +467,7 @@ function buildPortSite(gate: GateFeature, mid: { col: number; row: number }, use
       18,
     );
     if (!water) return null;
-    return { gate, center: water, lane: [water], approaches: [], water: true };
+    return { gate, icon: water, center: water, lane: [water], approaches: [], water: true };
   }
 
   let fallback: Candidate | null = null;
@@ -469,6 +490,7 @@ function buildPortSite(gate: GateFeature, mid: { col: number; row: number }, use
         score,
         site: {
           gate,
+          icon: portIconOf(line.approaches, mid, center),
           center,
           lane: line.lane,
           approaches: line.approaches,
@@ -596,17 +618,19 @@ export function gateAtCenter(col: number, row: number): GateSite | null {
   if (!centerCache) {
     centerCache = new Map();
     for (const site of Object.values(gateSites())) {
+      // 图标已移到岸上时，图标格与通行线中心格都算“点到了关港”
+      centerCache.set(keyOf(site.icon.col, site.icon.row), site);
       centerCache.set(keyOf(site.center.col, site.center.row), site);
     }
   }
   return centerCache.get(keyOf(col, row)) ?? null;
 }
 
-/** 关港图标世界坐标 */
+/** 关港图标世界坐标（港口取岸上滩头，不取江心） */
 export function gateWorldPos(site: GateSite): { x: number; y: number } {
   return {
-    x: (site.center.col + 0.5) * MAP.tile,
-    y: (site.center.row + 0.5) * MAP.tile,
+    x: (site.icon.col + 0.5) * MAP.tile,
+    y: (site.icon.row + 0.5) * MAP.tile,
   };
 }
 

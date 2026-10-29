@@ -16,7 +16,6 @@ import { POLICIES } from '../data/tables/policies';
 import type { TacticId } from '../data/tables/tactics';
 import {
   advanceTime,
-  citiesNearFoodCap,
   clampResources,
   log,
   runDisaster,
@@ -128,12 +127,11 @@ export type Action =
   | { t: 'PARTITION' }
   | { t: 'CHOOSE_POLICY'; policyId: PolicyId }
   | { t: 'RESOLVE_EVENT'; optionId: string }
+  /** 兼容旧调用：粮食上限已移除，该字段不再参与判定 */
   | { t: 'END_TURN'; confirmed?: boolean };
 
 export interface ActionResult extends OpResult {
   warnings?: string[];
-  /** 需要玩家二次确认（粮食将溢出） */
-  needConfirm?: boolean;
   /** 外交 / 招降的成功率与结果 */
   rate?: number;
   success?: boolean;
@@ -717,25 +715,6 @@ export function reduce(
     case 'END_TURN': {
       if (s.phase !== 'map') {
         return { state, result: { ok: false, message: '当前阶段无法结束回合' } };
-      }
-      // 【裁决】④ 粮食将溢出时二次确认
-      if (s.settings.overflowConfirm && !action.confirmed) {
-        const near = citiesNearFoodCap(s, s.playerFactionId);
-        if (near.length > 0) {
-          const mode = s.settings.overflowMode ?? BALANCE.FOOD_OVERFLOW_MODE;
-          return {
-            state,
-            result: {
-              ok: false,
-              message:
-                mode === 'classic'
-                  ? `以下城池粮草已达上限 ${BALANCE.FOOD_CAP} 的 95%，溢出将归零：${near.join('、')}`
-                  : `以下城池粮草已达上限 ${BALANCE.FOOD_CAP} 的 95%，超出部分将折损 50%：${near.join('、')}`,
-              warnings: near,
-              needConfirm: true,
-            },
-          };
-        }
       }
 
       const before = playerSnapshot(s);

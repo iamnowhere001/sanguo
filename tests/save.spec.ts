@@ -17,7 +17,7 @@ describe('存档序列化', () => {
       label: '测试',
       runSeed: s.seed,
       turn: s.turn,
-      presets: { balance: 'balanced', rules: { safeOverflow: true } },
+      presets: { balance: 'balanced', rules: { classicSpawn: false } },
       state: s,
     };
     const restored: SaveFile = JSON.parse(JSON.stringify(file));
@@ -27,7 +27,6 @@ describe('存档序列化', () => {
     expect(restored.runSeed).toBe(s.seed);
     expect(restored.state.generals.guanyu!.loyalty).toBe(77);
     expect(restored.state.cities.jiangxia!.food).toBe(4321);
-    expect(restored.state.settings.overflowConfirm).toBe(true);
 
     const [a] = nextFloat(s.streams.search);
     const rng = restoreRng(
