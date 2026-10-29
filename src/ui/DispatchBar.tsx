@@ -118,9 +118,12 @@ export function DispatchBar({
               目的地为 {state.cities[plan.homeCityId]?.name ?? plan.homeCityId}：抵达城心后自动入城解散
             </span>
           ) : null}
-          {plan.waterCrossing ? (
-            <span className="db-note">途经渡水口，接战按水战计算</span>
+          {plan.ferry ? (
+            <span className="db-note">
+              经 {plan.ferry.name} 摆渡过江：渡河 {plan.ferry.days} 日，一次登岸，不在江面停留
+            </span>
           ) : null}
+          {plan.ferry ? <span className="db-note">渡江接战按水战计算</span> : null}
         </div>
       ) : (
         <div className="db-body">

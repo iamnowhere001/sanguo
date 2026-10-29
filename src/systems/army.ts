@@ -1,6 +1,6 @@
 import { BALANCE } from '../data/tables/balance';
 import { MAP } from '../data/tables/geography';
-import { inMap, marchDaysForArmy, marchDaysOfTile, TILE_MARCH_DAYS } from '../data/tables/marchCost';
+import { inMap, marchDaysForArmy, marchDaysOfTile, marchStepDays, TILE_MARCH_DAYS } from '../data/tables/marchCost';
 import type { Army, GameState, General, GridPoint } from '../core/state';
 import { defendersOf } from '../core/state';
 import { done, fail, type OpResult } from '../core/result';
@@ -10,7 +10,7 @@ import { topUpFromPool } from './troops';
 import { defaultSquads, type SquadConfig } from './squads';
 import { log } from './economy';
 import { beaconMarchBonusOf } from './facilities';
-import { gateSiteAt, gateSites } from '../render/gateGrid';
+import { ferryBetween, gateSiteAt, gateSites } from '../render/gateGrid';
 import { gateBlockedFor } from './gates';
 import {
   approachTileAt,
@@ -86,12 +86,24 @@ function gateSummaryOf(path: GridPoint[]): {
   waterCrossing: boolean;
 } {
   let waterCrossing = false;
-  for (const p of path) {
+  for (let i = 0; i < path.length; i++) {
+    const p = path[i]!;
     const site = gateSiteAt(p.col, p.row);
     if (site?.water) waterCrossing = true;
+    // 过河是跳跃边：路径里不会出现水面格，要看相邻两格是否成对滩头
+    if (i > 0 && ferryBetween(path[i - 1]!, p)) waterCrossing = true;
   }
   // 旧版“敌关给目标城加城防”的机制已被“敌关封锁整条线”取代
   return { fortificationBonus: 0, waterCrossing };
+}
+
+/** 走这条路要摆渡哪一处港口；不过江返回 null */
+function ferryOnPath(path: GridPoint[]): { name: string; days: number } | null {
+  for (let i = 1; i < path.length; i++) {
+    const site = ferryBetween(path[i - 1]!, path[i]!);
+    if (site) return { name: site.gate.name, days: site.crossDays };
+  }
+  return null;
 }
 
 class TileHeap {
@@ -168,6 +180,8 @@ interface MarchGrid {
   /** 关防序号（1 起）；0 = 普通格 */
   gateIndex: Int16Array;
   gateIds: string[];
+  /** 渡口跳跃边：滩头下标 → 对岸滩头（一次摆渡，不下水） */
+  hops: Map<number, { to: number; cost: number; gateId: string }>;
   /** 城墙所属城序号（1 起）；0 = 非城墙 */
   wallCity: Int16Array;
   /** 1 = 城墙角，城主也不能穿过 */
@@ -190,16 +204,29 @@ function marchGrid(): MarchGrid {
 
   const gateIndex = new Int16Array(N);
   const gateIds: string[] = [];
+  const hops = new Map<number, { to: number; cost: number; gateId: string }>();
   for (const site of Object.values(gateSites())) {
     gateIds.push(site.gate.id);
     const gi = gateIds.length;
-    const base = site.water ? 1.5 : 1;
+    // 港口：江面是墙，渡线不铺可走格，只在两岸滩头之间拉一条跳跃边。
+    // 这样部队过河是「一次摆渡」而不是「在江心走二十格」。
+    if (site.water) {
+      if (site.approaches.length === 2 && site.crossDays > 0) {
+        const a = site.approaches[0]!;
+        const b = site.approaches[1]!;
+        const ia = a.row * cols + a.col;
+        const ib = b.row * cols + b.col;
+        hops.set(ia, { to: ib, cost: site.crossDays, gateId: site.gate.id });
+        hops.set(ib, { to: ia, cost: site.crossDays, gateId: site.gate.id });
+      }
+      continue;
+    }
     const apply = (col: number, row: number): void => {
       if (col < 0 || row < 0 || col >= cols || row >= rows) return;
       const i = row * cols + col;
       gateIndex[i] = gi;
       const atCenter = col === site.center.col && row === site.center.row;
-      cost[i] = base + (atCenter ? site.gate.extraDays : 0);
+      cost[i] = 1 + (atCenter ? site.gate.extraDays : 0);
     };
     for (const p of site.lane) apply(p.col, p.row);
     // 与 gateSiteAt 的兜底一致：图标格即使不在 lane 内也算通行
@@ -220,7 +247,7 @@ function marchGrid(): MarchGrid {
     }
   }
 
-  marchGridCache = { cols, rows, cost, gateIndex, gateIds, wallCity, wallCorner, cityIds };
+  marchGridCache = { cols, rows, cost, gateIndex, gateIds, hops, wallCity, wallCorner, cityIds };
   return marchGridCache;
 }
 
@@ -308,6 +335,31 @@ function marchField(
         heap.push(ni, nd);
       }
     }
+
+    // 渡口跳跃：站在滩头上，可以一次摆渡到对岸滩头（敌港封锁则不通）
+    const hop = grid.hops.get(id);
+    if (hop && !gateBlockedFor(s, hop.gateId, factionId)) {
+      const hr = Math.floor(hop.to / cols);
+      const hc = hop.to - hr * cols;
+      const hopOccupant = armyAtTile(s, hc, hr);
+      const hwi = grid.wallCity[hop.to]!;
+      const wallBlocked =
+        hwi > 0 &&
+        (grid.wallCorner[hop.to] === 1 ||
+          (s.cities[grid.cityIds[hwi - 1]!]?.ownerId ?? null) !== factionId);
+      if (
+        !wallBlocked &&
+        !extraBlocked?.has(hop.to) &&
+        (!hopOccupant || hopOccupant.factionId === factionId)
+      ) {
+        const hd = d + hop.cost;
+        if (hd < dist[hop.to]!) {
+          dist[hop.to] = hd;
+          prev[hop.to] = id;
+          heap.push(hop.to, hd);
+        }
+      }
+    }
   }
 
   return { start, dist, prev };
@@ -385,6 +437,14 @@ function siegeAt(s: GameState, factionId: string, tile: GridPoint): string | nul
   return canAttackFactions(s, factionId, city.ownerId) ? city.id : null;
 }
 
+/** 不可通行时的说明：水面与山岭要分开讲，玩家才知道该走渡口还是关隘 */
+function impassableReason(col: number, row: number): string {
+  const kind = tileKindAt(col, row);
+  if (kind === 'river' || kind === 'lake' || kind === 'sea') return '江面不可通行，须走渡口过河';
+  if (kind === 'mountain') return '山岭不可通行，须走关隘';
+  return '此处不可通行';
+}
+
 /**
  * 把一次地图点击解析成合法目的地。
  *
@@ -411,7 +471,7 @@ export function resolveDispatchDest(
     return { ok: true, target: { kind: 'city', cityId: city.id } };
   }
   if (!Number.isFinite(marchDaysForArmy(tile.col, tile.row))) {
-    return { ok: false, reason: '此处不可通行（山岭 / 水域）' };
+    return { ok: false, reason: impassableReason(tile.col, tile.row) };
   }
   const occupant = armyAtTile(s, tile.col, tile.row);
   if (occupant && occupant.factionId !== factionId) {
@@ -439,6 +499,8 @@ export interface DispatchPlan {
   homeCityId: string | null;
   fortificationBonus: number;
   waterCrossing: boolean;
+  /** 途经的渡口（过江时才非空），供确认条写明「经夏口渡过河 8 日」 */
+  ferry: { name: string; days: number } | null;
   gate: GateSide | null;
 }
 
@@ -523,6 +585,7 @@ export function planDispatch(
     siegeCityId: homeCityId ? null : siegeAt(s, factionId, best.goal),
     homeCityId,
     ...gateSummaryOf(full),
+    ferry: ferryOnPath(full),
     gate,
   };
 }
@@ -614,10 +677,13 @@ export function reachableTargets(
 // ── 移动力与行军 ────────────────────────────────────────────
 /** 剩余路程（天）：含当前这一步已走的零头 */
 export function armyDaysRemaining(_s: GameState, army: Army): number {
-  const next = army.path[0];
-  let total = next ? Math.max(0, marchDaysForArmy(next.col, next.row) - army.legDays) : 0;
-  for (let i = 1; i < army.path.length; i++) {
-    total += marchDaysForArmy(army.path[i]!.col, army.path[i]!.row);
+  let prev: GridPoint | null = army.at;
+  let total = 0;
+  for (let i = 0; i < army.path.length; i++) {
+    const p = army.path[i]!;
+    const cost = marchStepDays(prev, p);
+    total += i === 0 ? Math.max(0, cost - army.legDays) : cost;
+    prev = p;
   }
   return total;
 }
@@ -632,7 +698,9 @@ export function armyWorldPos(_s: GameState, army: Army): { x: number; y: number 
   const from = tileCenter(army.at.col, army.at.row);
   const next = army.path[0];
   if (!next) return from;
-  const cost = marchDaysForArmy(next.col, next.row);
+  // 摆渡未完成前停在滩头：部队不下水，只有付清船程才整体移到对岸
+  if (ferryBetween(army.at, next)) return from;
+  const cost = marchStepDays(army.at, next);
   const t = Number.isFinite(cost) && cost > 0 ? Math.min(1, Math.max(0, army.legDays / cost)) : 1;
   const to = tileCenter(next.col, next.row);
   return { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t };
@@ -647,9 +715,12 @@ function advanceAlongPath(s: GameState, army: Army, budget: number): number {
   while (left > 0) {
     const next = army.path[0];
     if (!next) break;
-    const site = gateSiteAt(next.col, next.row);
+    // 过河这一脚要查渡口封锁：水面不是可走格，封锁挂在港口上
+    const ferry = ferryBetween(army.at, next);
+    if (ferry && gateBlockedFor(s, ferry.gate.id, army.factionId)) break;
+    const site = ferry ? null : gateSiteAt(next.col, next.row);
     if (site && gateBlockedFor(s, site.gate.id, army.factionId)) break;
-    const cost = marchDaysForArmy(next.col, next.row);
+    const cost = marchStepDays(army.at, next);
     if (!Number.isFinite(cost)) break;
     // 前路被占 / 被城墙挡住：原地待命，等下一旬重新下令（不硬穿）
     const wall = wallTileAt(next.col, next.row);
@@ -666,6 +737,15 @@ function advanceAlongPath(s: GameState, army: Army, budget: number): number {
     army.at = { col: next.col, row: next.row };
     army.path.shift();
     army.legDays = 0;
+    // 摆渡落地：写进战报，玩家才知道这一步是「过江」而不是普通一格
+    if (ferry) {
+      log(
+        s,
+        'info',
+        `${s.factions[army.factionId]?.name ?? army.factionId} 军自 ${ferry.gate.name} 摆渡过江，${ferry.crossDays} 日登岸`,
+        army.factionId === s.playerFactionId ? undefined : 'ai',
+      );
+    }
     // 穿过己方城心：把「最近经过的己方城」更新为这里，战败撤退才有落脚点
     const center = cityAtCenter(army.at.col, army.at.row);
     if (center && s.cities[center]?.ownerId === army.factionId) army.fromCityId = center;
@@ -716,7 +796,13 @@ export function moveArmyTo(s: GameState, armyId: string, to: GridPoint): MoveOut
   const army = (s.armies ?? []).find((a) => a.id === armyId);
   if (!army) return { ok: false, message: '部队不存在', days: 0, remaining: 0, arrived: false };
   if (!Number.isFinite(marchDaysForArmy(to.col, to.row))) {
-    return { ok: false, message: '此处不可通行', days: 0, remaining: 0, arrived: false };
+    return {
+      ok: false,
+      message: impassableReason(to.col, to.row),
+      days: 0,
+      remaining: 0,
+      arrived: false,
+    };
   }
   const gateSite = gateSiteAt(to.col, to.row);
   if (gateSite && gateBlockedFor(s, gateSite.gate.id, army.factionId)) {
@@ -922,11 +1008,13 @@ export function dispatchPreviewOf(plan: DispatchPlan): GridPoint[] {
 export function firstLegEndOf(plan: DispatchPlan, mp: number): GridPoint | null {
   let used = 0;
   let last: GridPoint | null = null;
+  let prev: GridPoint = plan.exit;
   for (const p of plan.path) {
-    const cost = marchDaysForArmy(p.col, p.row);
+    const cost = marchStepDays(prev, p);
     if (!Number.isFinite(cost) || used + cost > mp) break;
     used += cost;
     last = p;
+    prev = p;
   }
   if (last && plan.path.length > 0) {
     const tail = plan.path[plan.path.length - 1]!;

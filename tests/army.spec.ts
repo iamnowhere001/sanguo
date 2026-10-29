@@ -26,6 +26,7 @@ import {
   sortieArmy,
 } from '../src/systems/army';
 import { gatesOf, siegeTargetOf, sortieBlocked } from '../src/systems/cityGrid';
+import { gateSites } from '../src/render/gateGrid';
 import type { Army, GameState, GridPoint } from '../src/core/state';
 
 function fresh(): GameState {
@@ -322,6 +323,83 @@ describe('L 档 · 逐格手动行军', () => {
     const { state: afterAssault, result } = reduce(s, { t: 'ASSAULT', armyId: army.id });
     expect(result.ok).toBe(true);
     expect(afterAssault.phase === 'battle' || afterAssault.gameOver).toBeTruthy();
+  });
+
+  it('过河靠摆渡：可达范围里没有水面，对岸滩头一次就到', () => {
+    const s = fresh();
+    const port = Object.values(gateSites()).find(
+      (x) => x.water && x.approaches.length === 2 && x.crossDays <= MARCH_DAYS_PER_XUN,
+    );
+    expect(port, '没有可用的渡口').toBeDefined();
+    const near = port!.approaches[0]!;
+    const far = port!.approaches[1]!;
+
+    const from = myCity(s);
+    const target = reachableTargets(s, s.playerFactionId, from)[0]!;
+    sortieArmy(s, from, target.cityId);
+    const army = s.armies!.at(-1)!;
+    // 把部队挪到近岸滩头，重新满移动力
+    army.at = { ...near };
+    army.path = [];
+    army.mp = armyMaxMp(army);
+
+    const reach = armyReach(s, army);
+    expect(reach.size).toBeGreaterThan(0);
+    for (const key of reach.keys()) {
+      const [col, row] = key.split(',').map(Number) as [number, number];
+      expect(isWaterKind(tileKindAt(col, row)), `可达范围里出现水面 ${key}`).toBe(false);
+    }
+    // 对岸滩头：一次摆渡就够，耗时为 crossDays
+    expect(reach.get(`${far.col},${far.row}`)).toBe(port!.crossDays);
+  });
+
+  it('点江面下令会被挡住，并提示走渡口', () => {
+    const s = fresh();
+    const from = myCity(s);
+    const target = reachableTargets(s, s.playerFactionId, from)[0]!;
+    sortieArmy(s, from, target.cityId);
+    const army = s.armies!.at(-1)!;
+
+    const port = Object.values(gateSites()).find((x) => x.water);
+    expect(port).toBeDefined();
+    const r = moveArmyTo(s, army.id, { ...port!.center });
+    expect(r.ok).toBe(false);
+    expect(r.message).toContain('渡口');
+  });
+
+  it('本旬走不完的渡河停在滩头，绝不落在江心', () => {
+    const s = fresh();
+    // 挑一条船程大于 4 天的渡线，才好在半途截住
+    const port = Object.values(gateSites()).find(
+      (x) => x.water && x.approaches.length === 2 && x.crossDays > 4,
+    );
+    expect(port, '没有长渡线可用').toBeDefined();
+    const near = port!.approaches[0]!;
+    const far = port!.approaches[1]!;
+
+    const from = myCity(s);
+    const target = reachableTargets(s, s.playerFactionId, from)[0]!;
+    sortieArmy(s, from, target.cityId);
+    const army = s.armies!.at(-1)!;
+    army.at = { ...near };
+    army.path = [];
+    army.legDays = 0;
+    // 只剩 4 天：付不起船程，应当留在近岸滩头攒天数
+    army.speed = 0.4;
+    army.mp = armyMaxMp(army);
+    const first = moveArmyTo(s, army.id, far);
+    expect(first.ok).toBe(true);
+    expect(army.at).toEqual(near);
+    expect(army.legDays).toBeCloseTo(4, 5);
+    expect(isWaterKind(tileKindAt(army.at.col, army.at.row))).toBe(false);
+
+    // 下个旬满额出发：一次摆渡登岸
+    army.speed = 1;
+    army.mp = armyMaxMp(army);
+    const second = moveArmyTo(s, army.id, far);
+    expect(second.ok).toBe(true);
+    expect(army.at).toEqual(far);
+    expect(isWaterKind(tileKindAt(army.at.col, army.at.row))).toBe(false);
   });
 });
 

@@ -10,7 +10,7 @@
  * - 关港之间不重叠。
  */
 import { GATES } from '../src/data/tables/gates';
-import { gateSites } from '../src/render/gateGrid';
+import { ferryHopFrom, gateSites } from '../src/render/gateGrid';
 import { cityTileIndex, tileKindAt, isWaterKind } from '../src/render/terrainGrid';
 import { MAP } from '../src/data/tables/geography';
 import type { GridPoint } from '../src/core/state';
@@ -88,6 +88,18 @@ for (const gate of GATES) {
     if (!adjacent(a, lane[0]!) || !adjacent(b, lane[lane.length - 1]!)) {
       problems.push(`${gate.name}：滩头未接在通行线两端`);
     }
+    // 港口过河是「滩头 ↔ 滩头」的一次摆渡：渡线本身不可站，跳跃边必须成对存在
+    if (gate.kind === 'port') {
+      if (site.crossDays <= 0) problems.push(`${gate.name}：渡河天数为 0`);
+      const hopA = ferryHopFrom(a.col, a.row);
+      const hopB = ferryHopFrom(b.col, b.row);
+      if (!hopA || hopA.to.col !== b.col || hopA.to.row !== b.row) {
+        problems.push(`${gate.name}：A→B 摆渡边缺失`);
+      }
+      if (!hopB || hopB.to.col !== a.col || hopB.to.row !== a.row) {
+        problems.push(`${gate.name}：B→A 摆渡边缺失`);
+      }
+    }
   } else if (lane.length <= 1) {
     problems.push(`${gate.name}：只有 1 格且无滩头，关门成为孤岛`);
   }
@@ -107,7 +119,8 @@ for (const gate of GATES) {
       : '无滩头';
   line(
     `  ${site.gate.kind === 'port' ? '港' : site.gate.kind === 'trail' ? '径' : '关'} ${gate.name.padEnd(4, '　')} ` +
-      `中心 ${site.center.col},${site.center.row} · 图标 ${site.icon.col},${site.icon.row} · 线 ${site.lane.length} 格 · ${ends}`,
+      `中心 ${site.center.col},${site.center.row} · 图标 ${site.icon.col},${site.icon.row} · 线 ${site.lane.length} 格` +
+      `${site.water ? ` · 渡河 ${site.crossDays} 日` : ''} · ${ends}`,
   );
 }
 

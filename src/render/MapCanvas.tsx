@@ -78,16 +78,6 @@ function hexA(hex: string, alpha: number): string {
   return `rgba(${(v >> 16) & 255},${(v >> 8) & 255},${v & 255},${alpha})`;
 }
 
-/** 字符串散列：给每条道路一个稳定的弧度，不随重绘跳动 */
-function hashText(s: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return (h >>> 0) / 4294967296;
-}
-
 const SIZE_RANK: Record<CitySize, number> = {
   capital: 0,
   large: 1,
@@ -1509,9 +1499,20 @@ export function MapCanvas({
       ctx.globalAlpha = 1;
     }
     lapPaint('territory');
-    if (view.zoom >= 4.5) {
-      ctx.strokeStyle = `rgba(58,48,32,${0.05 * Math.min(1, (view.zoom - 4.5) / 0.8)})`;
-      ctx.lineWidth = 0.3;
+    // 行军网格：选中部队 / 出征时叠一层淡格网，让「一格一步」看得见。
+    // 按屏幕上一格的像素大小决定要不要画：全图视图一格不到 2px，画出来就是一层灰。
+    const tilePx = MAP.tile * layout.scale * view.zoom;
+    const gridAlpha = selectedArmyId || dispatch
+      ? tilePx >= 9
+        ? Math.min(0.13, 0.05 + tilePx * 0.003)
+        : 0
+      : tilePx >= 26
+        ? Math.min(0.09, 0.03 + (tilePx - 26) * 0.003)
+        : 0;
+    if (gridAlpha > 0) {
+      ctx.strokeStyle = `rgba(58,48,32,${gridAlpha})`;
+      // 线宽按「1 个屏幕像素」反算：格网是标尺，不该随缩放变粗变细
+      ctx.lineWidth = 1 / Math.max(0.2, layout.scale * view.zoom);
       ctx.beginPath();
       const c0 = Math.max(1, Math.floor(worldRect.x / MAP.tile));
       const c1 = Math.min(MAP.cols, Math.ceil((worldRect.x + worldRect.w) / MAP.tile));
@@ -1534,7 +1535,6 @@ export function MapCanvas({
 
     const pts = project(state, size.w, size.h, view);
     pointsRef.current = pts;
-    const byId = new Map(pts.map((p) => [p.city.id, p]));
 
     // 势力色晕：走预烘精灵，避免每帧为 61 座城重建 61 个径向渐变
     for (const p of pts) {
@@ -1569,28 +1569,8 @@ export function MapCanvas({
       ctx.fillText(text, bx, by + 0.5);
     };
 
-    // 道路：略带弧度的淡色驿道，避免把地图切成坐标纸。
-    // 邻接线在高倍率下会像横跨江面的电线，随缩放淡出，只保留低倍率的大势。
-    const roadAlpha = Math.max(0.14, Math.min(1, 2.1 - view.zoom * 0.36));
-    for (const e of state.edges) {
-      const a = byId.get(e.a);
-      const b = byId.get(e.b);
-      if (!a || !b) continue;
-      const dist = Math.hypot(b.x - a.x, b.y - a.y);
-      if (dist < 1) continue;
-      const bend = (hashText(e.a + '|' + e.b) - 0.5) * Math.min(90, dist * 0.18);
-      const mx = (a.x + b.x) / 2 - ((b.y - a.y) / dist) * bend;
-      const my = (a.y + b.y) / 2 + ((b.x - a.x) / dist) * bend;
-      ctx.beginPath();
-      ctx.moveTo(a.x, a.y);
-      ctx.quadraticCurveTo(mx, my, b.x, b.y);
-      ctx.strokeStyle = `rgba(92,76,48,${0.2 * roadAlpha})`;
-      ctx.lineWidth = 3.4;
-      ctx.stroke();
-      ctx.strokeStyle = `rgba(240,229,198,${0.46 * roadAlpha})`;
-      ctx.lineWidth = 1.6;
-      ctx.stroke();
-    }
+    // 城池之间不画道路：行军是逐格走的，底图上再拉一层驿道线只会把山水读成拓扑图。
+    // 邻接关系仍在 state.edges 里，留给 AI / 议会算路，但不进画面。
     lapPaint('entities');
 
     lapPaint('interaction');
@@ -1606,20 +1586,23 @@ export function MapCanvas({
       gateHitsRef.current.push({ id: site.gate.id, x: sp.x, y: sp.y, r: 14 });
     }
 
-    if (view.zoom >= 0.8) {
-      for (const site of gateList) {
+    // 通行线默认不画。港口的渡线、关隘的山道一旦常驻，就成了一张盖在山水上的关系图；
+    // 关港图标本身就是地图地标，只有悬停 / 选中时才把"这一处通往哪"临时点亮。
+    const focusGateId = selectedGateId ?? hoverGate;
+    if (focusGateId) {
+      const site = gateSiteById(focusGateId);
+      const points = site ? site.lane.map(tileScreen) : [];
+      if (site && points.length >= 2) {
         const blocked = gateBlockedFor(state, site.gate.id, state.playerFactionId);
-        const points = site.lane.map(tileScreen);
-        if (points.length < 2) continue;
         const traceLane = () => {
           ctx.beginPath();
           points.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
         };
-        // 外晕：先让通行线在山水底图上"浮"起来
+        // 外晕：让通行线在山水底图上"浮"起来
         traceLane();
         ctx.setLineDash([]);
-        ctx.lineWidth = blocked ? 5 : 4;
-        ctx.strokeStyle = blocked ? 'rgba(70,26,20,0.35)' : 'rgba(40,54,46,0.3)';
+        ctx.lineWidth = blocked ? 4.4 : 3.6;
+        ctx.strokeStyle = blocked ? 'rgba(70,26,20,0.28)' : 'rgba(40,54,46,0.24)';
         ctx.stroke();
         // 内线：港口是渡船虚线，关隘是山道点线
         traceLane();
@@ -1631,8 +1614,8 @@ export function MapCanvas({
             ? 'rgba(152,214,214,0.95)'
             : 'rgba(198,160,96,0.95)';
         ctx.stroke();
+        ctx.setLineDash([]);
       }
-      ctx.setLineDash([]);
     }
 
     for (const site of gateList) {

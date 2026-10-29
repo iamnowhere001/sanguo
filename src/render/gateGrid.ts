@@ -49,6 +49,14 @@ export interface GateSite {
   approaches: [GridPoint, GridPoint] | [];
   /** 是否是水面渡线 */
   water: boolean;
+  /**
+   * 渡河天数（仅港口有值）：陆地部队不下水，从一岸滩头一次跳到对岸滩头。
+   *
+   * 原来的口径是「沿渡线逐格走 1.5 天/格」，一条 20 格的江面要走 30 天，
+   * 部队会在江心站着过旬——这正是要修的问题。现在按渡线长度折算成一次摆渡：
+   * 江面越宽船程越长，但始终是一次位移，部队不会出现在水面上。
+   */
+  crossDays: number;
 }
 
 const DIRS: Array<[number, number]> = [
@@ -280,6 +288,7 @@ function buildPassSite(gate: GateFeature, mid: { col: number; row: number }, tak
             lane: line.lane,
             approaches: line.approaches,
             water: false,
+            crossDays: 0,
           },
         };
       }
@@ -302,8 +311,15 @@ function buildPassSite(gate: GateFeature, mid: { col: number; row: number }, tak
     lane: [land],
     approaches: [],
     water: false,
+    crossDays: 0,
   };
 }
+
+/** 摆渡天数：过关耗时 + 每 4 格江面折 1 日船程（一次跳过去，不在水面停留） */
+function crossDaysOf(gate: GateFeature, lane: GridPoint[]): number {
+  return Math.max(2, gate.extraDays + Math.ceil(lane.length / 4));
+}
+
 
 // ── 渡口有效性 ─────────────────────────────────────────────
 /** 滩头到最近城池的最大陆路步数；超过即视为“渡过去也到不了城” */
@@ -492,6 +508,7 @@ function buildPortSite(gate: GateFeature, mid: { col: number; row: number }, tak
           lane: line.lane,
           approaches: line.approaches,
           water: true,
+          crossDays: crossDaysOf(gate, line.lane),
         },
       });
     }
@@ -516,7 +533,7 @@ function buildPortSite(gate: GateFeature, mid: { col: number; row: number }, tak
       18,
     );
     if (!water) return null;
-    return { gate, icon: water, center: water, lane: [water], approaches: [], water: true };
+    return { gate, icon: water, center: water, lane: [water], approaches: [], water: true, crossDays: 0 };
   }
 
   let fallback: Candidate | null = null;
@@ -539,6 +556,7 @@ function buildPortSite(gate: GateFeature, mid: { col: number; row: number }, tak
           lane: line.lane,
           approaches: line.approaches,
           water: true,
+          crossDays: crossDaysOf(gate, line.lane),
         },
       };
     }
@@ -697,6 +715,37 @@ export function gateWorldPos(site: GateSite): { x: number; y: number } {
 export function isGateLane(col: number, row: number): boolean {
   return gateSiteAt(col, row) !== null;
 }
+
+let hopCache: Map<string, { to: GridPoint; site: GateSite }> | null = null;
+
+/**
+ * 渡口跳跃：从某个滩头出发，一次摆渡到对岸滩头。
+ *
+ * 陆地部队不下水，所以「过河」在规则层是一条**跳跃边**，而不是一串水面格：
+ * 江面本身就是墙，只有真渡口的两端之间才有这条边。
+ * 这样部队既不会站在江心，也不会因为一条 20 格宽的江面走掉三旬。
+ */
+export function ferryHopFrom(col: number, row: number): { to: GridPoint; site: GateSite } | null {
+  if (!hopCache) {
+    hopCache = new Map();
+    for (const site of Object.values(gateSites())) {
+      if (!site.water || site.approaches.length !== 2) continue;
+      const a = site.approaches[0]!;
+      const b = site.approaches[1]!;
+      hopCache.set(keyOf(a.col, a.row), { to: b, site });
+      hopCache.set(keyOf(b.col, b.row), { to: a, site });
+    }
+  }
+  return hopCache.get(keyOf(col, row)) ?? null;
+}
+
+/** 两格之间是否正好是一次摆渡（同一港口的南北滩头） */
+export function ferryBetween(a: GridPoint, b: GridPoint): GateSite | null {
+  const hop = ferryHopFrom(a.col, a.row);
+  if (!hop) return null;
+  return hop.to.col === b.col && hop.to.row === b.row ? hop.site : null;
+}
+
 
 
 export { lonLatToTile };

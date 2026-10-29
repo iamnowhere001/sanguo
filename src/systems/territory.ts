@@ -1,6 +1,6 @@
 import type { GameState } from '../core/state';
 import { MAP } from '../data/tables/geography';
-import { gateSiteAt, isGateLane } from '../render/gateGrid';
+import { gateSiteAt, gateSites } from '../render/gateGrid';
 import { cityBlocks, isWaterKind, tileKindAt } from '../render/terrainGrid';
 import type { TileKind } from '../render/terrainGrid';
 
@@ -9,7 +9,7 @@ import type { TileKind } from '../render/terrainGrid';
  *
  * 语义采用「**道路可达**」：每格归属 = 从各城出发、按真实行军代价扩张时最先到达的势力。
  * 代价直接复用 `marchDaysForArmy`，因此版图边界与部队实际能走的路**同源**——
- * 山脉是墙、江面是墙、只有关隘 / 港口的通行线是缺口，版图会自然地在那里收拢成一条细颈。
+ * 山脉是墙、江面是墙、只有关隘的山道与港口的摆渡是缺口，版图会自然地在那里收拢成一条细颈。
  *
  * 为什么不是 Voronoi：Voronoi 不考虑地形，会把城池的领地从秦岭上翻过去；
  * 为什么不是固定半径：半径会把领内压到邻城城墙上。
@@ -66,13 +66,35 @@ export interface TerritoryField {
 export function territoryEntryCost(col: number, row: number): number {
   const site = gateSiteAt(col, row);
   if (site) {
-    // 关隘 / 港口：与部队行军一致，中线额外计 extraDays
-    const base = site.water ? 1.5 : 1;
+    // 港口渡线的水面是墙：过江和行军一样走「滩头—滩头」的跳跃边，
+    // 版图因此也只会在真渡口处收成一条细颈，而不是顺着整条渡线铺过去。
+    if (site.water) return Number.POSITIVE_INFINITY;
     const atCenter = col === site.center.col && row === site.center.row;
-    return Math.round((base + (atCenter ? site.gate.extraDays : 0)) * DAY_SCALE);
+    return Math.round((1 + (atCenter ? site.gate.extraDays : 0)) * DAY_SCALE);
   }
   const days = TERRITORY_DAYS[tileKindAt(col, row)];
   return Number.isFinite(days) ? days * DAY_SCALE : Number.POSITIVE_INFINITY;
+}
+
+/** 渡口跳跃边（下标 → 对岸滩头），版图扩张时和四邻一起松弛 */
+let ferryCache: Map<number, { to: number; cost: number }> | null = null;
+
+function territoryFerries(): Map<number, { to: number; cost: number }> {
+  if (ferryCache) return ferryCache;
+  const { cols } = MAP;
+  const out = new Map<number, { to: number; cost: number }>();
+  for (const site of Object.values(gateSites())) {
+    if (!site.water || site.approaches.length !== 2 || site.crossDays <= 0) continue;
+    const a = site.approaches[0]!;
+    const b = site.approaches[1]!;
+    const ia = a.row * cols + a.col;
+    const ib = b.row * cols + b.col;
+    const cost = site.crossDays * DAY_SCALE;
+    out.set(ia, { to: ib, cost });
+    out.set(ib, { to: ia, cost });
+  }
+  ferryCache = out;
+  return out;
 }
 
 /**
@@ -100,6 +122,7 @@ function territoryCostLut(): Uint16Array {
 /** 仅供测试：清空地形/关防派生缓存（地形本身是确定性的，正常流程不需要） */
 export function resetTerritoryCaches(): void {
   costLutCache = null;
+  ferryCache = null;
   cached = null;
 }
 
@@ -143,10 +166,9 @@ export function computeTerritory(state: GameState): TerritoryField {
     if (!who) continue;
     const block = blocks[cityId]!;
     // 水面（江城的门外滩涂、港口外的江面）不参与归属，
-    // 否则会出现"一格水属于某势力"的脏数据。关港通行线另算。
+    // 否则会出现"一格水属于某势力"的脏数据。过江另走渡口跳跃边。
     const seedable = (col: number, row: number): boolean => {
       if (col < 0 || row < 0 || col >= cols || row >= rows) return false;
-      if (isGateLane(col, row)) return true;
       return !isWaterKind(tileKindAt(col, row));
     };
     for (const t of block.tiles) {
@@ -161,6 +183,7 @@ export function computeTerritory(state: GameState): TerritoryField {
   }
 
   // 逐桶扩张
+  const ferries = territoryFerries();
   for (let c = 0; c <= maxCost; c++) {
     const bucket = buckets[c]!;
     for (let i = 0; i < bucket.length; i++) {
@@ -180,6 +203,10 @@ export function computeTerritory(state: GameState): TerritoryField {
         if (step === UNREACHED) continue;
         push(nIdx, c + step, who);
       }
+
+      // 渡口：一次摆渡到对岸滩头（江面本身不可进入）
+      const hop = ferries.get(idx);
+      if (hop) push(hop.to, c + hop.cost, who);
     }
     buckets[c] = [];
   }

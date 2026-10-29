@@ -1,5 +1,6 @@
 import { MAP } from './geography';
-import { gateSiteAt } from '../../render/gateGrid';
+import type { GridPoint } from '../../core/state';
+import { ferryBetween, gateSiteAt } from '../../render/gateGrid';
 import { tileKindAt, type TileKind } from '../../render/terrainGrid';
 
 /**
@@ -43,19 +44,36 @@ export function marchDaysOfTile(col: number, row: number): number {
 /**
  * 部队实际进军耗时：关防通行线优先于地形。
  *
- * 山口本身是山岭、渡线本身是江面，普通地形表里都是 Infinity；
- * 只有关防生成的那条 1 格宽通路可以在支付过关耗时后通过。
- * 中点是关门 / 港埠，额外计入 `extraDays`，让“过关”有明确的时间成本。
+ * 山口本身是山岭，普通地形表里是 Infinity；只有关防生成的那条 1 格宽通路
+ * 可以在支付过关耗时后通过，中点是关门，额外计入 `extraDays`。
+ *
+ * **渡线（港口）不同**：江面是墙，陆地部队不下水，所以渡线上的水面格一律返回
+ * Infinity；过江走 `marchStepDays` 里的「渡口跳跃」，一次从这岸滩头到对岸滩头。
  */
 export function marchDaysForArmy(col: number, row: number): number {
   const site = gateSiteAt(col, row);
   if (site) {
-    const base = site.water ? 1.5 : 1;
+    if (site.water) return Number.POSITIVE_INFINITY;
     const atCenter = col === site.center.col && row === site.center.row;
-    return base + (atCenter ? site.gate.extraDays : 0);
+    return 1 + (atCenter ? site.gate.extraDays : 0);
   }
   return marchDaysOfTile(col, row);
 }
+
+/**
+ * 走一步的实际耗时（含渡口跳跃）。
+ *
+ * 普通步长就是进入目标格的地形代价；若 `from → to` 正好是一次摆渡，
+ * 则整段江面折成一次位移，`to` 是那一格对岸滩头。
+ */
+export function marchStepDays(from: GridPoint | null, to: GridPoint): number {
+  if (from) {
+    const ferry = ferryBetween(from, to);
+    if (ferry) return ferry.crossDays;
+  }
+  return marchDaysForArmy(to.col, to.row);
+}
+
 
 export function inMap(col: number, row: number): boolean {
   return col >= 0 && row >= 0 && col < MAP.cols && row < MAP.rows;

@@ -4,10 +4,10 @@ import { CITY_TABLE } from '../src/data/tables/cities';
 import { GATES, gateById, isTrail } from '../src/data/tables/gates';
 import { createGame } from '../src/data/tables/scenarios';
 import type { Army, GameState } from '../src/core/state';
-import { gateAtCenter, gateSiteAt, gateSiteById, isGateLane } from '../src/render/gateGrid';
+import { ferryBetween, gateAtCenter, gateSiteById, isGateLane } from '../src/render/gateGrid';
 import { routeForArmy } from '../src/systems/army';
 import { isWaterKind, tileKindAt, wallTileAt } from '../src/render/terrainGrid';
-import { marchDaysForArmy } from '../src/data/tables/marchCost';
+import { marchDaysForArmy, marchStepDays } from '../src/data/tables/marchCost';
 import {
   armyAtGate,
   assaultGate,
@@ -55,7 +55,7 @@ function inBand(value: number, band: Band): boolean {
 }
 
 describe('关防 · 地图落位', () => {
-  it('31 处关港小路全部落位，通行线逐格相连且可通行', () => {
+  it('31 处关港小路全部落位，通行线逐格相连；水面只有渡口跳跃可过', () => {
     expect(GATES).toHaveLength(31);
     for (const gate of GATES) {
       const site = gateSiteById(gate.id);
@@ -67,9 +67,9 @@ describe('关防 · 地图落位', () => {
       let prev: { col: number; row: number } | null = null;
       for (const p of site!.lane) {
         expect(isGateLane(p.col, p.row), `${gate.id} 通行线断格`).toBe(true);
-        expect(Number.isFinite(marchDaysForArmy(p.col, p.row)), `${gate.id} 通行线不可行军`).toBe(
-          true,
-        );
+        // 陆地关隘的山道可以逐格走；港口渡线是水面，一格都不能站
+        const walkable = Number.isFinite(marchDaysForArmy(p.col, p.row));
+        expect(walkable, `${gate.id} 通行线可通行性与地形不符`).toBe(!site!.water);
         if (prev) {
           // 行军是 4 邻接：纯斜线在规则层走不通
           const step = Math.abs(p.col - prev.col) + Math.abs(p.row - prev.row);
@@ -77,6 +77,7 @@ describe('关防 · 地图落位', () => {
         }
         prev = p;
       }
+
 
       // 两端滩头 / 登岸点必须是可站立的陆地，不能压在城墙上
       for (const p of site!.approaches) {
@@ -86,29 +87,48 @@ describe('关防 · 地图落位', () => {
     }
   });
 
-  it('港口渡线跨水，普通水面仍不可行军', () => {
+  it('港口渡线跨水，水面不可站立，两岸滩头之间有一次摆渡', () => {
     const ports = GATES.filter((g) => g.kind === 'port');
     expect(ports.length).toBeGreaterThan(0);
     for (const gate of ports) {
       const site = gateSiteById(gate.id)!;
       expect(site.water).toBe(true);
+      expect(site.crossDays).toBeGreaterThan(1);
       expect(site.lane.some((p) => isWaterKind(tileKindAt(p.col, p.row)))).toBe(true);
+      // 渡线上的水面一格都不能站
+      for (const p of site.lane) {
+        expect(Number.isFinite(marchDaysForArmy(p.col, p.row)), `${gate.name} 水面可站`).toBe(false);
+      }
+      // 但两岸滩头之间必须能一次摆渡过去
+      expect(site.approaches).toHaveLength(2);
+      const a = site.approaches[0]!;
+      const b = site.approaches[1]!;
+      expect(ferryBetween(a, b)?.gate.id, `${gate.name} 缺少摆渡边`).toBe(gate.id);
+      expect(ferryBetween(b, a)?.gate.id, `${gate.name} 摆渡边不是双向`).toBe(gate.id);
+      expect(marchStepDays(a, b), `${gate.name} 渡河天数没走摆渡口径`).toBe(site.crossDays);
     }
   });
 
-  it('江夏→襄阳经夏口渡过江，不再绕行整条长江', () => {
+  it('江夏→襄阳经夏口渡过江，不再绕行整条长江，也不在江心过旬', () => {
     const s = createGame({ scenarioId: 'chibi', playerFactionId: 'liubei', aiEnabled: false });
     const route = routeForArmy(s, 'liubei', 'jiangxia', 'xiangyang');
     expect(route).not.toBeNull();
-    const names = new Set(
-      route!.path
-        .map((p) => gateSiteAt(p.col, p.row)?.gate.name)
-        .filter((n): n is string => Boolean(n)),
-    );
-    expect(names.has('夏口渡') || names.has('汉阳渡')).toBe(true);
+
+    // 路径里只允许出现陆地；过江体现为相邻两格之间的一次摆渡
+    const ferries = new Set<string>();
+    for (let i = 0; i < route!.path.length; i++) {
+      const p = route!.path[i]!;
+      expect(isWaterKind(tileKindAt(p.col, p.row)), `第 ${i} 格落在水里`).toBe(false);
+      if (i > 0) {
+        const f = ferryBetween(route!.path[i - 1]!, p);
+        if (f) ferries.add(f.gate.name);
+      }
+    }
+    expect(ferries.has('夏口渡') || ferries.has('汉阳渡')).toBe(true);
     // 绕行整条水系时超过 600 格；真正渡江后应在一百多格内
     expect(route!.path.length).toBeLessThan(200);
   });
+
 });
 
 describe('关防 · 图标落点', () => {
