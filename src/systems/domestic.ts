@@ -31,7 +31,7 @@ function cityTroopTotal(s: GameState, cityId: string): number {
  */
 export function edictCapOf(s: GameState, cityId: string): number {
   const generals = Object.values(s.generals).filter(
-    (g) => g.status === 'active' && g.locationId === cityId,
+    (g) => g.status === 'active' && g.locationId === cityId && !g.armyId,
   ).length;
   const { base, perGenerals, max } = BALANCE.MODERN.EDICT;
   return Math.min(max, base + Math.floor(generals / perGenerals));
@@ -52,6 +52,7 @@ function guard(s: GameState, cityId: string, generalId?: string): OpResult | nul
     const g = s.generals[generalId];
     if (!g) return fail('武将不存在');
     if (g.status !== 'active') return fail('该武将不在可用状态');
+    if (g.armyId) return fail('该武将正在行军途中');
     if (g.locationId !== cityId) return fail('该武将不在此城');
   }
   return null;
@@ -209,7 +210,7 @@ export function doRecruitAll(s: GameState, cityId: string): OpResult {
 
   const city = s.cities[cityId]!;
   const gens = Object.values(s.generals)
-    .filter((g) => g.status === 'active' && g.locationId === cityId)
+    .filter((g) => g.status === 'active' && g.locationId === cityId && !g.armyId)
     .sort((a, b) => troopCapOf(s, b) - b.troops - (troopCapOf(s, a) - a.troops));
 
   const skill = city.skill;
@@ -333,7 +334,7 @@ export function doBanquetAll(s: GameState, cityId: string): OpResult {
   if (bad) return bad;
   const city = s.cities[cityId]!;
   const gens = Object.values(s.generals).filter(
-    (g) => g.status === 'active' && g.locationId === cityId,
+    (g) => g.status === 'active' && g.locationId === cityId && !g.armyId,
   );
   if (gens.length === 0) return fail('此城没有武将');
 
@@ -582,6 +583,7 @@ export function doMoveGeneral(
   const g = s.generals[generalId];
   if (!g) return fail('武将不存在');
   if (g.status !== 'active') return fail('该武将不在可用状态');
+  if (g.armyId) return fail('该武将正在行军途中');
   if (g.locationId === toCityId) return fail('目标就是当前城池');
   if ((g.marchTurn ?? -1) >= s.turn) {
     return fail(`${g.name} 本月已行军，下月才能再调动`);

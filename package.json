@@ -12,6 +12,7 @@
     "sim:battle": "vite-node scripts/sim-battle.ts",
     "sim:economy": "vite-node scripts/sim-economy.ts",
     "audit:ai": "vite-node scripts/ai-audit.ts",
+    "map:check": "vite-node scripts/gen-map.ts",
     "perf:check": "vite-node scripts/perf-check.ts",
     "contrast:check": "vite-node scripts/contrast-check.ts",
     "verify": "npm run typecheck && npm test && npm run contrast:check && npm run build"

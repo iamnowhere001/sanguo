@@ -69,7 +69,7 @@ function aiRecruitCity(
   difficulty: DifficultyConfig,
 ): void {
   const gens = Object.values(state.generals).filter(
-    (g) => g.status === 'active' && g.locationId === city.id,
+    (g) => g.status === 'active' && g.locationId === city.id && !g.armyId,
   );
   if (gens.length === 0) return;
 
@@ -148,10 +148,11 @@ export function runAiFaction(state: GameState, factionId: string): 'battle' | 'd
       (g) =>
         g.status === 'active' &&
         g.locationId === city.id &&
+        !g.armyId &&
         g.stamina >= 20 &&
         !g.isRuler,
     ) ?? Object.values(state.generals).find(
-      (g) => g.status === 'active' && g.locationId === city.id && g.stamina >= 20,
+      (g) => g.status === 'active' && g.locationId === city.id && !g.armyId && g.stamina >= 20,
     );
     if (!agent) continue;
     if (city.gold < BALANCE.AI.developGoldReserve + BALANCE.DOMESTIC.reclaim.gold) continue;

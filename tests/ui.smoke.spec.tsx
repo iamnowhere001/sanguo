@@ -296,7 +296,8 @@ describe('UI 冒烟', () => {
     await act(async () => {
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'e' }));
     });
-    expect(gameStore.state?.month).toBe(2);
+    expect(gameStore.state?.xun).toBe(2);
+    expect(gameStore.state?.month).toBe(1);
     await act(async () => {
       gameStore.quit();
     });

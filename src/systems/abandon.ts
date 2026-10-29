@@ -39,7 +39,7 @@ export interface AbandonPlan {
 
 function activeGeneralsAt(state: GameState, cityId: string): General[] {
   return Object.values(state.generals).filter(
-    (g) => g.status === 'active' && g.locationId === cityId,
+    (g) => g.status === 'active' && g.locationId === cityId && !g.armyId,
   );
 }
 

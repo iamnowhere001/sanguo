@@ -82,7 +82,11 @@ export function selectAttackers(
   if (!city) return { generals: [], troops: 0 };
   const projected = projectedTroops(state, cityId);
   const defenders = Object.values(state.generals).filter(
-    (g) => g.status === 'active' && g.locationId === cityId && (projected.get(g.id) ?? 0) > 0,
+    (g) =>
+      g.status === 'active' &&
+      g.locationId === cityId &&
+      !g.armyId &&
+      (projected.get(g.id) ?? 0) > 0,
   );
   if (defenders.length === 0) return { generals: [], troops: 0 };
 
@@ -132,7 +136,7 @@ export function selectAllIn(
   const troopsOf = (g: General): number => projected.get(g.id) ?? g.troops;
   const generals = Object.values(state.generals)
     .filter(
-      (g) => g.status === 'active' && g.locationId === cityId && troopsOf(g) > 0,
+      (g) => g.status === 'active' && g.locationId === cityId && !g.armyId && troopsOf(g) > 0,
     )
     .sort((a, b) => troopsOf(b) - troopsOf(a))
     .slice(0, BALANCE.BATTLE_MAX_ATTACKERS);
@@ -167,6 +171,7 @@ export function fieldedDefenders(state: GameState, cityId: string): General[] {
       (g) =>
         g.status === 'active' &&
         g.locationId === cityId &&
+        !g.armyId &&
         (projected.get(g.id) ?? g.troops) > 0,
     )
     .sort(

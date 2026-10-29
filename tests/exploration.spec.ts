@@ -18,8 +18,13 @@ function fresh(): GameState {
   return s;
 }
 
+/** 推进一个月（3 旬）：派遣与线索结算是按月口径 */
 function endTurn(s: GameState): GameState {
-  return reduce(s, { t: 'END_TURN', confirmed: true }).state;
+  let next = s;
+  for (let i = 0; i < 3; i++) {
+    next = reduce(next, { t: 'END_TURN', confirmed: true }).state;
+  }
+  return next;
 }
 
 /** 找一个玩家可派、城内确有稀有武将候选的城池 */

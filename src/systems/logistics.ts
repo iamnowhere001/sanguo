@@ -130,7 +130,7 @@ export function doTransport(s: GameState, order: TransportOrder): OpResult {
   if (moved > 0) {
     to.troops = poolOf(to) + moved;
     const gens = Object.values(s.generals).filter(
-      (g) => g.status === 'active' && g.locationId === to.id,
+      (g) => g.status === 'active' && g.locationId === to.id && !g.armyId,
     );
     const leftover = distributeToGenerals(s, gens, moved);
     to.troops = leftover;

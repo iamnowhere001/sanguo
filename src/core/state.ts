@@ -74,6 +74,11 @@ export interface General {
    * 每名武将每月只能调动一次，避免「一城接一城」在单回合内把部队送到地图另一端。
    */
   marchTurn?: number;
+  /**
+   * 所在行军纵队的 id。
+   * 有值时不驻扎在城中：不计入城防、不可被内政 / 调动选中，抵达后清除。
+   */
+  armyId?: string;
 }
 
 export interface SearchEntry {
@@ -263,6 +268,31 @@ export interface MapEdge {
   a: string;
   b: string;
   cost: number;
+}
+
+/**
+ * 大地图行军纵队（M 档）。
+ *
+ * 部队在城与城之间沿道路移动，每旬推进 10 天行程；抵达敌城才切入战棋。
+ * 武将仍保留 `locationId`（出发城 / 最近己方城），用 `armyId` 标记为在途，
+ * 避免同一支部队同时被算作守军。
+ */
+export interface Army {
+  id: string;
+  factionId: string;
+  /** 出发城：用于「出征 / 回师」文案 */
+  originCityId: string;
+  /** 最近一个己方节点：战败撤退与中途受阻时回到这里 */
+  fromCityId: string;
+  targetCityId: string;
+  generalIds: string[];
+  /** 剩余路线（含目标城）；第一个元素是下一座城 */
+  path: string[];
+  /** 当前这一段路已经走了几天（0 ≤ legDays < 该段耗时） */
+  legDays: number;
+  /** 建队时的兵力快照，供地图标记展示 */
+  troops: number;
+  createdTurn: number;
 }
 
 /** 国策运行期状态：offer 非空时 UI 弹出三选一 */
@@ -631,7 +661,11 @@ export interface GameState {
   year: number;
   /** 1–12 */
   month: number;
-  /** 从开局算起的回合序号 */
+  /** 当前月内的旬：1 = 上旬，2 = 中旬，3 = 下旬 */
+  xun: number;
+  /** 本局已过的旬数（每旬 +1）；随机流与逐旬冷却按它派生 */
+  xunTurn: number;
+  /** 从开局算起的回合序号（= 月序，月结时 +1） */
   turn: number;
   playerFactionId: string;
   factions: Record<string, Faction>;
@@ -639,6 +673,10 @@ export interface GameState {
   generals: Record<string, General>;
   items: Record<string, Item>;
   edges: MapEdge[];
+  /** 在途行军纵队；旧档缺省视为空 */
+  armies?: Army[];
+  /** 行军纵队的自增序号，保证 id 在同局唯一 */
+  armySerial?: number;
   phase: GamePhase;
   log: LogEntry[];
   battle?: BattleState;
@@ -730,20 +768,25 @@ export function citiesOf(state: GameState, factionId: string): City[] {
 /** 城内可出战武将：active、驻守该城且仍有兵力。 */
 export function defendersOf(state: GameState, cityId: string): General[] {
   return Object.values(state.generals).filter(
-    (g) => g.status === 'active' && g.locationId === cityId && g.troops > 0,
+    (g) =>
+      g.status === 'active' &&
+      g.locationId === cityId &&
+      !g.armyId &&
+      g.troops > 0,
   );
 }
 
 /**
  * 城内驻军总数 = 未分配兵力池 + 各将统领兵力。
  * 一切「驻军上限 / 守军强度」判断都走这里，避免池兵被漏算。
+ * 在途部队不计入城中驻军。
  */
 export function garrisonTroopsOf(state: GameState, cityId: string): number {
   const city = state.cities[cityId];
   if (!city) return 0;
   let total = city.troops ?? 0;
   for (const g of Object.values(state.generals)) {
-    if (g.status === 'active' && g.locationId === cityId) total += g.troops;
+    if (g.status === 'active' && g.locationId === cityId && !g.armyId) total += g.troops;
   }
   return total;
 }

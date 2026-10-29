@@ -1451,6 +1451,37 @@ input[type='number'] {
   gap: 6px;
   white-space: nowrap;
 }
+/* 地形图例：放在左下角，和左上角的势力图例分居两侧 */
+.map-terrain-legend {
+  position: absolute;
+  left: var(--sp-4);
+  bottom: var(--sp-4);
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 10px;
+  max-width: 220px;
+  padding: 6px 9px;
+  background: rgba(20, 18, 14, 0.72);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 9.5px;
+  color: var(--muted);
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+}
+.map-terrain-legend span {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+.map-terrain-legend i {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  border: 1px solid rgba(239, 230, 210, 0.18);
+}
 .map-legend i {
   width: 7px;
   height: 7px;
@@ -3198,6 +3229,21 @@ input[type='number'] {
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--muted);
+}
+/* 发兵面板：行军天数、攻关 / 渡口提示 */
+.target-route {
+  color: var(--gold-dim, var(--gold)) !important;
+  font-size: 9.5px !important;
+  opacity: 0.9;
+}
+.deploy-route {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+.deploy-route b {
+  color: var(--paper);
 }
 .kill-mark {
   font-style: normal;
@@ -5581,6 +5627,9 @@ input[type='number'] {
 
   /* 小屏地图只有 200px 高，图例比地图本身更抢空间 */
   .map-legend {
+    display: none;
+  }
+  .map-terrain-legend {
     display: none;
   }
 }

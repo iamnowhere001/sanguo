@@ -30,6 +30,11 @@ export function migrateSave(state: GameState): GameState {
 
   if (typeof state.seed !== 'number') state.seed = legacy.rng?.seed ?? 0;
   state.battleSerial ??= 0;
+  // 旬回合：旧档按「每回合一月」解释，读档后落在该月上旬
+  state.xun ??= 1;
+  state.xunTurn ??= (state.turn - 1) * 3 + 1;
+  state.armies ??= [];
+  state.armySerial ??= 0;
 
   if (!state.streams) {
     state.streams = createStreams(state.seed, state.turn);

@@ -10,6 +10,15 @@ function fresh() {
   return createGame({ scenarioId: 'chibi', playerFactionId: 'liubei', aiEnabled: false });
 }
 
+/** 推进一个月（3 旬）：行军冷却与月结修复都以“月”为口径 */
+function endTurn(s: ReturnType<typeof fresh>) {
+  let next = s;
+  for (let i = 0; i < 3; i++) {
+    next = reduce(next, { t: 'END_TURN', confirmed: true }).state;
+  }
+  return next;
+}
+
 function activeAt(state: ReturnType<typeof fresh>, cityId: string) {
   return Object.values(state.generals).filter(
     (g) => g.status === 'active' && g.locationId === cityId,
@@ -182,7 +191,7 @@ describe('每月行军次数', () => {
     });
     expect(second.result.ok).toBe(false);
 
-    const nextTurn = reduce(first.state, { t: 'END_TURN', confirmed: true }).state;
+    const nextTurn = endTurn(first.state);
     const third = reduce(nextTurn, {
       t: 'MOVE_GENERAL',
       generalId: 'zhangfei',
@@ -254,7 +263,7 @@ describe('城池耐久', () => {
     const s = fresh();
     const city = s.cities.jiangxia!;
     city.durability = 10;
-    const r = reduce(s, { t: 'END_TURN', confirmed: true });
-    expect(r.state.cities.jiangxia!.durability).toBeGreaterThan(10);
+    const r = endTurn(s);
+    expect(r.cities.jiangxia!.durability).toBeGreaterThan(10);
   });
 });

@@ -9,14 +9,14 @@ import { log } from './economy';
 
 function cityTroops(state: GameState, cityId: string): number {
   return Object.values(state.generals)
-    .filter((g) => g.status === 'active' && g.locationId === cityId)
+    .filter((g) => g.status === 'active' && g.locationId === cityId && !g.armyId)
     .reduce((sum, g) => sum + g.troops, 0);
 }
 
 function addTroops(state: GameState, city: City, rate: number): number {
   const room = Math.max(0, garrisonCapOf(city.size) - cityTroops(state, city.id));
   const candidates = Object.values(state.generals).filter(
-    (g) => g.status === 'active' && g.locationId === city.id && !g.isRuler,
+    (g) => g.status === 'active' && g.locationId === city.id && !g.armyId && !g.isRuler,
   );
   if (candidates.length === 0 || room <= 0) return 0;
   let remaining = Math.min(room, Math.floor(cityTroops(state, city.id) * rate));

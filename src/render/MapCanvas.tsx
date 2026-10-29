@@ -3,7 +3,24 @@ import type { City, CitySize, GameState } from '../core/state';
 import { cityTroops } from '../core/selectors';
 import { BALANCE } from '../data/tables/balance';
 import { CITY_SIZE_LABEL, fortificationLabel } from '../data/tables/cities';
+import {
+  CITY_COORDS,
+  COASTLINE,
+  DESERTS,
+  FORESTS,
+  LAKES,
+  LAT_RANGE,
+  LON_RANGE,
+  MAP,
+  MARSHES,
+  RIDGES,
+  RIVERS,
+  projectLonLat,
+} from '../data/tables/geography';
+import { GATES } from '../data/tables/gates';
+import { armyWorldPos } from '../systems/army';
 import { TERRAIN_LABEL } from '../data/tables/unitClasses';
+import { cityWorldPos } from './terrainGrid';
 import { drawFactionPattern, factionPattern, PATTERN_LABEL } from './factionPattern';
 
 interface ProjectedCity {
@@ -16,6 +33,12 @@ interface MapView {
   zoom: number;
   x: number;
   y: number;
+}
+
+interface Layout {
+  scale: number;
+  ox: number;
+  oy: number;
 }
 
 const MIN_ZOOM = 1;
@@ -48,51 +71,338 @@ const SIZE_RANK: Record<CitySize, number> = {
   small: 3,
 };
 
+/**
+ * 世界坐标 → 画布坐标。
+ * 世界矩形固定为 MAP.width × MAP.height（96×72 格 × 12），
+ * 不再像旧版那样按 61 城的包围盒自适应 —— 地形底图需要一个稳定的画幅，
+ * 否则换剧本（城池集合不同）时海岸线会跟着缩放。
+ */
+function layoutOf(w: number, h: number): Layout {
+  // 手机地图只有 200px 高：收窄留白，把纵向空间还给地形与城池
+  const padX = w < 560 ? 6 : 12;
+  const padY = h < 300 ? 5 : 10;
+  const scale = Math.min(
+    (w - padX * 2) / MAP.width,
+    (h - padY * 2) / MAP.height,
+  );
+  return {
+    scale,
+    ox: (w - MAP.width * scale) / 2,
+    oy: (h - MAP.height * scale) / 2,
+  };
+}
+
+function worldToScreen(
+  wx: number,
+  wy: number,
+  w: number,
+  h: number,
+  view: MapView,
+  layout: Layout,
+): { x: number; y: number } {
+  const bx = layout.ox + wx * layout.scale;
+  const by = layout.oy + wy * layout.scale;
+  const cx = w / 2;
+  const cy = h / 2;
+  return {
+    x: cx + (bx - cx) * view.zoom + view.x,
+    y: cy + (by - cy) * view.zoom + view.y,
+  };
+}
+
 function project(
   state: GameState,
   w: number,
   h: number,
   view: MapView = { zoom: 1, x: 0, y: 0 },
 ): ProjectedCity[] {
-  const cities = Object.values(state.cities);
-  const xs = cities.map((c) => c.x);
-  const ys = cities.map((c) => c.y);
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
-  // 手机地图只有 200px 高：收窄留白，把纵向空间还给城池与道路
-  const padX = w < 560 ? 28 : 70;
-  const padY = h < 300 ? 16 : 56;
-  const scale = Math.min(
-    (w - padX * 2) / Math.max(1, maxX - minX),
-    (h - padY * 2) / Math.max(1, maxY - minY),
-  );
-  const ox = (w - (maxX - minX) * scale) / 2;
-  const oy = (h - (maxY - minY) * scale) / 2;
-  const cx = w / 2;
-  const cy = h / 2;
-  return cities.map((c) => {
-    const bx = ox + (c.x - minX) * scale;
-    const by = oy + (c.y - minY) * scale;
-    return {
-      city: c,
-      x: cx + (bx - cx) * view.zoom + view.x,
-      y: cy + (by - cy) * view.zoom + view.y,
-    };
+  const layout = layoutOf(w, h);
+  return Object.values(state.cities).map((c) => {
+    const world = cityWorldPos(c);
+    const p = worldToScreen(world.x, world.y, w, h, view, layout);
+    return { city: c, x: p.x, y: p.y };
   });
+}
+
+// ── 地形底图（离屏缓存） ────────────────────────────────────
+/**
+ * 地形是静态的，但每帧重画 6,912 格不划算，而且鼠标悬停会触发重绘。
+ * 这里把整张地形画到一张离屏画布（2× 分辨率），之后每帧只做一次 drawImage。
+ */
+let terrainCache: HTMLCanvasElement | null = null;
+
+/** 把经纬度折线写进当前路径（调用方负责 beginPath / stroke） */
+function pathFromLonLat(
+  ctx: CanvasRenderingContext2D,
+  pts: Array<[number, number]>,
+): void {
+  pts.forEach(([lon, lat], i) => {
+    const p = projectLonLat(lon, lat);
+    if (i === 0) ctx.moveTo(p.x, p.y);
+    else ctx.lineTo(p.x, p.y);
+  });
+}
+
+/** 沿山脊采样，画"山峰"符号：三两个小三角，比整片色块更像山脉 */
+function drawRidgeSymbols(ctx: CanvasRenderingContext2D): void {
+  for (const ridge of RIDGES) {
+    const size = 5 + ridge.height * 5;
+    for (let i = 0; i < ridge.points.length - 1; i++) {
+      const a = projectLonLat(ridge.points[i]![0], ridge.points[i]![1]);
+      const b = projectLonLat(ridge.points[i + 1]![0], ridge.points[i + 1]![1]);
+      const steps = Math.max(2, Math.round(Math.hypot(b.x - a.x, b.y - a.y) / (size * 1.5)));
+      for (let s = 0; s < steps; s++) {
+        const t = (s + 0.5) / steps;
+        // 沿脊线左右交替偏移，避免所有山峰排成一条直线
+        const nx = -(b.y - a.y);
+        const ny = b.x - a.x;
+        const len = Math.hypot(nx, ny) || 1;
+        const offset = ((s % 3) - 1) * size * 0.5;
+        const px = a.x + (b.x - a.x) * t + (nx / len) * offset;
+        const py = a.y + (b.y - a.y) * t + (ny / len) * offset;
+        const h = size * (0.75 + ((s * 37) % 11) / 22);
+
+        ctx.beginPath();
+        ctx.moveTo(px - size * 0.55, py + h * 0.45);
+        ctx.lineTo(px, py - h * 0.55);
+        ctx.lineTo(px + size * 0.55, py + h * 0.45);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(214,192,146,0.3)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(24,20,12,0.45)';
+        ctx.lineWidth = 0.6;
+        ctx.stroke();
+      }
+    }
+  }
+}
+
+/** 画一整张地形底图（世界坐标 1:1，调用方负责缩放） */
+function paintTerrain(ctx: CanvasRenderingContext2D): void {
+  const { width: W, height: H } = MAP;
+
+  // 海：从东南向西北略变深，避免一整片死色
+  const sea = ctx.createLinearGradient(0, 0, W, H);
+  sea.addColorStop(0, '#16222a');
+  sea.addColorStop(0.55, '#121b21');
+  sea.addColorStop(1, '#0e1519');
+  ctx.fillStyle = sea;
+  ctx.fillRect(0, 0, W, H);
+  drawSeaTexture(ctx, W, H);
+
+  drawLandShape(ctx, W, H);
+}
+
+/**
+ * 大陆形状：先填陆地色，再按地形上色。
+ * 与 `terrainGrid.isLand()` 共用同一份海岸线数据，只是这里画矢量、那边算栅格。
+ */
+function drawLandShape(ctx: CanvasRenderingContext2D, W: number, H: number): void {
+  const landPath = new Path2D();
+  let first = true;
+  for (const [lon, lat] of COASTLINE_PTS) {
+    const p = projectLonLat(lon, lat);
+    if (first) {
+      landPath.moveTo(p.x, p.y);
+      first = false;
+    } else {
+      landPath.lineTo(p.x, p.y);
+    }
+  }
+  // 闭合到图外框：西 → 北 → 东，回到海岸线起点
+  const frame: Array<[number, number]> = [
+    [LON0, LAT0],
+    [LON0, LAT1],
+    [LON1, LAT1],
+    [LON1, LAT0],
+  ];
+  for (const [lon, lat] of frame) {
+    const p = projectLonLat(lon, lat);
+    landPath.lineTo(p.x, p.y);
+  }
+  landPath.closePath();
+
+  const landGrad = ctx.createLinearGradient(0, 0, W * 0.6, H);
+  landGrad.addColorStop(0, '#383428');
+  landGrad.addColorStop(0.5, '#322f26');
+  landGrad.addColorStop(1, '#2c2920');
+  ctx.fillStyle = landGrad;
+  ctx.fill(landPath);
+
+  // 以下地形只画在陆地内
+  ctx.save();
+  ctx.clip(landPath);
+  drawLandGrain(ctx, W, H);
+
+  // 荒漠
+  for (const blob of DESERTS) {
+    const p = projectLonLat(blob.lon, blob.lat);
+    const r = blob.r * (MAP.width / 25.5);
+    const g = ctx.createRadialGradient(p.x, p.y, r * 0.15, p.x, p.y, r);
+    g.addColorStop(0, 'rgba(150,126,78,0.5)');
+    g.addColorStop(0.7, 'rgba(132,112,70,0.26)');
+    g.addColorStop(1, 'rgba(132,112,70,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // 丘陵带 → 山地核心：用粗细三层描边模拟"山体两侧渐高"
+  for (const ridge of RIDGES) {
+    const draw = (widthScale: number, color: string, alpha: number) => {
+      ctx.beginPath();
+      pathFromLonLat(ctx, ridge.points as Array<[number, number]>);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = color;
+      ctx.globalAlpha = alpha;
+      ctx.lineWidth = ridge.width * 2 * widthScale * (MAP.width / 25.5);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    };
+    draw(1.55, '#3f3722', 0.5);
+    draw(0.95, '#5a4a2a', 0.66);
+    draw(0.42, '#77613a', 0.55);
+  }
+
+  // 林地
+  for (const blob of FORESTS) {
+    const p = projectLonLat(blob.lon, blob.lat);
+    const r = blob.r * (MAP.width / 25.5);
+    const g = ctx.createRadialGradient(p.x, p.y, r * 0.1, p.x, p.y, r);
+    g.addColorStop(0, 'rgba(58,84,50,0.55)');
+    g.addColorStop(0.75, 'rgba(48,70,44,0.26)');
+    g.addColorStop(1, 'rgba(48,70,44,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // 沼泽
+  for (const blob of MARSHES) {
+    const p = projectLonLat(blob.lon, blob.lat);
+    const r = blob.r * (MAP.width / 25.5);
+    const g = ctx.createRadialGradient(p.x, p.y, r * 0.1, p.x, p.y, r);
+    g.addColorStop(0, 'rgba(52,72,64,0.5)');
+    g.addColorStop(1, 'rgba(52,72,64,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  drawRidgeSymbols(ctx);
+  ctx.restore();
+
+  // 湖泊：半径已在 geography.ts 放大，这里按原值绘制
+  for (const lake of LAKES) {
+    const p = projectLonLat(lake.lon, lake.lat);
+    const rx = lake.rx * (MAP.width / 25.5);
+    const ry = lake.ry * (MAP.height / 22);
+    ctx.beginPath();
+    ctx.ellipse(p.x, p.y, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fillStyle = '#1d2c30';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(120,160,164,0.22)';
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+  }
+
+  // 河流：支流先画、干流压上
+  // M 档放大了河宽，让"水战"在地图上看得见：干流宽到约 1 格，支流也不低于半格
+  const rivers = [...RIVERS].sort((a, b) => a.scale - b.scale);
+  for (const river of rivers) {
+    const base = river.scale >= 1 ? 4.2 : 2.8;
+    for (const [width, color, alpha] of [
+      [base * 2.2, 'rgba(38,60,64,0.5)', 0.9],
+      [base, 'rgba(96,146,150,0.6)', 1],
+    ] as const) {
+      ctx.beginPath();
+      pathFromLonLat(ctx, river.points as Array<[number, number]>);
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = color;
+      ctx.globalAlpha = alpha;
+      ctx.lineWidth = width;
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // 海岸线：地图上最需要一眼认出的形状
+  ctx.beginPath();
+  pathFromLonLat(ctx, COASTLINE_PTS);
+  ctx.strokeStyle = 'rgba(220,204,168,0.5)';
+  ctx.lineWidth = 1.4;
+  ctx.lineJoin = 'round';
+  ctx.stroke();
+}
+
+function ensureTerrainCache(): HTMLCanvasElement {
+  if (terrainCache) return terrainCache;
+  const scale = 2;
+  const canvas = document.createElement('canvas');
+  canvas.width = MAP.width * scale;
+  canvas.height = MAP.height * scale;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
+    paintTerrain(ctx);
+  }
+  terrainCache = canvas;
+  return canvas;
+}
+
+/** 地形图例：五种最有辨识度的地形，帮玩家把色块和含义对上 */
+const LEGEND: Array<{ label: string; color: string }> = [
+  { label: '山地', color: '#6b5a34' },
+  { label: '丘陵', color: '#544a30' },
+  { label: '林地', color: '#3d5238' },
+  { label: '河流', color: '#4a7a80' },
+  { label: '荒漠', color: '#7a6840' },
+];
+
+/** 海面波纹：十几条极淡的横向曲线，让海"是水"而不是"是背景" */
+function drawSeaTexture(ctx: CanvasRenderingContext2D, W: number, H: number): void {
+  ctx.strokeStyle = 'rgba(120,160,168,0.05)';
+  ctx.lineWidth = 1.2;
+  for (let i = 0; i < 26; i++) {
+    const y = (i / 26) * H + ((i * 37) % 11);
+    ctx.beginPath();
+    for (let x = 0; x <= W; x += 24) {
+      const wave = Math.sin((x / W) * Math.PI * 6 + i) * 2.6;
+      if (x === 0) ctx.moveTo(x, y + wave);
+      else ctx.lineTo(x, y + wave);
+    }
+    ctx.stroke();
+  }
+}
+
+/** 陆地颗粒：确定性散点，避免大块平涂的"塑料感" */
+function drawLandGrain(ctx: CanvasRenderingContext2D, W: number, H: number): void {
+  ctx.fillStyle = 'rgba(232,212,172,0.10)';
+  for (let i = 0; i < 3200; i++) {
+    // 线性同余，保证每次生成的点完全一致
+    const a = (i * 2654435761) % 4294967296;
+    const b = (i * 1103515245 + 12345) % 4294967296;
+    const x = (a / 4294967296) * W;
+    const y = (b / 4294967296) * H;
+    ctx.fillRect(x, y, 1.4, 1.4);
+  }
 }
 
 export function MapCanvas({
   state,
   selectedCityId,
-  attackTargetIds,
+  attackRoutes,
   onSelect,
 }: {
   state: GameState;
   selectedCityId: string;
-  /** 从当前选中城池可直接出征的相邻敌城 */
-  attackTargetIds: string[];
+  /** 从当前选中城池可发兵抵达的路线（沿道路逐城） */
+  attackRoutes: Array<{ targetId: string; path: string[]; days: number }>;
   onSelect: (id: string) => void;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -196,7 +506,7 @@ export function MapCanvas({
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, size.w, size.h);
 
-    // 底
+    // 底：海域渐变（地形底图之外留白也应是海色）
     const bg = ctx.createRadialGradient(
       size.w * 0.5,
       size.h * 0.38,
@@ -205,55 +515,40 @@ export function MapCanvas({
       size.h * 0.5,
       Math.max(size.w, size.h) * 0.8,
     );
-    bg.addColorStop(0, '#1d1a14');
-    bg.addColorStop(1, '#12110e');
+    bg.addColorStop(0, '#161d1f');
+    bg.addColorStop(1, '#101618');
     ctx.fillStyle = bg;
     ctx.fillRect(0, 0, size.w, size.h);
 
-    // 网格
-    ctx.strokeStyle = 'rgba(239,230,210,0.045)';
+    // 地形底图：一次 drawImage，跟着缩放 / 平移走
+    const layout = layoutOf(size.w, size.h);
+    const cache = ensureTerrainCache();
+    ctx.save();
+    ctx.translate(size.w / 2 + view.x, size.h / 2 + view.y);
+    ctx.scale(view.zoom, view.zoom);
+    ctx.translate(-size.w / 2, -size.h / 2);
+    ctx.translate(layout.ox, layout.oy);
+    ctx.scale(layout.scale, layout.scale);
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(cache, 0, 0, MAP.width, MAP.height);
+    ctx.restore();
+
+    // 战略网格：弱到只提供"这是一张作战图"的暗示
+    ctx.strokeStyle = 'rgba(239,230,210,0.035)';
     ctx.lineWidth = 1;
-    for (let x = 0; x < size.w; x += 44) {
+    const gridStep = 44 * Math.max(1, view.zoom);
+    for (let x = 0; x < size.w; x += gridStep) {
       ctx.beginPath();
       ctx.moveTo(x, 0);
       ctx.lineTo(x, size.h);
       ctx.stroke();
     }
-    for (let y = 0; y < size.h; y += 44) {
+    for (let y = 0; y < size.h; y += gridStep) {
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(size.w, y);
       ctx.stroke();
     }
-
-    // 河流：跟随缩放 / 平移，线宽保持屏幕像素稳定
-    ctx.save();
-    ctx.translate(size.w / 2 + view.x, size.h / 2 + view.y);
-    ctx.scale(view.zoom, view.zoom);
-    ctx.translate(-size.w / 2, -size.h / 2);
-    ctx.beginPath();
-    ctx.moveTo(size.w * 0.08, size.h * 0.88);
-    ctx.bezierCurveTo(
-      size.w * 0.32,
-      size.h * 0.62,
-      size.w * 0.44,
-      size.h * 0.78,
-      size.w * 0.62,
-      size.h * 0.58,
-    );
-    ctx.bezierCurveTo(
-      size.w * 0.76,
-      size.h * 0.44,
-      size.w * 0.86,
-      size.h * 0.52,
-      size.w * 0.96,
-      size.h * 0.28,
-    );
-    ctx.strokeStyle = 'rgba(61,95,90,0.32)';
-    ctx.lineWidth = 9 / view.zoom;
-    ctx.lineCap = 'round';
-    ctx.stroke();
-    ctx.restore();
 
     const pts = project(state, size.w, size.h, view);
     pointsRef.current = pts;
@@ -305,48 +600,79 @@ export function MapCanvas({
       ctx.setLineDash([]);
     }
 
-    // 出征路线：从选中城池指向相邻敌城
-    const attackSet = new Set(attackTargetIds);
-    const selPoint = byId.get(selectedCityId);
-    if (selPoint) {
-      for (const id of attackTargetIds) {
-        const tp = byId.get(id);
-        if (!tp) continue;
-        ctx.beginPath();
-        ctx.setLineDash([2, 5]);
-        ctx.moveTo(selPoint.x, selPoint.y);
-        ctx.lineTo(tp.x, tp.y);
-        ctx.strokeStyle = 'rgba(193,74,58,0.42)';
-        ctx.lineWidth = 1.6;
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
+    // 出征路线：沿道路逐城画出真实行军路径
+    const attackSet = new Set(attackRoutes.map((r) => r.targetId));
+    for (const route of attackRoutes) {
+      const points = [selectedCityId, ...route.path]
+        .map((id) => byId.get(id))
+        .filter((p): p is ProjectedCity => Boolean(p));
+      if (points.length < 2) continue;
+      ctx.beginPath();
+      ctx.setLineDash([3, 5]);
+      ctx.lineWidth = 1.6;
+      ctx.strokeStyle = 'rgba(193,74,58,0.4)';
+      points.forEach((p, i) => {
+        if (i === 0) ctx.moveTo(p.x, p.y);
+        else ctx.lineTo(p.x, p.y);
+      });
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // 箭头落在目标城外侧，点明行军方向
+      const last = points[points.length - 1]!;
+      const prev = points[points.length - 2]!;
+      const angle = Math.atan2(last.y - prev.y, last.x - prev.x);
+      const tipX = last.x - Math.cos(angle) * 12;
+      const tipY = last.y - Math.sin(angle) * 12;
+      ctx.beginPath();
+      ctx.moveTo(tipX, tipY);
+      ctx.lineTo(tipX - Math.cos(angle - 0.4) * 6, tipY - Math.sin(angle - 0.4) * 6);
+      ctx.lineTo(tipX - Math.cos(angle + 0.4) * 6, tipY - Math.sin(angle + 0.4) * 6);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(193,74,58,0.7)';
+      ctx.fill();
     }
 
-    // 地形装饰（61 城下收敛为两个小标记）
-    for (const p of pts) {
-      const c = p.city;
-      if (c.terrain === 'mountain') {
-        for (let i = 0; i < 2; i++) {
-          const bx = p.x - 10 + i * 10;
-          const by = p.y + 20 + (i % 2) * 2;
-          ctx.beginPath();
-          ctx.moveTo(bx, by);
-          ctx.lineTo(bx + 4, by - 7);
-          ctx.lineTo(bx + 8, by);
-          ctx.closePath();
-          ctx.fillStyle = 'rgba(160,130,88,0.2)';
-          ctx.fill();
-        }
+    // 关卡 / 渡口：画在道路中点，关隘用菱形，渡口用波纹圆点
+    const gateOwnerColor = (gate: (typeof GATES)[number]): string => {
+      const owner = gate.guardCityId ? state.cities[gate.guardCityId]?.ownerId : null;
+      return owner ? state.factions[owner]?.color ?? '#8a8274' : '#8a8274';
+    };
+    for (const gate of GATES) {
+      const [ea, eb] = gate.edges[0]!;
+      const ca = CITY_COORDS[ea];
+      const cb = CITY_COORDS[eb];
+      if (!ca || !cb) continue;
+      const world = projectLonLat((ca[0] + cb[0]) / 2, (ca[1] + cb[1]) / 2);
+      const sp = worldToScreen(world.x, world.y, size.w, size.h, view, layout);
+      const color = gateOwnerColor(gate);
+      const r = 4.6;
+      ctx.save();
+      ctx.translate(sp.x, sp.y);
+      if (gate.kind === 'pass') {
+        ctx.rotate(Math.PI / 4);
+        ctx.beginPath();
+        ctx.rect(-r, -r, r * 2, r * 2);
+        ctx.fillStyle = 'rgba(20,19,15,0.9)';
+        ctx.fill();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+      } else {
+        ctx.beginPath();
+        ctx.arc(0, 0, r, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(28,48,54,0.92)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(120,170,176,0.85)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(-r * 0.6, 0);
+        ctx.quadraticCurveTo(-r * 0.2, -r * 0.5, 0, 0);
+        ctx.quadraticCurveTo(r * 0.2, r * 0.5, r * 0.6, 0);
+        ctx.strokeStyle = 'rgba(160,206,212,0.9)';
+        ctx.stroke();
       }
-      if (c.terrain === 'forest') {
-        for (let i = 0; i < 2; i++) {
-          ctx.beginPath();
-          ctx.arc(p.x - 8 + i * 9, p.y + 21, 2.2, 0, Math.PI * 2);
-          ctx.fillStyle = 'rgba(90,130,90,0.25)';
-          ctx.fill();
-        }
-      }
+      ctx.restore();
     }
 
     // 城池节点
@@ -357,6 +683,12 @@ export function MapCanvas({
       const isHover = c.id === hover;
       const isTarget = attackSet.has(c.id);
       const r = NODE_RADIUS[c.size];
+
+      // 城基：一圈土色底盘，让节点"坐"在地形上而不是浮着
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r + 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(14,13,10,0.55)';
+      ctx.fill();
 
       if (isTarget) {
         ctx.beginPath();
@@ -447,6 +779,49 @@ export function MapCanvas({
       }
     }
 
+    // 在途部队：沿剩余路线画虚线，标记用势力色小旗
+    for (const army of state.armies ?? []) {
+      const pos = armyWorldPos(state, army);
+      if (!pos) continue;
+      const cur = worldToScreen(pos.x, pos.y, size.w, size.h, view, layout);
+      const color = state.factions[army.factionId]?.color ?? '#8a8274';
+      const routePts = [cur, ...army.path.map((id) => byId.get(id))]
+        .filter((p): p is { x: number; y: number } => Boolean(p));
+      if (routePts.length > 1) {
+        ctx.beginPath();
+        ctx.setLineDash([4, 4]);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = `${color}88`;
+        routePts.forEach((p, i) => {
+          if (i === 0) ctx.moveTo(p.x, p.y);
+          else ctx.lineTo(p.x, p.y);
+        });
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      ctx.beginPath();
+      ctx.arc(cur.x, cur.y, 6.2, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(16,15,12,0.95)';
+      ctx.fill();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(cur.x, cur.y - 6.2);
+      ctx.lineTo(cur.x + 6, cur.y - 12);
+      ctx.lineTo(cur.x + 6, cur.y - 8);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+      if (view.zoom >= 1.35) {
+        ctx.font = '600 9px "PingFang SC", "Noto Sans SC", sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = color;
+        ctx.fillText(`${army.troops}`, cur.x + 9, cur.y);
+      }
+    }
+
     // 标签：按优先级绘制，碰撞则隐藏（悬停有 tooltip 兜底）
     type Box = { x1: number; y1: number; x2: number; y2: number };
     const placed: Box[] = [];
@@ -519,12 +894,42 @@ export function MapCanvas({
       }
     }
 
+    // 关卡 / 渡口名称：缩放到一定倍数才显示，避免全图过密
+    if (view.zoom >= 1.25) {
+      const gateFont = '600 9px "PingFang SC", "Noto Sans SC", sans-serif';
+      for (const gate of GATES) {
+        const [ea, eb] = gate.edges[0]!;
+        const ca = CITY_COORDS[ea];
+        const cb = CITY_COORDS[eb];
+        if (!ca || !cb) continue;
+        const world = projectLonLat((ca[0] + cb[0]) / 2, (ca[1] + cb[1]) / 2);
+        const sp = worldToScreen(world.x, world.y, size.w, size.h, view, layout);
+        ctx.font = gateFont;
+        const tw = ctx.measureText(gate.name).width + 7;
+        const box: Box = {
+          x1: sp.x - tw / 2,
+          y1: sp.y + 6,
+          x2: sp.x + tw / 2,
+          y2: sp.y + 18,
+        };
+        if (overlaps(box)) continue;
+        drawChip(
+          box,
+          gate.name,
+          gate.kind === 'ferry' ? '#b7d9dd' : '#e3cf9f',
+          'rgba(17,16,13,0.72)',
+          gateFont,
+        );
+        placed.push(box);
+      }
+    }
+
     // 悬停 tooltip
     const hoverPoint = hover ? pts.find((p) => p.city.id === hover) : null;
     if (hoverPoint) {
       const c = hoverPoint.city;
       const gens = Object.values(state.generals)
-        .filter((g) => g.status === 'active' && g.locationId === c.id)
+        .filter((g) => g.status === 'active' && g.locationId === c.id && !g.armyId)
         .sort((a, b) => b.troops - a.troops);
       const governor = gens[0];
       const nearCapTooltip =
@@ -601,7 +1006,7 @@ export function MapCanvas({
         ctx.fillText('! 粮草已达上限 95%：征兵 / 卖粮 / 分城', x + 12, y + (hasSkill ? 136 : 120));
       }
     }
-  }, [state, selectedCityId, attackTargetIds, hover, size, view]);
+  }, [state, selectedCityId, attackRoutes, hover, size, view]);
 
   const hit = (clientX: number, clientY: number): string | null => {
     const canvas = canvasRef.current;
@@ -703,6 +1108,15 @@ export function MapCanvas({
         </button>
       </div>
 
+      <div className="map-terrain-legend" aria-label="地形图例">
+        {LEGEND.map((item) => (
+          <span key={item.label}>
+            <i style={{ backgroundColor: item.color }} />
+            {item.label}
+          </span>
+        ))}
+      </div>
+
       <div className="map-legend">
         {Object.values(state.factions)
           .filter((f) => f.cityIds.length > 0)
@@ -722,3 +1136,8 @@ export function MapCanvas({
     </div>
   );
 }
+
+// 局部常量：避免每次绘制都解构
+const COASTLINE_PTS = COASTLINE;
+const [LON0, LON1] = LON_RANGE;
+const [LAT0, LAT1] = LAT_RANGE;

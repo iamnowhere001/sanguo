@@ -54,7 +54,7 @@ export function poachRate(state: GameState, agent: General, target: General): nu
 
 export function governorOf(state: GameState, cityId: string): General | null {
   const gens = Object.values(state.generals).filter(
-    (g) => g.status === 'active' && g.locationId === cityId,
+    (g) => g.status === 'active' && g.locationId === cityId && !g.armyId,
   );
   if (gens.length === 0) return null;
   return (

@@ -12,20 +12,21 @@ export function factionName(state: GameState, factionId: string | null): string 
   return state.factions[factionId]?.name ?? '未知';
 }
 
-/** 城内驻军总数：未分配兵力池 + 各将统领兵力 */
+/** 城内驻军总数：未分配兵力池 + 各将统领兵力（在途部队不计） */
 export function cityTroops(state: GameState, cityId: string): number {
   const pool = state.cities[cityId]?.troops ?? 0;
   return (
     pool +
     Object.values(state.generals)
-      .filter((g) => g.status === 'active' && g.locationId === cityId)
+      .filter((g) => g.status === 'active' && g.locationId === cityId && !g.armyId)
       .reduce((sum, g) => sum + g.troops, 0)
   );
 }
 
+/** 城中驻守武将（在途部队不计） */
 export function cityGenerals(state: GameState, cityId: string): General[] {
   return Object.values(state.generals).filter(
-    (g) => g.status === 'active' && g.locationId === cityId,
+    (g) => g.status === 'active' && g.locationId === cityId && !g.armyId,
   );
 }
 

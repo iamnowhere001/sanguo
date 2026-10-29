@@ -11,6 +11,7 @@ import { CITY_SIZE_LABEL, fortificationLabel } from '../data/tables/cities';
 import { MOVE_RANGE, TERRAIN_LABEL, UNIT_CLASS_LABEL } from '../data/tables/unitClasses';
 import type { DomesticCmd, GameState, General } from '../core/state';
 import { effForce, effIntellect, neighborsOf } from '../core/state';
+import { MARCH_DAYS_PER_XUN, reachableTargets } from '../systems/army';
 import {
   cityDamageMultiplier,
   foodOutput,
@@ -200,15 +201,10 @@ export function CityPanel({
   const isMine = city?.ownerId === state.playerFactionId;
   const enemyTargets = useMemo(
     () =>
-      city
-        ? neighborsOf(state, city.id)
-            .map((id) => state.cities[id]!)
-            .filter(
-              (c) =>
-                c &&
-                c.ownerId !== state.playerFactionId &&
-                canAttackFactions(state, state.playerFactionId, c.ownerId),
-            )
+      city && city.ownerId === state.playerFactionId
+        ? reachableTargets(state, state.playerFactionId, city.id)
+            .map((t) => state.cities[t.cityId]!)
+            .filter(Boolean)
         : [],
     [state, city],
   );
@@ -1358,17 +1354,17 @@ export function CityPanel({
             }
             title={
               enemyTargets.length > 0
-                ? `出征 ${enemyTargets.map((c) => c.name).join('、')}`
-                : '无相邻敌城'
+                ? `发兵 ${enemyTargets.map((c) => c.name).join('、')}`
+                : '暂无发兵路线'
             }
             onClick={() => onDeploy(city.id, enemyTargets[0]?.id ?? '')}
           >
             {enemyTargets.length > 0
-              ? `出征 · ${enemyTargets
+              ? `发兵 · ${enemyTargets
                   .slice(0, 2)
                   .map((c) => c.name)
                   .join('、')}${enemyTargets.length > 2 ? ` 等 ${enemyTargets.length} 城` : ''}`
-              : '无相邻敌城'}
+              : '暂无发兵路线'}
           </button>
           <button
             className="btn"
@@ -1458,15 +1454,16 @@ export function DeployDialog({
   initialTargetId: string;
   onClose: () => void;
 }) {
-  const targets = neighborsOf(state, fromCityId)
-    .map((id) => state.cities[id]!)
-    .filter(
-      (c) =>
-        c &&
-        c.ownerId !== state.playerFactionId &&
-        canAttackFactions(state, state.playerFactionId, c.ownerId),
-    );
-  const [targetId, setTargetId] = useState(initialTargetId || targets[0]?.id || '');
+  // M 档：目标不再限定相邻城，而是「沿己方道路可抵达」的敌城
+  const options = useMemo(
+    () => reachableTargets(state, state.playerFactionId, fromCityId),
+    [state, fromCityId],
+  );
+  const targets = options
+    .map((o) => state.cities[o.cityId]!)
+    .filter((c): c is NonNullable<typeof c> => Boolean(c));
+  const [targetId, setTargetId] = useState(initialTargetId || options[0]?.cityId || '');
+  const routeOption = options.find((o) => o.cityId === targetId);
   useEscape(onClose);
   const target = state.cities[targetId];
   const maxAttackers = BALANCE.BATTLE_MAX_ATTACKERS;
@@ -1501,10 +1498,13 @@ export function DeployDialog({
   const defenders = allDefenders.slice(0, BALANCE.BATTLE_MAX_DEFENDERS);
   const reserveCount = allDefenders.length - defenders.length;
   const defenderTroops = defenders.reduce((sum, g) => sum + g.troops, 0);
-  // 城防折算成“等效守军”：城防 100 时，同样兵力更难啃；技能加成同样计入
+  // 城防折算成“等效守军”：城防 100 时，同样兵力更难啃；技能与关隘加成同样计入
+  const gateFort = routeOption?.gate.fortification ?? 0;
   const fortification = Math.min(
     100,
-    (target?.fortification ?? 0) + (target?.skill?.fortificationBonus ?? 0),
+    (target?.fortification ?? 0) +
+      (target?.skill?.fortificationBonus ?? 0) +
+      gateFort,
   );
   const effectiveDefenders = defenderTroops * (1 + fortification / 150);
   const ratio = attackerTroops / Math.max(1, effectiveDefenders);
@@ -1552,7 +1552,7 @@ export function DeployDialog({
   const launch = () => {
     if (!target || selected.length === 0) return;
     const result = gameStore.dispatch({
-      t: 'DEPLOY',
+      t: 'MARCH',
       fromCityId,
       targetCityId: target.id,
       generalIds: selected,
@@ -1564,7 +1564,7 @@ export function DeployDialog({
     <div className="modal" onClick={onClose}>
       <div className="modal-card" onClick={(e) => e.stopPropagation()}>
         <header className="modal-head">
-          <h3>出征</h3>
+          <h3>发兵 · 地图行军</h3>
           <button className="btn ghost sm" onClick={onClose}>
             取消
           </button>
@@ -1593,21 +1593,45 @@ export function DeployDialog({
         <div className="deploy-block">
           <span className="label">目标城池</span>
           <div className="target-list">
-            {targets.map((c) => (
-              <button
-                key={c.id}
-                className={`target${c.id === targetId ? ' on' : ''}`}
-                onClick={() => setTargetId(c.id)}
-              >
-                <b>{c.name}</b>
-                <span>
-                  {factionName(state, c.ownerId)} · {cityTroops(state, c.id)} 兵 ·{' '}
-                  {cityGenerals(state, c.id).filter((g) => g.troops > 0).length} 将 · 城防{' '}
-                  {Math.min(100, c.fortification + (c.skill?.fortificationBonus ?? 0))}
-                </span>
-              </button>
-            ))}
+            {targets.map((c) => {
+              const o = options.find((x) => x.cityId === c.id);
+              return (
+                <button
+                  key={c.id}
+                  className={`target target-stack${c.id === targetId ? ' on' : ''}`}
+                  onClick={() => setTargetId(c.id)}
+                >
+                  <b>{c.name}</b>
+                  <span>
+                    {factionName(state, c.ownerId)} · {cityTroops(state, c.id)} 兵 ·{' '}
+                    {cityGenerals(state, c.id).filter((g) => g.troops > 0).length} 将 · 城防{' '}
+                    {Math.min(100, c.fortification + (c.skill?.fortificationBonus ?? 0))}
+                  </span>
+                  <span className="target-route">
+                    {o ? `行军 ${o.days} 日 · 约 ${Math.ceil(o.days / MARCH_DAYS_PER_XUN)} 旬` : ''}
+                    {o?.gate.hostilePasses.length
+                      ? ` · 攻关 ${o.gate.hostilePasses.map((g) => g.name).join('、')}`
+                      : o?.gate.ferries.length
+                        ? ` · 渡 ${o.gate.ferries.map((g) => g.name).join('、')}`
+                        : ''}
+                  </span>
+                </button>
+              );
+            })}
           </div>
+
+          {routeOption ? (
+            <p className="deploy-route">
+              路线：{state.cities[fromCityId]?.name}
+              {routeOption.path.slice(0, -1).map((id) => ` → ${state.cities[id]?.name}`)}
+              {` → ${state.cities[routeOption.cityId]?.name}`}；预计 {routeOption.days} 日（约{' '}
+              {Math.ceil(routeOption.days / MARCH_DAYS_PER_XUN)} 旬）。
+              {routeOption.gate.hostilePasses.length > 0
+                ? ` 途中强攻关隘，敌城城防 +${routeOption.gate.fortification}。`
+                : ''}
+              {routeOption.gate.ferries.length > 0 ? ' 末段渡河，接战按水战地形。' : ''}
+            </p>
+          ) : null}
         </div>
 
         <div className="deploy-block">
@@ -1663,7 +1687,7 @@ export function DeployDialog({
             再想想
           </button>
           <button className="btn primary" disabled={selected.length === 0} onClick={launch}>
-            出发
+            起兵
           </button>
         </div>
       </div>

@@ -13,8 +13,16 @@ function fresh(): GameState {
   return s;
 }
 
-function endTurn(s: GameState): GameState {
+/** 推进一旬（回合 = 旬） */
+function endXun(s: GameState): GameState {
   return reduce(s, { t: 'END_TURN', confirmed: true }).state;
+}
+
+/** 推进一个月（3 旬）：月结仍以“月”为口径，与旧用例保持一致 */
+function endTurn(s: GameState): GameState {
+  let next = s;
+  for (let i = 0; i < 3; i++) next = endXun(next);
+  return next;
 }
 
 /** 把搜索随机流拨到满足条件的游标，便于确定性测试 */
@@ -87,6 +95,7 @@ describe('月度流水线', () => {
   it('粮食安全溢出：不归零，按超出部分折损 50%', () => {
     let s = fresh();
     s.cities.jiangxia!.food = 65600;
+    s = endXun(endXun(s));
     const { state, result } = reduce(s, { t: 'END_TURN', confirmed: true });
     expect(result.warnings?.length).toBeGreaterThan(0);
     expect(state.cities.jiangxia!.food).toBeGreaterThan(0);
@@ -102,6 +111,7 @@ describe('月度流水线', () => {
     });
     for (const c of Object.values(s.cities)) c.defense = 100;
     s.cities.jiangxia!.food = 65600;
+    s = endXun(endXun(s));
     const { state } = reduce(s, { t: 'END_TURN', confirmed: true });
     expect(state.cities.jiangxia!.food).toBe(0);
   });

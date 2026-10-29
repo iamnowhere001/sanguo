@@ -52,7 +52,9 @@ import {
   useBattleCommand,
   waitUnit,
 } from '../systems/battle';
-import { continueAiPhase, startAiPhase } from '../systems/ai';
+import { continueAiPhase, startAiPhase, aiFactionIds } from '../systems/ai';
+import { tickDiplomacy } from '../systems/factionDiplomacy';
+import { launchArmy, playArmyTurn } from '../systems/army';
 import { doDiplomacy, doPersuadeCity, type DiplomacyKind } from '../systems/diplomacy';
 import {
   doFactionDiplomacy,
@@ -100,6 +102,7 @@ export type Action =
   | { t: 'PERSUADE_CITY'; cityId: string }
   | { t: 'PRISONER'; prisonerId: string; action: PrisonerAction; agentId?: string }
   | { t: 'DEPLOY'; fromCityId: string; targetCityId: string; generalIds: string[] }
+  | { t: 'MARCH'; fromCityId: string; targetCityId: string; generalIds: string[] }
   | { t: 'BATTLE_MOVE'; unitId: string; x: number; y: number }
   | { t: 'BATTLE_UNDO_MOVE'; unitId: string }
   | { t: 'BATTLE_ATTACK'; attackerId: string; targetId: string }
@@ -137,6 +140,14 @@ export interface ActionResult extends OpResult {
  */
 export function runMonthlyPipeline(s: GameState, facts = emptyMonthFacts()): string[] {
   advanceTime(s);
+  return runMonthStages(s, facts);
+}
+
+/**
+ * 月度结算本体（不含时间推进）。
+ * 旬回合下只有跨月的那一旬调用这里；其余两旬只推进部队。
+ */
+export function runMonthStages(s: GameState, facts = emptyMonthFacts()): string[] {
   // 【优化】E09 忠诚改为事件驱动，不再全员每月 −1
   runStaminaRecovery(s);
   runUpkeep(s, facts);
@@ -394,6 +405,11 @@ export function reduce(
       if (s.phase !== 'map') return { state, result: { ok: false, message: '当前不在大地图阶段' } };
       const { result } = createBattle(s, action.fromCityId, action.targetCityId, action.generalIds);
       return { state: result.ok ? s : state, result };
+    }
+    case 'MARCH': {
+      if (s.phase !== 'map') return { state, result: { ok: false, message: '当前不在大地图阶段' } };
+      const r = launchArmy(s, action.fromCityId, action.targetCityId, action.generalIds);
+      return { state: r.ok ? s : state, result: r };
     }
     case 'BATTLE_MOVE': {
       if (!s.battle || s.phase !== 'battle') {
@@ -671,17 +687,56 @@ export function reduce(
       const before = playerSnapshot(s);
       const logStart = s.log.length;
       const facts = emptyMonthFacts();
-      const warnings = runMonthlyPipeline(s, facts);
+      // 旬回合：每回合推进一旬，只有跨月那一旬做月度结算
+      const monthRolled = advanceTime(s);
+      const warnings = monthRolled ? runMonthStages(s, facts) : [];
 
       if (s.gameOver) {
         return { state: s, result: { ok: true, message: '回合结束', warnings } };
       }
 
-      refreshChapter(s);
-      maybeScheduleEvent(s);
-      s.pendingMonth = { before, logStart, warnings, facts };
-      startAiPhase(s);
-      return { state: s, result: { ok: true, message: '回合结束', warnings } };
+      if (monthRolled) {
+        refreshChapter(s);
+        maybeScheduleEvent(s);
+      }
+
+      // 部队每旬推进；若接战则停在本旬，等待战棋结束
+      const armyTurn = playArmyTurn(s);
+      checkGameOver(s);
+      if (s.gameOver) {
+        return { state: s, result: { ok: true, message: '回合结束', warnings } };
+      }
+
+      if ((s.phase as GameState['phase']) === 'battle') {
+        if (monthRolled) {
+          s.pendingMonth = { before, logStart, warnings, facts };
+          // 战棋结束后再跑 AI 与月报
+          tickDiplomacy(s);
+          s.aiQueue = s.settings.aiEnabled ? aiFactionIds(s) : [];
+        }
+        return {
+          state: s,
+          result: {
+            ok: true,
+            message: armyTurn.battleStarted ? '部队与敌军接战' : '回合结束',
+            warnings,
+          },
+        };
+      }
+
+      if (monthRolled) {
+        s.pendingMonth = { before, logStart, warnings, facts };
+        startAiPhase(s);
+        return { state: s, result: { ok: true, message: '新的一月开始', warnings } };
+      }
+
+      return {
+        state: s,
+        result: {
+          ok: true,
+          message: `进入${s.xun === 2 ? '中旬' : '下旬'}`,
+        },
+      };
     }
   }
 }

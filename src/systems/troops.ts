@@ -93,7 +93,7 @@ export function assignTroops(
   const city = s.cities[cityId];
   const g = s.generals[generalId];
   if (!city || !g) return { moved: 0, reason: '城池或武将不存在' };
-  if (g.status !== 'active' || g.locationId !== cityId) {
+  if (g.status !== 'active' || g.locationId !== cityId || g.armyId) {
     return { moved: 0, reason: '该武将不在城中' };
   }
   const delta = Math.trunc(amount);
@@ -140,7 +140,10 @@ export function withdrawTroops(s: GameState, cityId: string, amount: number): nu
 
   if (need > 0) {
     const gens = Object.values(s.generals)
-      .filter((g) => g.status === 'active' && g.locationId === cityId && g.troops > 0)
+      .filter(
+        (g) =>
+          g.status === 'active' && g.locationId === cityId && !g.armyId && g.troops > 0,
+      )
       .sort((a, b) => a.troops - b.troops || a.id.localeCompare(b.id));
     for (const g of gens) {
       if (need <= 0) break;
@@ -165,7 +168,7 @@ export function reserveTroopsFor(s: GameState, g: General): number {
  */
 export function projectedTroops(s: GameState, cityId: string): Map<string, number> {
   const gens = Object.values(s.generals).filter(
-    (g) => g.status === 'active' && g.locationId === cityId,
+    (g) => g.status === 'active' && g.locationId === cityId && !g.armyId,
   );
   let pool = poolOf(s.cities[cityId]);
   const out = new Map<string, number>();

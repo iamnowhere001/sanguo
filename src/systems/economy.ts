@@ -40,21 +40,37 @@ function factionOfGeneral(s: GameState, g: General): string | null {
   return s.cities[g.locationId]?.ownerId ?? null;
 }
 
-/** ① 时间推进，重置交易额度，并按新回合重新派生各随机流 */
-export function advanceTime(s: GameState): void {
-  s.month += 1;
-  if (s.month > 12) {
-    s.month = 1;
-    s.year += 1;
+/**
+ * ① 时间推进。
+ *
+ * 一回合 = 一旬（10 天）；3 旬为一月。
+ * 只有从「下旬」推进到「上旬」时才跨月，并做月度重置（交易额度 / 内政次数 / 国策）。
+ * 返回 true 表示本次推进跨月，调用方据此执行月度结算。
+ */
+export function advanceTime(s: GameState): boolean {
+  s.xunTurn = (s.xunTurn ?? 1) + 1;
+  s.xun = (s.xun ?? 1) + 1;
+  let monthRolled = false;
+  if (s.xun > 3) {
+    s.xun = 1;
+    s.month += 1;
+    if (s.month > 12) {
+      s.month = 1;
+      s.year += 1;
+    }
+    s.turn += 1;
+    monthRolled = true;
   }
-  s.turn += 1;
-  // 【优化】E14 随机数按系统分流：每回合从 runSeed + 回合重新派生
-  s.streams = createStreams(s.seed, s.turn);
-  for (const c of Object.values(s.cities)) {
-    c.tradeVolume = 0;
-    c.domesticUsed = 0;
+  // 【优化】E14 随机数按系统分流：每旬从 runSeed + 旬序号重新派生
+  s.streams = createStreams(s.seed, s.xunTurn);
+  if (monthRolled) {
+    for (const c of Object.values(s.cities)) {
+      c.tradeVolume = 0;
+      c.domesticUsed = 0;
+    }
+    refreshPolicyOffer(s);
   }
-  refreshPolicyOffer(s);
+  return monthRolled;
 }
 
 /** ② 体力每月恢复 */

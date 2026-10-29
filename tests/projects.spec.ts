@@ -41,10 +41,14 @@ function richJiangxia(s: GameState): GameState {
   return s;
 }
 
+/** 推进一个月（3 旬）：工程按月推进 */
 function endTurn(s: GameState): GameState {
-  const r = reduce(s, { t: 'END_TURN', confirmed: true });
-  let next = r.state;
-  if (next.report) next = reduce(next, { t: 'DISMISS_REPORT' }).state;
+  let next = s;
+  for (let i = 0; i < 3; i++) {
+    const r = reduce(next, { t: 'END_TURN', confirmed: true });
+    next = r.state;
+    if (next.report) next = reduce(next, { t: 'DISMISS_REPORT' }).state;
+  }
   return next;
 }
 

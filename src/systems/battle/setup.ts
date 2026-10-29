@@ -147,6 +147,7 @@ export function createBattle(
   targetCityId: string,
   generalIds: string[],
   attackerFactionId: string = state.playerFactionId,
+  opts?: { waterCrossing?: boolean; fortificationBonus?: number },
 ): { result: OpResult; battle?: BattleState } {
   const from = state.cities[fromCityId];
   const target = state.cities[targetCityId];
@@ -172,6 +173,7 @@ export function createBattle(
   for (const id of generalIds) {
     const g = state.generals[id];
     if (!g || g.status !== 'active') return { result: fail('武将不可用') };
+    if (g.armyId) return { result: fail(`${g.name} 正在行军途中`) };
     if (g.locationId !== fromCityId) return { result: fail(`${g.name} 不在此城`) };
     attackers.push(g);
   }
@@ -186,7 +188,7 @@ export function createBattle(
     state,
     targetCityId,
     Object.values(state.generals).filter(
-      (g) => g.status === 'active' && g.locationId === targetCityId,
+      (g) => g.status === 'active' && g.locationId === targetCityId && !g.armyId,
     ),
   );
   const defenders = defendersOf(state, targetCityId);
@@ -209,7 +211,7 @@ export function createBattle(
     targetCityId,
     targetCityName: target.name,
     targetTerrain: target.terrain,
-    isWaterCity: target.isWaterCity,
+    isWaterCity: target.isWaterCity || Boolean(opts?.waterCrossing),
     citySize: target.size,
   });
   const grid = battlefield.grid;
@@ -264,7 +266,9 @@ export function createBattle(
     // 城池专属技能：守城城防加成（如濡须水寨 / 逍遥津固守）
     fortification: Math.min(
       100,
-      target.fortification + (target.skill?.fortificationBonus ?? 0),
+      target.fortification +
+        (target.skill?.fortificationBonus ?? 0) +
+        (opts?.fortificationBonus ?? 0),
     ),
     cityDurabilityMax: durabilityMaxOf(target),
     cityDurability:

@@ -89,7 +89,7 @@ function candidateTroops(
 ): CandidateTroops {
   const attackerTroops = generalIds
     .map((id) => state.generals[id])
-    .filter((g) => g?.status === 'active' && g.locationId === fromCityId)
+    .filter((g) => g?.status === 'active' && g.locationId === fromCityId && !g.armyId)
     .reduce((sum, g) => sum + (g?.troops ?? 0), 0);
   const allDefenders = defendersOf(state, targetCityId).sort(
     (a, b) => b.troops - a.troops,

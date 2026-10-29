@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { BALANCE } from '../data/tables/balance';
 import { difficultyOf } from '../data/tables/difficulty';
 import type { GameState } from '../core/state';
-import { neighborsOf } from '../core/state';
 import { gameStore, useGameStore } from '../store/gameStore';
 import { MapCanvas } from '../render/MapCanvas';
 import { audio } from '../audio';
@@ -19,7 +18,9 @@ import { Bar } from './atoms';
 import { ConfirmDialog, cityTroops, factionColor, factionName, fmt } from './common';
 import { activePolicy } from '../systems/policy';
 import { buildCouncilBrief } from '../systems/council';
-import { canAttackFactions } from '../systems/factionDiplomacy';
+import { armyEtaXun, reachableTargets } from '../systems/army';
+
+const XUN_LABEL = ['上旬', '中旬', '下旬'];
 
 export function MapScreen() {
   const store = useGameStore();
@@ -31,7 +32,10 @@ export function MapScreen() {
   const generals = useMemo(
     () =>
       Object.values(state.generals).filter(
-        (g) => g.status === 'active' && state.cities[g.locationId]?.ownerId === state.playerFactionId,
+        (g) =>
+          g.status === 'active' &&
+          !g.armyId &&
+          state.cities[g.locationId]?.ownerId === state.playerFactionId,
       ),
     [state],
   );
@@ -53,37 +57,37 @@ export function MapScreen() {
   const [councilOpen, setCouncilOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
 
-  /** 能从选中城池出征的相邻敌城 */
-  const attackFromSelected = useMemo(() => {
+  /** 能从选中城池发兵抵达的敌城（按旬回合沿己方道路推进） */
+  const attackRoutes = useMemo(() => {
     const c = state.cities[selectedCityId];
     if (!c || c.ownerId !== state.playerFactionId) return [];
-    return neighborsOf(state, selectedCityId).filter((id) => {
-      const n = state.cities[id];
-      return (
-        n &&
-        n.ownerId !== state.playerFactionId &&
-        canAttackFactions(state, state.playerFactionId, n.ownerId)
-      );
-    });
+    return reachableTargets(state, state.playerFactionId, selectedCityId).map((t) => ({
+      targetId: t.cityId,
+      path: t.path,
+      days: t.days,
+    }));
   }, [state, selectedCityId]);
 
-  /** 全图任意己方城池可攻击的敌城：用于左侧列表标记 */
+  const attackFromSelected = useMemo(
+    () => attackRoutes.map((r) => r.targetId),
+    [attackRoutes],
+  );
+
+  /** 全图任意己方城池可发兵抵达的敌城：用于左侧列表标记 */
   const attackableAny = useMemo(() => {
     const set = new Set<string>();
     for (const c of mine) {
-      for (const id of neighborsOf(state, c.id)) {
-        const n = state.cities[id];
-        if (
-          n &&
-          n.ownerId !== state.playerFactionId &&
-          canAttackFactions(state, state.playerFactionId, n.ownerId)
-        ) {
-          set.add(id);
-        }
+      for (const t of reachableTargets(state, state.playerFactionId, c.id)) {
+        set.add(t.cityId);
       }
     }
     return set;
   }, [state, mine]);
+
+  const myArmies = useMemo(
+    () => (state.armies ?? []).filter((a) => a.factionId === state.playerFactionId),
+    [state],
+  );
 
   const totalGold = mine.reduce((s, c) => s + c.gold, 0);
   const totalFood = mine.reduce((s, c) => s + c.food, 0);
@@ -175,9 +179,9 @@ export function MapScreen() {
       <header className="topbar">
         <div className="tb-left">
           <span className="date">
-            {state.year} 年 {state.month} 月
+            {state.year} 年 {state.month} 月 · {XUN_LABEL[(state.xun ?? 1) - 1]}
           </span>
-          <span className="turn">第 {state.turn} 回合</span>
+          <span className="turn">第 {state.xunTurn ?? 1} 旬</span>
         </div>
 
         <div className="tb-kpis">
@@ -217,7 +221,7 @@ export function MapScreen() {
         <div className="tb-actions">
           <div className="tb-secondary">
             {policy ? (
-              <span className="policy-pill" title={`${policy.school}国策，剩余 ${Math.max(0, (state.policy?.expiresTurn ?? state.turn) - state.turn)} 回合`}>
+              <span className="policy-pill" title={`${policy.school}国策，剩余 ${Math.max(0, (state.policy?.expiresTurn ?? state.turn) - state.turn)} 个月`}>
                 <i>国策</i>
                 {policy.name}
               </span>
@@ -266,8 +270,8 @@ export function MapScreen() {
               <kbd>G</kbd>
             </button>
           ) : null}
-          <button className="btn primary" onClick={endTurn}>
-            结束回合
+          <button className="btn primary" onClick={endTurn} title="结束本旬（E）">
+            结束{XUN_LABEL[(state.xun ?? 1) - 1]}
           </button>
           <button
             className="btn ghost sm tb-more"
@@ -394,6 +398,38 @@ export function MapScreen() {
             </div>
           </section>
 
+          {myArmies.length > 0 ? (
+            <section className="rail-mine">
+              <div className="section-title">
+                <span>在途部队</span>
+                <span className="muted small">{myArmies.length}</span>
+              </div>
+              <div className="city-list">
+                {myArmies.map((a) => (
+                  <button
+                    key={a.id}
+                    className="city-row"
+                    onClick={() => setSelectedCityId(a.targetCityId)}
+                    title={`${a.generalIds
+                      .map((id) => state.generals[id]?.name)
+                      .filter(Boolean)
+                      .join('、')} → ${state.cities[a.targetCityId]?.name ?? a.targetCityId}`}
+                  >
+                    <i
+                      className="fdot"
+                      style={{ background: factionColor(state, a.factionId) }}
+                    />
+                    <span className="cname">{state.cities[a.targetCityId]?.name ?? a.targetCityId}</span>
+                    <span className="cmeta">{fmt(a.troops)} 兵</span>
+                    <span className="cres">
+                      <em>约</em> {armyEtaXun(state, a)} 旬
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
           <FactionRail
             state={state}
             selectedCityId={selectedCityId}
@@ -425,7 +461,7 @@ export function MapScreen() {
           <MapCanvas
             state={state}
             selectedCityId={selectedCityId}
-            attackTargetIds={attackFromSelected}
+            attackRoutes={attackRoutes}
             onSelect={(id) => {
               // 地图点选走画布，不经过按钮委托，这里单独补声
               if (id !== selectedCityId) audio.play('ui.select');
@@ -435,12 +471,12 @@ export function MapScreen() {
           <div className={`map-hint${attackFromSelected.length > 0 ? ' accent' : ''}`}>
             {state.cities[selectedCityId]?.ownerId === state.playerFactionId
               ? attackFromSelected.length > 0
-                ? `可出征：${attackFromSelected
+                ? `可发兵：${attackFromSelected
                     .map((id) => state.cities[id]?.name)
                     .slice(0, 3)
-                    .join('、')} · 从右侧发起`
-                : '此城暂无相邻敌方城池 · 可经营、征兵或调将'
-              : '点击己方城池经营 · 点击相邻敌城查看守军'}
+                    .join('、')} · 部队沿地图行军，抵达后接战`
+                : '此城暂无发兵路线 · 可经营、征兵或先打通己方道路'
+              : '点击己方城池经营 · 点击敌城查看守军与行军距离'}
           </div>
         </main>
 
@@ -472,7 +508,7 @@ export function MapScreen() {
             </span>
           ) : null}
           {attackFromSelected.length > 0 ? (
-            <span className="sb-flag">可出征 {attackFromSelected.length} 城</span>
+            <span className="sb-flag">可发兵 {attackFromSelected.length} 城</span>
           ) : (
             <span>点击地图切换城池</span>
           )}
@@ -513,7 +549,7 @@ export function MapScreen() {
           body={`${factionName(
             state,
             state.pendingDiplomacy.fromFactionId,
-          )} 遣使求和。接受后停战 12 回合，双方不得出兵；拒绝会进一步恶化关系。`}
+          )} 遣使求和。接受后停战 12 个月，双方不得出兵；拒绝会进一步恶化关系。`}
           confirmLabel="接受停战"
           cancelLabel="拒绝"
           onConfirm={() => {
@@ -562,11 +598,11 @@ export function MapScreen() {
                 ['Tab', '切换焦点（城池列表 / 操作按钮）'],
                 ['Enter / Space', '触发当前按钮'],
                 ['G', '打开朝议 / 军师奏折'],
-                ['E', '结束回合'],
+                ['E', '结束本旬'],
                 ['?', '打开 / 关闭快捷键'],
                 ['Esc', '关闭弹窗 / 取消战棋指令'],
                 ['战棋 Tab', '切换待行动部队'],
-                ['战棋 Space', '结束本回合'],
+                ['战棋 Space', '结束战术回合'],
                 ['战棋 Esc', '取消选择 / 计策 / 突击'],
               ].map(([key, desc]) => (
                 <div className="kb-row" key={key}>
@@ -598,7 +634,7 @@ export function MapScreen() {
           title="粮草将溢出"
           body={confirmTurn}
           cancelLabel="先处理粮草"
-          confirmLabel="仍然结束回合"
+          confirmLabel="仍然结束本旬"
           tone="primary"
           onCancel={() => setConfirmTurn(null)}
           onConfirm={() => {
