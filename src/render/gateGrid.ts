@@ -107,7 +107,67 @@ function walk(
   return out;
 }
 
-/** 从中心向两侧找连续同类地形，形成一条 1 格宽的线；两端必须接可站立的陆地 */
+/**
+ * 把一条逐格斜线补成 4 邻接的“阶梯”。
+ *
+ * 行军只走上下左右，纯斜线在规则层是走不通的；每遇到一个对角步，
+ * 就在两个正交拐角里挑一个仍属于该地形（水面 / 山体）的格子补进去。
+ */
+function connectLane(
+  points: GridPoint[],
+  inside: (col: number, row: number) => boolean,
+): GridPoint[] | null {
+  const out: GridPoint[] = [points[0]!];
+  for (let i = 1; i < points.length; i++) {
+    const a = out[out.length - 1]!;
+    const b = points[i]!;
+    const dc = b.col - a.col;
+    const dr = b.row - a.row;
+    if (Math.abs(dc) + Math.abs(dr) === 1) {
+      out.push(b);
+      continue;
+    }
+    if (Math.abs(dc) !== 1 || Math.abs(dr) !== 1) return null;
+    const cornerA = { col: a.col + dc, row: a.row };
+    const cornerB = { col: a.col, row: a.row + dr };
+    const okA =
+      inMap(cornerA.col, cornerA.row) &&
+      inside(cornerA.col, cornerA.row) &&
+      !isCityWall(cornerA.col, cornerA.row);
+    const okB =
+      inMap(cornerB.col, cornerB.row) &&
+      inside(cornerB.col, cornerB.row) &&
+      !isCityWall(cornerB.col, cornerB.row);
+    if (!okA && !okB) return null;
+    out.push(okA ? cornerA : cornerB, b);
+  }
+  return out;
+}
+
+/** 通行线端点旁的可站立滩头 / 登岸格（必须与端点上下左右相邻） */
+function bankOf(
+  end: GridPoint,
+  laneSet: Set<string>,
+  forward: [number, number],
+): GridPoint | null {
+  const standable = (c: number, r: number): boolean =>
+    inMap(c, r) &&
+    !laneSet.has(keyOf(c, r)) &&
+    !isWaterKind(tileKindAt(c, r)) &&
+    !isCityWall(c, r);
+  const straight = { col: end.col + forward[0], row: end.row + forward[1] };
+  if (Math.abs(forward[0]) + Math.abs(forward[1]) === 1 && standable(straight.col, straight.row)) {
+    return straight;
+  }
+  for (const [dx, dy] of ORTHO) {
+    const col = end.col + dx;
+    const row = end.row + dy;
+    if (standable(col, row)) return { col, row };
+  }
+  return null;
+}
+
+/** 从中心向两侧找连续同类地形，形成一条 1 格宽、4 邻接的线；两端接可站立陆地 */
 function lineThrough(
   center: GridPoint,
   dir: [number, number],
@@ -131,23 +191,14 @@ function lineThrough(
     return null;
   }
 
-  const before = neg.length
-    ? { col: neg.at(-1)!.col - dir[0], row: neg.at(-1)!.row - dir[1] }
-    : { col: center.col - dir[0], row: center.row - dir[1] };
-  const after = pos.length
-    ? { col: pos.at(-1)!.col + dir[0], row: pos.at(-1)!.row + dir[1] }
-    : { col: center.col + dir[0], row: center.row + dir[1] };
+  const lane = connectLane([...neg.reverse(), center, ...pos], inside);
+  if (!lane) return null;
+  const laneSet = new Set(lane.map((p) => keyOf(p.col, p.row)));
+  const before = bankOf(lane[0]!, laneSet, [-dir[0], -dir[1]] as [number, number]);
+  const after = bankOf(lane[lane.length - 1]!, laneSet, dir);
+  if (!before || !after) return null;
 
-  const standable = (p: GridPoint): boolean =>
-    inMap(p.col, p.row) &&
-    !isWaterKind(tileKindAt(p.col, p.row)) &&
-    !isCityWall(p.col, p.row);
-  if (!standable(before) || !standable(after)) return null;
-
-  return {
-    lane: [...neg.reverse(), center, ...pos],
-    approaches: [before, after],
-  };
+  return { lane, approaches: [before, after] };
 }
 
 interface Candidate {
@@ -303,8 +354,10 @@ function landDetour(a: GridPoint, b: GridPoint, cap: number): number {
 }
 
 /** 一条渡线是否真的“跨水到对岸”，且在两岸都能走到城 */
-function isRealPortLine(line: { lane: GridPoint[]; approaches: [GridPoint, GridPoint] }): boolean {
-  const [a, b] = line.approaches;
+function isRealPortLine(line: { lane: GridPoint[]; approaches: [] | [GridPoint, GridPoint] }): boolean {
+  if (line.approaches.length < 2) return false;
+  const a = line.approaches[0]!;
+  const b = line.approaches[1]!;
   const water = line.lane.filter((p) => isWaterKind(tileKindAt(p.col, p.row))).length;
   if (water < MIN_PORT_WATER) return false;
 
@@ -334,8 +387,10 @@ function buildPortSite(gate: GateFeature, mid: { col: number; row: number }, use
     (c, r) => isInlandWater(tileKindAt(c, r)) && !isCityWall(c, r) && !used.has(keyOf(c, r)),
     radius,
   );
+  const cityDist = cityLandDistance();
 
-  let best: Candidate | null = null;
+  // 先用便宜的几何条件筛一遍，再对少量候选做“绕行检测”（BFS 较贵）。
+  const candidates: Candidate[] = [];
   for (const center of centers) {
     for (const dir of DIRS) {
       const line = lineThrough(
@@ -348,26 +403,34 @@ function buildPortSite(gate: GateFeature, mid: { col: number; row: number }, use
       if (line.lane.some((p) => used.has(keyOf(p.col, p.row)))) continue;
       // 渡线必须真的跨水，而不是沿着岸线走
       if (!line.lane.some((p) => isInlandWater(tileKindAt(p.col, p.row)))) continue;
-      if (!isRealPortLine(line)) continue;
+      const water = line.lane.filter((p) => isWaterKind(tileKindAt(p.col, p.row))).length;
+      if (water < MIN_PORT_WATER) continue;
+      const [a, b] = line.approaches;
+      const da = cityDist[a.row * MAP.cols + a.col]!;
+      const db = cityDist[b.row * MAP.cols + b.col]!;
+      if (!Number.isFinite(da) || !Number.isFinite(db)) continue;
+      if (da > MAX_APPROACH_CITY_DIST || db > MAX_APPROACH_CITY_DIST) continue;
       const score =
         line.lane.length * 0.9 +
         Math.hypot(center.col - mid.col, center.row - mid.row) +
         (dir[0] !== 0 && dir[1] !== 0 ? 0.15 : 0);
-      if (!best || score < best.score) {
-        best = {
-          score,
-          site: {
-            gate,
-            center,
-            lane: line.lane,
-            approaches: line.approaches,
-            water: true,
-          },
-        };
-      }
+      candidates.push({
+        score,
+        site: {
+          gate,
+          center,
+          lane: line.lane,
+          approaches: line.approaches,
+          water: true,
+        },
+      });
     }
   }
-  if (best) return best.site;
+
+  candidates.sort((a, b) => a.score - b.score);
+  for (const candidate of candidates.slice(0, 12)) {
+    if (isRealPortLine(candidate.site)) return candidate.site;
+  }
 
   // 兜底：仍按最近的江 / 湖面放一条最短渡线，避免配表里的港口凭空消失。
   // 正常情况下不会走到这里；真走到时 `gate-check` 会把它列为可疑落位。

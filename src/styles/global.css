@@ -1705,6 +1705,84 @@ input[type='number'] {
 .gate-panel .cp-title h2 {
   font-size: 20px;
 }
+.gate-panel.pass {
+  --gate-accent: #c8a45e;
+  --gate-soft: rgba(200, 164, 94, 0.12);
+}
+.gate-panel.port {
+  --gate-accent: #6fb3b6;
+  --gate-soft: rgba(111, 179, 182, 0.12);
+}
+.gate-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.gate-kind-mark {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid var(--gate-accent);
+  background: var(--gate-soft);
+  color: var(--gate-accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.gate-route {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: var(--sp-3);
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent);
+}
+.gate-route .gate-bank {
+  flex: none;
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  color: var(--dim);
+}
+.gate-route .gate-lane {
+  position: relative;
+  flex: 1;
+  height: 2px;
+  border-top: 2px dashed var(--gate-accent);
+  opacity: 0.7;
+}
+.gate-route.water .gate-lane {
+  border-top-style: dotted;
+  border-top-color: #8fd0d2;
+}
+.gate-route.land .gate-lane {
+  border-top-color: #c8a45e;
+}
+.gate-route.blocked .gate-lane {
+  border-top-color: var(--red-text);
+}
+.gate-route .gate-node {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid var(--gate-accent);
+  background: var(--gate-soft);
+  color: var(--gate-accent);
+  font-size: 11px;
+  font-weight: 700;
+}
+.gate-route.blocked .gate-node {
+  border-color: var(--red-text);
+  color: var(--red-text);
+  background: var(--red-soft);
+}
 .gate-state {
   display: flex;
   flex-direction: column;

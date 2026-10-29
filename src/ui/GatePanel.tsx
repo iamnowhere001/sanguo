@@ -60,11 +60,14 @@ export function GatePanel({
   const actionLabel = access === 'neutral' ? '接管' : '攻关';
 
   return (
-    <aside className="side-panel city-panel gate-panel">
+    <aside className={`side-panel city-panel gate-panel ${gate.kind}`}>
       <header className="panel-head cp-head">
         <div className="cp-head-top">
           <div className="cp-title">
-            <h2>{gate.name}</h2>
+            <div className="gate-title-row">
+              <span className="gate-kind-mark">{gate.kind === 'port' ? '港' : '关'}</span>
+              <h2>{gate.name}</h2>
+            </div>
             <div className="sub-line">
               <span className="faction-inline">
                 <i style={{ background: color }} />
@@ -189,6 +192,17 @@ export function GatePanel({
                   : '—'}
               </b>
             </div>
+          </div>
+          <div className={`gate-route ${site?.water ? 'water' : 'land'} ${blocked ? 'blocked' : ''}`}>
+            <span className="gate-bank">岸</span>
+            <span className="gate-lane">
+              <i />
+            </span>
+            <span className="gate-node">{site?.water ? '渡' : '关'}</span>
+            <span className="gate-lane">
+              <i />
+            </span>
+            <span className="gate-bank">岸</span>
           </div>
           <p className="gate-note">
             线外仍是不可通行的{site?.water ? '江面' : '山体'}；所有部队只能走这一条线，

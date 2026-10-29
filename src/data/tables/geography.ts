@@ -162,10 +162,10 @@ export function riverHalfWidth(scale: number): number {
   return 0.18 + scale * 0.16;
 }
 
-/** 河流在屏幕上的世界宽度（略窄于不可通行的河岸带，留出滩涂） */
+/** 河流在屏幕上的世界宽度（与不可通行河岸带对齐，略留滩涂） */
 export function riverWorldWidth(scale: number): number {
   const unitsPerLon = MAP.width / (LON_RANGE[1] - LON_RANGE[0]);
-  return riverHalfWidth(scale) * 2 * unitsPerLon * 0.76;
+  return riverHalfWidth(scale) * 2 * unitsPerLon * 0.92;
 }
 
 /** 主要水系。顺序即绘制顺序：先支流后干流，干流压在上面。 */

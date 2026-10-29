@@ -3,21 +3,7 @@ import type { Army, City, CitySize, GameState, GridPoint } from '../core/state';
 import { cityTroops } from '../core/selectors';
 import { BALANCE } from '../data/tables/balance';
 import { CITY_SIZE_LABEL, fortificationLabel } from '../data/tables/cities';
-import {
-  CITY_COORDS,
-  COASTLINE,
-  DESERTS,
-  FORESTS,
-  LAKES,
-  LAT_RANGE,
-  LON_RANGE,
-  MAP,
-  MARSHES,
-  RIDGES,
-  RIVERS,
-  projectLonLat,
-  riverWorldWidth,
-} from '../data/tables/geography';
+import { CITY_COORDS, MAP } from '../data/tables/geography';
 import { GATE_KIND_LABEL } from '../data/tables/gates';
 import {
   armyMaxMp,
@@ -48,6 +34,7 @@ import {
 } from './terrainGrid';
 import { gateAtCenter, gateSiteById, gateSites, gateWorldPos } from './gateGrid';
 import { drawFactionPattern, factionPattern, PATTERN_LABEL } from './factionPattern';
+import { PALETTE, paintTerrain } from './terrainPaint';
 
 interface ProjectedCity {
   city: City;
@@ -74,47 +61,15 @@ interface Layout {
   oy: number;
 }
 
-const MIN_ZOOM = 1;
+const MIN_ZOOM = 0.2;
 /**
- * 世界从 96×72 扩到 192×144 后，100% 缩放只有旧版一半的像素密度。
- * 默认 200% 让城池、部队的屏幕尺寸与旧版一致；720% 对应旧版 360% 的最大特写。
+ * 缩放口径：
+ * - 20% = 全图（相机基准尺度是整图的 1/5）
+ * - 100% = 默认州郡视角，城池、关港、部队都看得清
+ * - 720% = 城池特写，一格约 28px
  */
+const DEFAULT_ZOOM = 1;
 const MAX_ZOOM = 7.2;
-
-/**
- * 宣纸绘本地图配色。
- * 参照《三国志11》：暖纸底、墨线勾边、青绿水系、赭黄山脊、砖石城墙。
- */
-const PALETTE = {
-  sea0: '#33484f',
-  sea1: '#263a43',
-  sea2: '#1c2c35',
-  paper0: '#d6c69e',
-  paper1: '#c9b88c',
-  paper2: '#bda978',
-  ink: 'rgba(58,49,32,0.72)',
-  inkSoft: 'rgba(58,49,32,0.34)',
-  inkStrong: '#2e2818',
-  text: '#2b2415',
-  road: 'rgba(126,104,66,0.55)',
-  roadCasing: 'rgba(88,72,44,0.22)',
-  river0: '#5c8a8d',
-  river1: '#7fa9a8',
-  riverCore: 'rgba(196,224,220,0.55)',
-  lake0: '#4d7b7f',
-  lake1: '#6d9a99',
-  mountain0: '#b6a37a',
-  mountain1: '#8c7a56',
-  mountain2: '#675839',
-  wall: '#eadfc3',
-  wallShade: '#c3b391',
-  wallDeep: '#a4936f',
-  roof: '#7d5b3f',
-  roofDark: '#5b4029',
-  courtyard: '#cbbb90',
-  chip: 'rgba(243,235,214,0.94)',
-  token: 'rgba(247,240,222,0.97)',
-} as const;
 
 /** #rrggbb → rgba()，用于给势力色叠透明度 */
 function hexA(hex: string, alpha: number): string {
@@ -122,6 +77,16 @@ function hexA(hex: string, alpha: number): string {
   if (!m) return hex;
   const v = parseInt(m[1]!, 16);
   return `rgba(${(v >> 16) & 255},${(v >> 8) & 255},${v & 255},${alpha})`;
+}
+
+/** 字符串散列：给每条道路一个稳定的弧度，不随重绘跳动 */
+function hashText(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0) / 4294967296;
 }
 
 const SIZE_RANK: Record<CitySize, number> = {
@@ -135,8 +100,12 @@ const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.m
 
 /** 限制平移范围：地图边缘不会被拖出视野 */
 function clampPan(view: MapView, w: number, h: number): MapView {
-  const maxX = w * 0.5 * Math.max(0, view.zoom - 1);
-  const maxY = h * 0.5 * Math.max(0, view.zoom - 1);
+  // 地图在屏幕上以视口中心为基准缩放；可平移量 = 地图超出视口的一半
+  const { scale } = layoutOf(w, h);
+  const mapW = MAP.width * scale * view.zoom;
+  const mapH = MAP.height * scale * view.zoom;
+  const maxX = Math.max(0, (mapW - w) / 2);
+  const maxY = Math.max(0, (mapH - h) / 2);
   return {
     zoom: view.zoom,
     x: clamp(view.x, -maxX, maxX),
@@ -144,14 +113,18 @@ function clampPan(view: MapView, w: number, h: number): MapView {
   };
 }
 
+/**
+ * 相机基准：整张地图铺满视口的缩放 = 20%。
+ * 乘 5 后，默认 100% 只显示约 1/5 地图，正好是州郡视角。
+ */
+const CAMERA_BASE = 5;
+
 /** 世界矩形固定为 MAP.width × MAP.height，换剧本时海岸线不会跟着缩放 */
 function layoutOf(w: number, h: number): Layout {
   const padX = w < 560 ? 6 : 12;
   const padY = h < 300 ? 5 : 10;
-  const scale = Math.min(
-    (w - padX * 2) / MAP.width,
-    (h - padY * 2) / MAP.height,
-  );
+  const scale =
+    Math.min((w - padX * 2) / MAP.width, (h - padY * 2) / MAP.height) * CAMERA_BASE;
   return {
     scale,
     ox: (w - MAP.width * scale) / 2,
@@ -217,244 +190,7 @@ function project(
   });
 }
 
-// ── 地形底图（分块缓存） ────────────────────────────────────
-
-function pathFromLonLat(
-  ctx: CanvasRenderingContext2D,
-  pts: Array<[number, number]>,
-): void {
-  pts.forEach(([lon, lat], i) => {
-    const p = projectLonLat(lon, lat);
-    if (i === 0) ctx.moveTo(p.x, p.y);
-    else ctx.lineTo(p.x, p.y);
-  });
-}
-
-/** 山脊符号：水墨"斧劈皴"笔触 */
-function drawRidgeSymbols(ctx: CanvasRenderingContext2D): void {
-  for (const ridge of RIDGES) {
-    const size = 5.5 + ridge.height * 6;
-    for (let i = 0; i < ridge.points.length - 1; i++) {
-      const a = projectLonLat(ridge.points[i]![0], ridge.points[i]![1]);
-      const b = projectLonLat(ridge.points[i + 1]![0], ridge.points[i + 1]![1]);
-      const steps = Math.max(2, Math.round(Math.hypot(b.x - a.x, b.y - a.y) / (size * 1.3)));
-      for (let s = 0; s < steps; s++) {
-        const t = (s + 0.5) / steps;
-        const nx = -(b.y - a.y);
-        const ny = b.x - a.x;
-        const len = Math.hypot(nx, ny) || 1;
-        const offset = ((s % 3) - 1) * size * 0.55;
-        const px = a.x + (b.x - a.x) * t + (nx / len) * offset;
-        const py = a.y + (b.y - a.y) * t + (ny / len) * offset;
-        const h = size * (0.8 + ((s * 37) % 11) / 20);
-        drawBrushPeak(ctx, px, py, size, h);
-      }
-    }
-  }
-}
-
-function drawBrushPeak(
-  ctx: CanvasRenderingContext2D,
-  px: number,
-  py: number,
-  size: number,
-  h: number,
-): void {
-  const base = py + size * 0.5;
-
-  ctx.beginPath();
-  ctx.moveTo(px, py - h);
-  ctx.quadraticCurveTo(px - size * 0.5, py - h * 0.15, px - size, base);
-  ctx.lineTo(px, base);
-  ctx.closePath();
-  ctx.fillStyle = PALETTE.mountain0;
-  ctx.fill();
-
-  ctx.beginPath();
-  ctx.moveTo(px, py - h);
-  ctx.quadraticCurveTo(px + size * 0.45, py - h * 0.1, px + size, base);
-  ctx.lineTo(px, base);
-  ctx.closePath();
-  ctx.fillStyle = PALETTE.mountain1;
-  ctx.fill();
-
-  ctx.beginPath();
-  ctx.moveTo(px - size, base);
-  ctx.quadraticCurveTo(px - size * 0.5, py - h * 0.15, px, py - h);
-  ctx.quadraticCurveTo(px + size * 0.45, py - h * 0.1, px + size, base);
-  ctx.strokeStyle = 'rgba(58,49,32,0.55)';
-  ctx.lineWidth = 0.7;
-  ctx.stroke();
-
-  ctx.beginPath();
-  ctx.moveTo(px, py - h + 1.5);
-  ctx.quadraticCurveTo(px - size * 0.16, py - h * 0.4, px - size * 0.3, base - 1);
-  ctx.strokeStyle = 'rgba(246,238,214,0.45)';
-  ctx.lineWidth = 0.8;
-  ctx.stroke();
-}
-
-function paintTerrain(ctx: CanvasRenderingContext2D): void {
-  const { width: W, height: H } = MAP;
-
-  const sea = ctx.createLinearGradient(0, 0, W, H);
-  sea.addColorStop(0, PALETTE.sea0);
-  sea.addColorStop(0.55, PALETTE.sea1);
-  sea.addColorStop(1, PALETTE.sea2);
-  ctx.fillStyle = sea;
-  ctx.fillRect(0, 0, W, H);
-  drawSeaTexture(ctx, W, H);
-
-  drawLandShape(ctx, W, H);
-}
-
-function drawLandShape(ctx: CanvasRenderingContext2D, W: number, H: number): void {
-  const landPath = new Path2D();
-  let first = true;
-  for (const [lon, lat] of COASTLINE_PTS) {
-    const p = projectLonLat(lon, lat);
-    if (first) {
-      landPath.moveTo(p.x, p.y);
-      first = false;
-    } else {
-      landPath.lineTo(p.x, p.y);
-    }
-  }
-  const frame: Array<[number, number]> = [
-    [LON0, LAT0],
-    [LON0, LAT1],
-    [LON1, LAT1],
-    [LON1, LAT0],
-  ];
-  for (const [lon, lat] of frame) {
-    const p = projectLonLat(lon, lat);
-    landPath.lineTo(p.x, p.y);
-  }
-  landPath.closePath();
-
-  const landGrad = ctx.createLinearGradient(0, 0, W * 0.7, H);
-  landGrad.addColorStop(0, PALETTE.paper0);
-  landGrad.addColorStop(0.55, PALETTE.paper1);
-  landGrad.addColorStop(1, PALETTE.paper2);
-  ctx.fillStyle = landGrad;
-  ctx.fill(landPath);
-
-  ctx.save();
-  ctx.clip(landPath);
-  drawLandGrain(ctx, W, H);
-  drawContours(ctx);
-
-  for (const blob of DESERTS) {
-    const p = projectLonLat(blob.lon, blob.lat);
-    const r = blob.r * (MAP.width / 25.5);
-    const g = ctx.createRadialGradient(p.x, p.y, r * 0.15, p.x, p.y, r);
-    g.addColorStop(0, 'rgba(201,172,112,0.55)');
-    g.addColorStop(0.7, 'rgba(193,163,104,0.28)');
-    g.addColorStop(1, 'rgba(193,163,104,0)');
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  for (const ridge of RIDGES) {
-    const draw = (widthScale: number, color: string, alpha: number) => {
-      ctx.beginPath();
-      pathFromLonLat(ctx, ridge.points as Array<[number, number]>);
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.strokeStyle = color;
-      ctx.globalAlpha = alpha;
-      ctx.lineWidth = ridge.width * 2 * widthScale * (MAP.width / 25.5);
-      ctx.stroke();
-      ctx.globalAlpha = 1;
-    };
-    draw(1.55, 'rgba(126,110,76,0.42)', 1);
-    draw(0.95, 'rgba(146,127,88,0.5)', 1);
-    draw(0.42, 'rgba(101,86,55,0.42)', 1);
-  }
-
-  for (const blob of FORESTS) {
-    const p = projectLonLat(blob.lon, blob.lat);
-    const r = blob.r * (MAP.width / 25.5);
-    const g = ctx.createRadialGradient(p.x, p.y, r * 0.1, p.x, p.y, r);
-    g.addColorStop(0, 'rgba(104,120,70,0.42)');
-    g.addColorStop(0.75, 'rgba(96,112,66,0.2)');
-    g.addColorStop(1, 'rgba(96,112,66,0)');
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  for (const blob of MARSHES) {
-    const p = projectLonLat(blob.lon, blob.lat);
-    const r = blob.r * (MAP.width / 25.5);
-    const g = ctx.createRadialGradient(p.x, p.y, r * 0.1, p.x, p.y, r);
-    g.addColorStop(0, 'rgba(106,128,108,0.42)');
-    g.addColorStop(1, 'rgba(106,128,108,0)');
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  drawRidgeSymbols(ctx);
-  ctx.restore();
-
-  for (const lake of LAKES) {
-    const p = projectLonLat(lake.lon, lake.lat);
-    const rx = lake.rx * (MAP.width / 25.5);
-    const ry = lake.ry * (MAP.height / 22);
-    const g = ctx.createRadialGradient(p.x, p.y, Math.min(rx, ry) * 0.2, p.x, p.y, Math.max(rx, ry));
-    g.addColorStop(0, PALETTE.lake1);
-    g.addColorStop(1, PALETTE.lake0);
-    ctx.beginPath();
-    ctx.ellipse(p.x, p.y, rx, ry, 0, 0, Math.PI * 2);
-    ctx.fillStyle = g;
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(48,64,58,0.55)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    ctx.strokeStyle = 'rgba(214,236,230,0.22)';
-    for (let i = 1; i <= 2; i++) {
-      ctx.beginPath();
-      ctx.ellipse(p.x, p.y + ry * 0.22 * i, rx * 0.55, ry * 0.3 * i, 0, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-  }
-
-  const rivers = [...RIVERS].sort((a, b) => a.scale - b.scale);
-  for (const river of rivers) {
-    const base = riverWorldWidth(river.scale);
-    for (const [width, color] of [
-      [base * 1.55, 'rgba(52,66,58,0.38)'],
-      [base, PALETTE.river1],
-      [base * 0.4, PALETTE.riverCore],
-    ] as const) {
-      ctx.beginPath();
-      pathFromLonLat(ctx, [...river.points] as Array<[number, number]>);
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      ctx.strokeStyle = color;
-      ctx.lineWidth = width;
-      ctx.stroke();
-    }
-  }
-
-  ctx.beginPath();
-  pathFromLonLat(ctx, COASTLINE_PTS);
-  ctx.strokeStyle = 'rgba(44,38,22,0.55)';
-  ctx.lineWidth = 2.2;
-  ctx.lineJoin = 'round';
-  ctx.stroke();
-  ctx.beginPath();
-  pathFromLonLat(ctx, COASTLINE_PTS);
-  ctx.strokeStyle = 'rgba(248,241,222,0.45)';
-  ctx.lineWidth = 0.9;
-  ctx.stroke();
-}
-
+// ── 地形分块缓存 ────────────────────────────────────────────
 /**
  * 地形分块缓存。
  *
@@ -507,7 +243,7 @@ function terrainChunkAt(cx: number, cy: number): TerrainChunk {
     // 稍微外扩 1 世界单位，压掉块与块之间的抗锯齿缝
     ctx.rect(x - 1, y - 1, w + 2, h + 2);
     ctx.clip();
-    paintTerrain(ctx);
+    paintTerrain(ctx, { x: x - 1, y: y - 1, w: w + 2, h: h + 2 });
   }
 
   const chunk: TerrainChunk = { canvas, x, y, w, h, used: ++terrainChunkTick };
@@ -524,6 +260,30 @@ function terrainChunkAt(cx: number, cy: number): TerrainChunk {
     if (oldestKey) terrainChunks.delete(oldestKey);
   }
   return chunk;
+}
+
+/**
+ * 全图总览缓存。
+ *
+ * 20% 缩放时整张地图都要显示。若继续用 576 世界单位的分块，一屏要
+ * 一百多块、LRU 会反复淘汰重画。这里单独烘焙一张 691×518 的总览图
+ * （世界尺寸的 1/10），低倍率时直接整图缩放绘制。
+ */
+const OVERVIEW_SCALE = 1 / 10;
+let overviewCanvas: HTMLCanvasElement | null = null;
+
+function terrainOverview(): HTMLCanvasElement {
+  if (overviewCanvas) return overviewCanvas;
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(MAP.width * OVERVIEW_SCALE);
+  canvas.height = Math.round(MAP.height * OVERVIEW_SCALE);
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.setTransform(OVERVIEW_SCALE, 0, 0, OVERVIEW_SCALE, 0, 0);
+    paintTerrain(ctx, { x: 0, y: 0, w: MAP.width, h: MAP.height });
+  }
+  overviewCanvas = canvas;
+  return canvas;
 }
 
 function screenToWorld(
@@ -559,55 +319,171 @@ function visibleWorldRect(
 }
 
 const LEGEND: Array<{ label: string; color: string }> = [
-  { label: '山地', color: '#8c7a56' },
-  { label: '丘陵', color: '#b6a37a' },
-  { label: '林地', color: '#687846' },
-  { label: '河流', color: '#7fa9a8' },
+  { label: '山地', color: '#a28a5d' },
+  { label: '丘陵', color: '#c6b17e' },
+  { label: '林地', color: '#53683a' },
+  { label: '河流', color: '#64979a' },
   { label: '荒漠', color: '#c1a368' },
 ];
 
-function drawSeaTexture(ctx: CanvasRenderingContext2D, W: number, H: number): void {
-  ctx.strokeStyle = 'rgba(206,228,224,0.07)';
-  ctx.lineWidth = 1.2;
-  for (let i = 0; i < 26; i++) {
-    const y = (i / 26) * H + ((i * 37) % 11);
+// ── 城池绘制（3×3 城墙 + 四门） ─────────────────────────────
+/** 关隘图标：城楼 + 垛口 + 旗帜，屏幕空间尺寸 */
+function drawPassIcon(
+  ctx: CanvasRenderingContext2D,
+  r: number,
+  color: string,
+  blocked: boolean,
+): void {
+  const hw = r * 1.05;
+  // 落影
+  ctx.beginPath();
+  ctx.ellipse(0, r * 0.92, hw * 1.1, r * 0.3, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(24,20,14,0.35)';
+  ctx.fill();
+
+  // 城墙基座
+  ctx.beginPath();
+  ctx.roundRect(-hw, -r * 0.15, hw * 2, r * 1.1, r * 0.12);
+  ctx.fillStyle = blocked ? '#9c6a52' : '#e2d4b4';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(52,43,28,0.85)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // 垛口
+  const merlons = 5;
+  for (let i = 0; i < merlons; i++) {
+    const mw = (hw * 2) / (merlons * 1.55);
+    const x = -hw + (i + 0.28) * ((hw * 2) / merlons);
+    ctx.fillStyle = blocked ? '#8f5b46' : '#d7c7a4';
+    ctx.fillRect(x, -r * 0.42, mw, r * 0.3);
+    ctx.strokeStyle = 'rgba(52,43,28,0.7)';
+    ctx.lineWidth = 0.7;
+    ctx.strokeRect(x, -r * 0.42, mw, r * 0.3);
+  }
+
+  // 门洞
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.32, r * 0.95);
+  ctx.lineTo(-r * 0.32, r * 0.22);
+  ctx.quadraticCurveTo(0, -r * 0.32, r * 0.32, r * 0.22);
+  ctx.lineTo(r * 0.32, r * 0.95);
+  ctx.closePath();
+  ctx.fillStyle = blocked ? 'rgba(74,28,22,0.95)' : 'rgba(58,46,30,0.92)';
+  ctx.fill();
+
+  // 门楼屋顶：中间高、两檐上翘
+  ctx.beginPath();
+  ctx.moveTo(-hw * 1.22, -r * 0.48);
+  ctx.quadraticCurveTo(-hw * 0.9, -r * 0.62, -hw * 0.52, -r * 0.86);
+  ctx.lineTo(hw * 0.52, -r * 0.86);
+  ctx.quadraticCurveTo(hw * 0.9, -r * 0.62, hw * 1.22, -r * 0.48);
+  ctx.quadraticCurveTo(0, -r * 0.7, -hw * 1.22, -r * 0.48);
+  ctx.closePath();
+  ctx.fillStyle = blocked ? '#7f3427' : PALETTE.roof;
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(38,31,20,0.85)';
+  ctx.lineWidth = 0.9;
+  ctx.stroke();
+
+  // 屋脊高光
+  ctx.beginPath();
+  ctx.moveTo(-hw * 0.5, -r * 0.84);
+  ctx.lineTo(hw * 0.5, -r * 0.84);
+  ctx.strokeStyle = 'rgba(246,236,208,0.55)';
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+
+  // 旗杆与势力旗
+  ctx.beginPath();
+  ctx.moveTo(0, -r * 0.86);
+  ctx.lineTo(0, -r * 1.7);
+  ctx.strokeStyle = 'rgba(46,40,24,0.9)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(0, -r * 1.7);
+  ctx.lineTo(r * 1.05, -r * 1.5);
+  ctx.lineTo(0, -r * 1.28);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(38,31,20,0.6)';
+  ctx.lineWidth = 0.7;
+  ctx.stroke();
+}
+
+/** 港口图标：蓝色渡口令牌 + 渡船剪影 */
+function drawPortIcon(
+  ctx: CanvasRenderingContext2D,
+  r: number,
+  color: string,
+  blocked: boolean,
+): void {
+  // 落影
+  ctx.beginPath();
+  ctx.ellipse(0, r * 0.95, r * 0.95, r * 0.3, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(20,32,34,0.35)';
+  ctx.fill();
+
+  // 令牌底
+  const g = ctx.createLinearGradient(0, -r, 0, r);
+  g.addColorStop(0, blocked ? '#7f5a52' : '#4d8588');
+  g.addColorStop(1, blocked ? '#5f3c38' : '#2f5f66');
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.fillStyle = g;
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(228,242,236,0.85)';
+  ctx.lineWidth = 1.3;
+  ctx.stroke();
+  if (color) {
     ctx.beginPath();
-    for (let x = 0; x <= W; x += 24) {
-      const wave = Math.sin((x / W) * Math.PI * 6 + i) * 2.6;
-      if (x === 0) ctx.moveTo(x, y + wave);
-      else ctx.lineTo(x, y + wave);
-    }
+    ctx.arc(0, 0, r + 1.6, 0, Math.PI * 2);
+    ctx.strokeStyle = hexA(color, 0.9);
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  // 渡船：船身 + 桅杆 + 帆
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.62, r * 0.22);
+  ctx.quadraticCurveTo(0, r * 0.68, r * 0.62, r * 0.22);
+  ctx.quadraticCurveTo(0, r * 0.4, -r * 0.62, r * 0.22);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(42,32,20,0.95)';
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(0, r * 0.25);
+  ctx.lineTo(0, -r * 0.72);
+  ctx.strokeStyle = 'rgba(246,238,216,0.95)';
+  ctx.lineWidth = 1.1;
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(0, -r * 0.68);
+  ctx.quadraticCurveTo(r * 0.55, -r * 0.38, r * 0.44, r * 0.04);
+  ctx.lineTo(0, r * 0.08);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(244,234,208,0.95)';
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(52,44,28,0.7)';
+  ctx.lineWidth = 0.7;
+  ctx.stroke();
+
+  // 水波
+  for (let i = 0; i < 2; i++) {
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.66, r * (0.56 + i * 0.2));
+    ctx.quadraticCurveTo(-r * 0.22, r * (0.36 + i * 0.2), 0, r * (0.56 + i * 0.2));
+    ctx.quadraticCurveTo(r * 0.24, r * (0.72 + i * 0.2), r * 0.66, r * (0.52 + i * 0.2));
+    ctx.strokeStyle = `rgba(196,234,228,${0.8 - i * 0.3})`;
+    ctx.lineWidth = 1;
     ctx.stroke();
   }
 }
 
-function drawContours(ctx: CanvasRenderingContext2D): void {
-  ctx.save();
-  ctx.setLineDash([9, 11]);
-  for (const ridge of RIDGES) {
-    for (const spread of [3.2, 4.6]) {
-      ctx.beginPath();
-      pathFromLonLat(ctx, ridge.points as Array<[number, number]>);
-      ctx.strokeStyle = `rgba(70,58,38,${0.1 / spread})`;
-      ctx.lineWidth = ridge.width * 2 * spread * (MAP.width / 25.5);
-      ctx.stroke();
-    }
-  }
-  ctx.restore();
-}
-
-function drawLandGrain(ctx: CanvasRenderingContext2D, W: number, H: number): void {
-  for (let i = 0; i < 3600; i++) {
-    const a = (i * 2654435761) % 4294967296;
-    const b = (i * 1103515245 + 12345) % 4294967296;
-    const x = (a / 4294967296) * W;
-    const y = (b / 4294967296) * H;
-    ctx.fillStyle = i % 3 === 0 ? 'rgba(252,246,228,0.18)' : 'rgba(96,80,50,0.09)';
-    ctx.fillRect(x, y, 1.3, 1.3);
-  }
-}
-
-// ── 城池绘制（3×3 城墙 + 四门） ─────────────────────────────
 /** 门楼：一座带歇山顶的小门楼，宽度随城郭缩放 */
 function drawGateHouse(
   ctx: CanvasRenderingContext2D,
@@ -1176,8 +1052,8 @@ export function MapCanvas({
   const centerView = (nextZoom: number, cityId = selectedCityId) => {
     if (size.w < 10 || size.h < 10) return;
     const zoom = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM);
-    if (zoom <= 1.001) {
-      setView({ zoom: 1, x: 0, y: 0 });
+    if (zoom <= MIN_ZOOM + 0.001) {
+      setView({ zoom: MIN_ZOOM, x: 0, y: 0 });
       return;
     }
     const base = project(state, size.w, size.h);
@@ -1204,13 +1080,33 @@ export function MapCanvas({
   useEffect(() => {
     if (!size.w || !size.h || mobileInit.current) return;
     mobileInit.current = true;
-    // 大地图默认进入「州郡视角」：桌面 200%，手机 260%。
-    centerView(size.w < 560 ? 2.6 : 2);
+    // 默认州郡视角：任何屏幕都固定 100%，看清城池与关港
+    centerView(DEFAULT_ZOOM);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [size.w, size.h]);
 
+  // 空闲时先把全图总览烘焙好，避免第一次点「全图」时卡一拍
   useEffect(() => {
-    if (view.zoom <= 1.01 || !size.w || !size.h) return;
+    const prewarm = () => terrainOverview();
+    const idleWindow = window as typeof window & {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    // 后台标签页里 requestIdleCallback 可能一直不触发，留一个定时兜底；
+    // 前台正常使用时 rIC 会先跑，兜底那次直接命中缓存。
+    const fallback = window.setTimeout(prewarm, 4000);
+    if (idleWindow.requestIdleCallback) {
+      const id = idleWindow.requestIdleCallback(prewarm, { timeout: 3000 });
+      return () => {
+        idleWindow.cancelIdleCallback?.(id);
+        window.clearTimeout(fallback);
+      };
+    }
+    return () => window.clearTimeout(fallback);
+  }, []);
+
+  useEffect(() => {
+    if (view.zoom <= MIN_ZOOM + 0.01 || !size.w || !size.h) return;
     const base = project(state, size.w, size.h);
     const target = base.find((p) => p.city.id === selectedCityId);
     if (!target) return;
@@ -1276,26 +1172,30 @@ export function MapCanvas({
     ctx.translate(layout.ox, layout.oy);
     ctx.scale(layout.scale, layout.scale);
     ctx.imageSmoothingEnabled = true;
-    const chunkX0 = Math.max(0, Math.floor(worldRect.x / TERRAIN_CHUNK_WORLD));
-    const chunkY0 = Math.max(0, Math.floor(worldRect.y / TERRAIN_CHUNK_WORLD));
-    const chunkX1 = Math.min(
-      Math.ceil(MAP.width / TERRAIN_CHUNK_WORLD) - 1,
-      Math.floor((worldRect.x + worldRect.w) / TERRAIN_CHUNK_WORLD),
-    );
-    const chunkY1 = Math.min(
-      Math.ceil(MAP.height / TERRAIN_CHUNK_WORLD) - 1,
-      Math.floor((worldRect.y + worldRect.h) / TERRAIN_CHUNK_WORLD),
-    );
-    for (let cy = chunkY0; cy <= chunkY1; cy++) {
-      for (let cx = chunkX0; cx <= chunkX1; cx++) {
-        const chunk = terrainChunkAt(cx, cy);
-        // 0.5 世界单位外扩，遮住块缝
-        ctx.drawImage(chunk.canvas, chunk.x - 0.5, chunk.y - 0.5, chunk.w + 1, chunk.h + 1);
+    if (view.zoom < 0.4) {
+      ctx.drawImage(terrainOverview(), 0, 0, MAP.width, MAP.height);
+    } else {
+      const chunkX0 = Math.max(0, Math.floor(worldRect.x / TERRAIN_CHUNK_WORLD));
+      const chunkY0 = Math.max(0, Math.floor(worldRect.y / TERRAIN_CHUNK_WORLD));
+      const chunkX1 = Math.min(
+        Math.ceil(MAP.width / TERRAIN_CHUNK_WORLD) - 1,
+        Math.floor((worldRect.x + worldRect.w) / TERRAIN_CHUNK_WORLD),
+      );
+      const chunkY1 = Math.min(
+        Math.ceil(MAP.height / TERRAIN_CHUNK_WORLD) - 1,
+        Math.floor((worldRect.y + worldRect.h) / TERRAIN_CHUNK_WORLD),
+      );
+      for (let cy = chunkY0; cy <= chunkY1; cy++) {
+        for (let cx = chunkX0; cx <= chunkX1; cx++) {
+          const chunk = terrainChunkAt(cx, cy);
+          // 0.5 世界单位外扩，遮住块缝
+          ctx.drawImage(chunk.canvas, chunk.x - 0.5, chunk.y - 0.5, chunk.w + 1, chunk.h + 1);
+        }
       }
     }
-    if (view.zoom >= 0.32) {
-      ctx.strokeStyle = `rgba(58,48,32,${0.14 * Math.min(1, (view.zoom - 0.32) / 0.4)})`;
-      ctx.lineWidth = 0.4;
+    if (view.zoom >= 4.5) {
+      ctx.strokeStyle = `rgba(58,48,32,${0.05 * Math.min(1, (view.zoom - 4.5) / 0.8)})`;
+      ctx.lineWidth = 0.3;
       ctx.beginPath();
       const c0 = Math.max(1, Math.floor(worldRect.x / MAP.tile));
       const c1 = Math.min(MAP.cols, Math.ceil((worldRect.x + worldRect.w) / MAP.tile));
@@ -1358,25 +1258,25 @@ export function MapCanvas({
       ctx.fillText(text, bx, by + 0.5);
     };
 
-    // 道路
+    // 道路：略带弧度的淡色驿道，避免把地图切成坐标纸
     for (const e of state.edges) {
       const a = byId.get(e.a);
       const b = byId.get(e.b);
       if (!a || !b) continue;
+      const dist = Math.hypot(b.x - a.x, b.y - a.y);
+      if (dist < 1) continue;
+      const bend = (hashText(e.a + '|' + e.b) - 0.5) * Math.min(90, dist * 0.18);
+      const mx = (a.x + b.x) / 2 - ((b.y - a.y) / dist) * bend;
+      const my = (a.y + b.y) / 2 + ((b.x - a.x) / dist) * bend;
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
-      ctx.strokeStyle = PALETTE.roadCasing;
-      ctx.lineWidth = 3;
+      ctx.quadraticCurveTo(mx, my, b.x, b.y);
+      ctx.strokeStyle = 'rgba(92,76,48,0.2)';
+      ctx.lineWidth = 3.4;
       ctx.stroke();
-      ctx.beginPath();
-      ctx.setLineDash([5, 6]);
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
-      ctx.strokeStyle = PALETTE.road;
-      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = 'rgba(240,229,198,0.46)';
+      ctx.lineWidth = 1.6;
       ctx.stroke();
-      ctx.setLineDash([]);
     }
 
     // 出征路线
@@ -1423,23 +1323,33 @@ export function MapCanvas({
       const world = gateWorldPos(site);
       const sp = worldToScreen(world.x, world.y, size.w, size.h, view, layout);
       gateScreen.set(site.gate.id, sp);
-      gateHitsRef.current.push({ id: site.gate.id, x: sp.x, y: sp.y, r: 10 });
+      gateHitsRef.current.push({ id: site.gate.id, x: sp.x, y: sp.y, r: 12 });
     }
 
-    if (view.zoom >= 1.35) {
+    if (view.zoom >= 0.8) {
       for (const site of gateList) {
         const blocked = gateBlockedFor(state, site.gate.id, state.playerFactionId);
         const points = site.lane.map(tileScreen);
         if (points.length < 2) continue;
-        ctx.beginPath();
-        ctx.setLineDash(blocked ? [2, 3] : [3, 4]);
-        ctx.lineWidth = blocked ? 1.6 : 1.3;
+        const traceLane = () => {
+          ctx.beginPath();
+          points.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+        };
+        // 外晕：先让通行线在山水底图上"浮"起来
+        traceLane();
+        ctx.setLineDash([]);
+        ctx.lineWidth = blocked ? 5 : 4;
+        ctx.strokeStyle = blocked ? 'rgba(70,26,20,0.35)' : 'rgba(40,54,46,0.3)';
+        ctx.stroke();
+        // 内线：港口是渡船虚线，关隘是山道点线
+        traceLane();
+        ctx.setLineDash(site.water ? [5, 5] : [2, 4]);
+        ctx.lineWidth = blocked ? 2 : 1.8;
         ctx.strokeStyle = blocked
-          ? 'rgba(186,76,56,0.82)'
+          ? 'rgba(218,96,74,0.95)'
           : site.water
-            ? 'rgba(124,184,190,0.68)'
-            : 'rgba(158,124,68,0.7)';
-        points.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+            ? 'rgba(152,214,214,0.95)'
+            : 'rgba(198,160,96,0.95)';
         ctx.stroke();
       }
       ctx.setLineDash([]);
@@ -1449,86 +1359,43 @@ export function MapCanvas({
       const gate = site.gate;
       const sp = gateScreen.get(gate.id)!;
       const owner = gateOwnerOf(state, gate.id);
-      const color = owner ? state.factions[owner]?.color ?? '#8a8274' : '#8a8274';
+      const color = owner ? state.factions[owner]?.color ?? '#8a8274' : '';
       const blocked = gateBlockedFor(state, gate.id, state.playerFactionId);
-      const r = 5;
+      const r = gate.kind === 'pass' ? 7.2 : 7.6;
       ctx.save();
       ctx.translate(sp.x, sp.y);
-      if (gate.kind === 'pass') {
-        const hw = r * 1.15;
-        ctx.beginPath();
-        ctx.moveTo(-hw, r * 0.85);
-        ctx.lineTo(-hw, -r * 0.25);
-        ctx.lineTo(-hw * 0.55, -r * 0.95);
-        ctx.lineTo(hw * 0.55, -r * 0.95);
-        ctx.lineTo(hw, -r * 0.25);
-        ctx.lineTo(hw, r * 0.85);
-        ctx.closePath();
-        ctx.fillStyle = 'rgba(238,229,208,0.96)';
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(52,45,30,0.8)';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(-r * 0.36, r * 0.85);
-        ctx.lineTo(-r * 0.36, r * 0.05);
-        ctx.quadraticCurveTo(0, -r * 0.5, r * 0.36, r * 0.05);
-        ctx.lineTo(r * 0.36, r * 0.85);
-        ctx.closePath();
-        ctx.fillStyle = 'rgba(66,56,36,0.9)';
-        ctx.fill();
-        ctx.beginPath();
-        ctx.moveTo(0, -r * 0.95);
-        ctx.lineTo(0, -r * 1.8);
-        ctx.strokeStyle = 'rgba(52,45,30,0.8)';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(0, -r * 1.8);
-        ctx.lineTo(r * 1.1, -r * 1.55);
-        ctx.lineTo(0, -r * 1.3);
-        ctx.closePath();
-        ctx.fillStyle = color;
-        ctx.fill();
-      } else {
-        ctx.beginPath();
-        ctx.arc(0, 0, r, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(72,120,122,0.95)';
-        ctx.fill();
-        ctx.strokeStyle = owner ? color : 'rgba(228,242,236,0.85)';
-        ctx.lineWidth = 1.4;
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(-r * 0.62, 0);
-        ctx.quadraticCurveTo(-r * 0.2, -r * 0.5, 0, 0);
-        ctx.quadraticCurveTo(r * 0.2, r * 0.5, r * 0.62, 0);
-        ctx.strokeStyle = 'rgba(214,240,234,0.95)';
-        ctx.lineWidth = 1.1;
-        ctx.stroke();
-      }
+      if (gate.kind === 'pass') drawPassIcon(ctx, r, color || '#8a8274', blocked);
+      else drawPortIcon(ctx, r, color, blocked);
 
       // 敌对封锁：红圈 + 斜杠，全图一眼能看出此路不通
       if (blocked) {
         ctx.beginPath();
-        ctx.arc(0, 0, r * 1.55, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(206,86,62,0.95)';
-        ctx.lineWidth = 1.2;
+        ctx.arc(0, 0, r * 1.6, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(214,86,62,0.98)';
+        ctx.lineWidth = 1.6;
         ctx.stroke();
         ctx.beginPath();
-        ctx.moveTo(-r * 0.9, -r * 0.9);
-        ctx.lineTo(r * 0.9, r * 0.9);
-        ctx.strokeStyle = 'rgba(206,86,62,0.95)';
-        ctx.lineWidth = 1.4;
+        ctx.moveTo(-r * 0.95, -r * 0.95);
+        ctx.lineTo(r * 0.95, r * 0.95);
+        ctx.strokeStyle = 'rgba(214,86,62,0.98)';
+        ctx.lineWidth = 1.8;
         ctx.stroke();
       }
 
       if (gate.id === selectedGateId || gate.id === hoverGate) {
         ctx.beginPath();
-        ctx.arc(0, 0, r * 2.05, 0, Math.PI * 2);
+        ctx.arc(0, 0, r * 1.9, 0, Math.PI * 2);
         ctx.strokeStyle =
-          gate.id === selectedGateId ? 'rgba(246,214,122,0.95)' : 'rgba(246,232,196,0.75)';
-        ctx.lineWidth = 1.3;
+          gate.id === selectedGateId ? 'rgba(246,214,122,1)' : 'rgba(246,232,196,0.85)';
+        ctx.lineWidth = gate.id === selectedGateId ? 2 : 1.5;
         ctx.stroke();
+        if (gate.id === selectedGateId) {
+          ctx.beginPath();
+          ctx.arc(0, 0, r * 2.15, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(246,214,122,0.3)';
+          ctx.lineWidth = 3;
+          ctx.stroke();
+        }
       }
       ctx.restore();
     }
@@ -1823,7 +1690,7 @@ export function MapCanvas({
     }
 
     // 关防名
-    if (view.zoom >= 1.25) {
+    if (view.zoom >= 0.95) {
       const gateFont = '600 9px "PingFang SC", "Noto Sans SC", sans-serif';
       for (const site of Object.values(gateSites())) {
         const world = gateWorldPos(site);
@@ -1831,7 +1698,7 @@ export function MapCanvas({
         const blocked = gateBlockedFor(state, site.gate.id, state.playerFactionId);
         ctx.font = gateFont;
         const tw = ctx.measureText(site.gate.name).width + 7;
-        const box: Box = { x1: sp.x - tw / 2, y1: sp.y + 6, x2: sp.x + tw / 2, y2: sp.y + 18 };
+        const box: Box = { x1: sp.x - tw / 2, y1: sp.y + 10, x2: sp.x + tw / 2, y2: sp.y + 22 };
         if (overlaps(box)) continue;
         drawChip(
           box,
@@ -2106,14 +1973,15 @@ export function MapCanvas({
             ? 'grabbing'
             : selectedArmyId
               ? 'crosshair'
-              : view.zoom > 1.01
+              : view.zoom > MIN_ZOOM + 0.01
                 ? 'grab'
                 : hover || hoverArmy || hoverGate
                   ? 'pointer'
                   : 'default',
         }}
         onWheel={(e) => {
-          centerView(view.zoom + (e.deltaY < 0 ? 0.28 : -0.28));
+          const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+          centerView(view.zoom * factor);
         }}
         onPointerDown={(e) => {
           if (e.button !== 0 || size.w < 10) return;
@@ -2134,7 +2002,7 @@ export function MapCanvas({
             const dx = e.clientX - drag.startX;
             const dy = e.clientY - drag.startY;
             if (Math.hypot(dx, dy) > 4) drag.moved = true;
-            if (drag.moved && view.zoom > 1.01) {
+            if (drag.moved && view.zoom > MIN_ZOOM + 0.01) {
               setView(
                 clampPan(
                   { zoom: view.zoom, x: drag.originX + dx, y: drag.originY + dy },
@@ -2236,18 +2104,26 @@ export function MapCanvas({
       />
 
       <div className="map-zoom" aria-label="地图缩放">
-        <button type="button" onClick={() => centerView(view.zoom - 0.35)} title="缩小">
+        <button
+          type="button"
+          onClick={() => centerView(view.zoom / 1.25)}
+          title="缩小"
+        >
           −
         </button>
         <span className="map-zoom-pct">{Math.round(view.zoom * 100)}%</span>
-        <button type="button" onClick={() => centerView(view.zoom + 0.35)} title="放大">
+        <button
+          type="button"
+          onClick={() => centerView(view.zoom * 1.25)}
+          title="放大"
+        >
           ＋
         </button>
         <button
           type="button"
           className="map-zoom-reset"
-          onClick={() => setView({ zoom: 1, x: 0, y: 0 })}
-          title="显示全图"
+          onClick={() => centerView(MIN_ZOOM)}
+          title="显示全图（20%）"
         >
           全图
         </button>
@@ -2282,7 +2158,3 @@ export function MapCanvas({
   );
 }
 
-// 局部常量：避免每次绘制都解构
-const COASTLINE_PTS = COASTLINE;
-const [LON0, LON1] = LON_RANGE;
-const [LAT0, LAT1] = LAT_RANGE;

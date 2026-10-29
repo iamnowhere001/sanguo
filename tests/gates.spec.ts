@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { createGame } from '../src/data/tables/scenarios';
 import { GATES } from '../src/data/tables/gates';
 import type { Army, GameState } from '../src/core/state';
-import { gateSiteById, isGateLane } from '../src/render/gateGrid';
+import { gateSiteAt, gateSiteById, isGateLane } from '../src/render/gateGrid';
+import { routeForArmy } from '../src/systems/army';
 import { isWaterKind, tileKindAt, wallTileAt } from '../src/render/terrainGrid';
 import { marchDaysForArmy } from '../src/data/tables/marchCost';
 import {
@@ -56,8 +57,9 @@ describe('关防 · 地图落位', () => {
           true,
         );
         if (prev) {
-          const step = Math.max(Math.abs(p.col - prev.col), Math.abs(p.row - prev.row));
-          expect(step, `${gate.id} 通行线不连续`).toBeLessThanOrEqual(1);
+          // 行军是 4 邻接：纯斜线在规则层走不通
+          const step = Math.abs(p.col - prev.col) + Math.abs(p.row - prev.row);
+          expect(step, `${gate.id} 通行线不连续`).toBe(1);
         }
         prev = p;
       }
@@ -78,6 +80,20 @@ describe('关防 · 地图落位', () => {
       expect(site.water).toBe(true);
       expect(site.lane.some((p) => isWaterKind(tileKindAt(p.col, p.row)))).toBe(true);
     }
+  });
+
+  it('江夏→襄阳经夏口渡过江，不再绕行整条长江', () => {
+    const s = createGame({ scenarioId: 'chibi', playerFactionId: 'liubei', aiEnabled: false });
+    const route = routeForArmy(s, 'liubei', 'jiangxia', 'xiangyang');
+    expect(route).not.toBeNull();
+    const names = new Set(
+      route!.path
+        .map((p) => gateSiteAt(p.col, p.row)?.gate.name)
+        .filter((n): n is string => Boolean(n)),
+    );
+    expect(names.has('夏口渡')).toBe(true);
+    // 绕行整条水系时超过 600 格；真正渡江后应在一百多格内
+    expect(route!.path.length).toBeLessThan(200);
   });
 });
 

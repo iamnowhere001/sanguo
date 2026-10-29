@@ -16,8 +16,9 @@ import { MAP } from '../src/data/tables/geography';
 import type { GridPoint } from '../src/core/state';
 
 const key = (p: GridPoint) => `${p.col},${p.row}`;
+/** 行军只走上下左右：关防通行线必须是 4 邻接的阶梯，不能是纯斜线 */
 const adjacent = (a: GridPoint, b: GridPoint) =>
-  Math.max(Math.abs(a.col - b.col), Math.abs(a.row - b.row)) === 1;
+  Math.abs(a.col - b.col) + Math.abs(a.row - b.row) === 1;
 
 const sites = gateSites();
 const wall = cityTileIndex().wall;
