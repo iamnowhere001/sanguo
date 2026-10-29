@@ -849,6 +849,7 @@ export function BattleScreen() {
           >
             <span>
               {targetCityName} · {BATTLEFIELD_THEME_LABEL[battlefieldTheme]}
+              {battle.waterBattle ? ' · 水战' : ''}
             </span>
             <b>{battlefieldName}</b>
           </div>
@@ -1179,6 +1180,7 @@ export function BattleScreen() {
                     }}
                   >
                     {BATTLEFIELD_THEME_LABEL[battlefieldTheme]}
+                    {battle.waterBattle ? ' · 水战' : ''}
                   </span>
                   <b>{battlefieldName}</b>
                 </div>

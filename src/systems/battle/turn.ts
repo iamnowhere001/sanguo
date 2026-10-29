@@ -104,6 +104,17 @@ export function advanceBattleDay(
     }
   }
 
+  // 水战：非水兵单位滞留水域会晕船减员（保留最后 1 兵，交由常规溃散判定）
+  if (b.waterBattle) {
+    for (const u of Object.values(b.units)) {
+      if (u.routed || u.unitClass === 'navy' || u.troops <= 0) continue;
+      if (b.grid[u.y]?.[u.x] !== 'water') continue;
+      const lost = Math.max(1, Math.floor(u.troops * 0.05));
+      u.troops = Math.max(1, u.troops - lost);
+      b.log.push(`${u.name} 不习水战，溺水减员 ${lost}`);
+    }
+  }
+
   for (const u of Object.values(b.units)) {
     if (u.routed) continue;
     u.hasMoved = false;

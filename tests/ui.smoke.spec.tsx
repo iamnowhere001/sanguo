@@ -101,7 +101,7 @@ describe('UI 冒烟', () => {
     document.body.appendChild(el);
     root = createRoot(el);
     await act(async () => {
-      root!.render(<CityPanel state={state} cityId="jiangxia" onDeploy={() => {}} />);
+      root!.render(<CityPanel state={state} cityId="jiangxia" onMarch={() => {}} />);
     });
     expect(el.textContent).toContain('训练');
     expect(el.textContent).toContain('演武');
@@ -137,7 +137,7 @@ describe('UI 冒烟', () => {
     document.body.appendChild(el);
     root = createRoot(el);
     await act(async () => {
-      root!.render(<CityPanel state={state} cityId="jiangxia" onDeploy={() => {}} />);
+      root!.render(<CityPanel state={state} cityId="jiangxia" onMarch={() => {}} />);
     });
     expect(el.textContent).not.toContain('营造');
     expect(el.textContent).toContain('搜索');
@@ -249,7 +249,7 @@ describe('UI 冒烟', () => {
     document.body.appendChild(el);
     root = createRoot(el);
     await act(async () => {
-      root!.render(<CityPanel state={state} cityId="xiangyang" onDeploy={() => {}} />);
+      root!.render(<CityPanel state={state} cityId="xiangyang" onMarch={() => {}} />);
     });
     expect(el.textContent).toContain('劝降');
     expect(el.textContent).toContain('中立空城');
@@ -355,7 +355,7 @@ describe('UI 冒烟', () => {
     document.body.appendChild(el);
     root = createRoot(el);
     await act(async () => {
-      root!.render(<CityPanel state={state} cityId="xinye" onDeploy={() => {}} />);
+      root!.render(<CityPanel state={state} cityId="xinye" onMarch={() => {}} />);
     });
     const btn = [...el.querySelectorAll('button')].find(
       (b) => b.textContent?.trim() === '弃城撤退',

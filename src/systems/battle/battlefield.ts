@@ -1,4 +1,5 @@
 import { createRng, nextFloat, randInt, type RngState } from '../../core/rng';
+import { sliceBattlefieldFromMap } from './mapSlice';
 import type {
   BattleTerrain,
   BattlefieldFeature,
@@ -1046,6 +1047,22 @@ export function buildBattlefield(ctx: BattlefieldContext): BattlefieldResult {
 
   const draft: BattlefieldDraft = { grid: blankGrid(), features: [] };
   generatorFor(theme)(draft, rng, variant);
+
+  // L 档「地图裁切战」：地形取自大地图真实栅格，主题专名与地标继续沿用。
+  // 裁切层会强制城池格 / 出生点 / 中央通道，并在水域切断时架浮桥。
+  const slice = sliceBattlefieldFromMap(ctx.targetCityId, ctx.attackerCityId);
+  if (slice) {
+    const keepLandmarks = draft.features.filter(
+      (f) => slice.grid[f.y]?.[f.x] !== 'water' && !isCityCell(f.x, f.y),
+    );
+    draft.grid = slice.grid;
+    draft.features = [
+      ...keepLandmarks,
+      ...slice.features.filter(
+        (f) => !keepLandmarks.some((k) => k.x === f.x && k.y === f.y && k.kind === f.kind),
+      ),
+    ];
+  }
   finalize(draft);
 
   return {

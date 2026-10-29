@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import type { City, CitySize, GameState } from '../core/state';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { City, CitySize, GameState, GridPoint } from '../core/state';
 import { cityTroops } from '../core/selectors';
 import { BALANCE } from '../data/tables/balance';
 import { CITY_SIZE_LABEL, fortificationLabel } from '../data/tables/cities';
@@ -20,7 +20,7 @@ import {
 import { GATES } from '../data/tables/gates';
 import { armyWorldPos } from '../systems/army';
 import { TERRAIN_LABEL } from '../data/tables/unitClasses';
-import { cityWorldPos } from './terrainGrid';
+import { cityWorldPos, tileCenter } from './terrainGrid';
 import { drawFactionPattern, factionPattern, PATTERN_LABEL } from './factionPattern';
 
 interface ProjectedCity {
@@ -510,13 +510,21 @@ export function MapCanvas({
   state,
   selectedCityId,
   attackRoutes,
+  marchFrom,
+  marchTargets,
   onSelect,
+  onMarchTarget,
 }: {
   state: GameState;
   selectedCityId: string;
-  /** 从当前选中城池可发兵抵达的路线（沿道路逐城） */
-  attackRoutes: Array<{ targetId: string; path: string[]; days: number }>;
+  /** 从选中城池可出征抵达的路线（网格逐格） */
+  attackRoutes: Array<{ targetId: string; path: GridPoint[]; days: number }>;
+  /** 出征模式：从哪座城出兵；非空时点击可抵达的敌城即出征 */
+  marchFrom?: string | null;
+  /** 出征模式下的全部可选目标（路线过多时只画一部分，但全部可点） */
+  marchTargets?: string[];
   onSelect: (id: string) => void;
+  onMarchTarget?: (cityId: string) => void;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -533,6 +541,10 @@ export function MapCanvas({
     moved: boolean;
   } | null>(null);
   const mobileInit = useRef(false);
+  const attackSet = useMemo(
+    () => new Set(marchTargets ?? attackRoutes.map((r) => r.targetId)),
+    [marchTargets, attackRoutes],
+  );
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -644,24 +656,22 @@ export function MapCanvas({
     ctx.scale(layout.scale, layout.scale);
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(cache, 0, 0, MAP.width, MAP.height);
+    // 行军网格：放大后显出 96×72 的格子，提示"部队在格上走"
+    if (view.zoom >= 1.2) {
+      ctx.strokeStyle = `rgba(58,48,32,${0.14 * Math.min(1, (view.zoom - 1.2) / 0.45)})`;
+      ctx.lineWidth = 0.4;
+      ctx.beginPath();
+      for (let c = 1; c < MAP.cols; c++) {
+        ctx.moveTo(c * MAP.tile, 0);
+        ctx.lineTo(c * MAP.tile, MAP.height);
+      }
+      for (let r = 1; r < MAP.rows; r++) {
+        ctx.moveTo(0, r * MAP.tile);
+        ctx.lineTo(MAP.width, r * MAP.tile);
+      }
+      ctx.stroke();
+    }
     ctx.restore();
-
-    // 战略网格：弱到只提供"这是一张作战图"的暗示
-    ctx.strokeStyle = 'rgba(60,50,34,0.07)';
-    ctx.lineWidth = 1;
-    const gridStep = 44 * Math.max(1, view.zoom);
-    for (let x = 0; x < size.w; x += gridStep) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, size.h);
-      ctx.stroke();
-    }
-    for (let y = 0; y < size.h; y += gridStep) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(size.w, y);
-      ctx.stroke();
-    }
 
     const pts = project(state, size.w, size.h, view);
     pointsRef.current = pts;
@@ -734,12 +744,15 @@ export function MapCanvas({
       ctx.setLineDash([]);
     }
 
-    // 出征路线：沿道路逐城画出真实行军路径
-    const attackSet = new Set(attackRoutes.map((r) => r.targetId));
+    // 出征路线：沿网格逐格画出真实行军路径
+    const tileScreen = (p: GridPoint) => {
+      const c = tileCenter(p.col, p.row);
+      return worldToScreen(c.x, c.y, size.w, size.h, view, layout);
+    };
     for (const route of attackRoutes) {
-      const points = [selectedCityId, ...route.path]
-        .map((id) => byId.get(id))
-        .filter((p): p is ProjectedCity => Boolean(p));
+      const start = byId.get(marchFrom ?? selectedCityId);
+      if (!start) continue;
+      const points = [start, ...route.path.map(tileScreen)];
       if (points.length < 2) continue;
       ctx.beginPath();
       ctx.setLineDash([4, 4]);
@@ -753,7 +766,9 @@ export function MapCanvas({
       ctx.beginPath();
       ctx.setLineDash([4, 4]);
       ctx.lineWidth = 1.6;
-      ctx.strokeStyle = 'rgba(150,54,40,0.75)';
+      ctx.strokeStyle = marchFrom
+        ? 'rgba(246,214,122,0.9)'
+        : 'rgba(150,54,40,0.75)';
       points.forEach((p, i) => {
         if (i === 0) ctx.moveTo(p.x, p.y);
         else ctx.lineTo(p.x, p.y);
@@ -771,7 +786,7 @@ export function MapCanvas({
       ctx.lineTo(tipX - Math.cos(angle - 0.4) * 6, tipY - Math.sin(angle - 0.4) * 6);
       ctx.lineTo(tipX - Math.cos(angle + 0.4) * 6, tipY - Math.sin(angle + 0.4) * 6);
       ctx.closePath();
-      ctx.fillStyle = 'rgba(150,54,40,0.85)';
+      ctx.fillStyle = marchFrom ? 'rgba(246,214,122,0.95)' : 'rgba(150,54,40,0.85)';
       ctx.fill();
     }
 
@@ -856,6 +871,60 @@ export function MapCanvas({
       ctx.restore();
     }
 
+    // 设施：占一格的农田 / 市场 / 箭楼 / 烽燧，按格子中心绘制
+    for (const f of state.facilities ?? []) {
+      const center = tileCenter(f.col, f.row);
+      const sp = worldToScreen(center.x, center.y, size.w, size.h, view, layout);
+      const ownerId = state.cities[f.cityId]?.ownerId;
+      const color = ownerId ? state.factions[ownerId]?.color ?? '#8a8274' : '#8a8274';
+      ctx.save();
+      ctx.translate(sp.x, sp.y);
+      // 底：纸色圆牌，保证任何地形上都读得出来
+      ctx.beginPath();
+      ctx.arc(0, 0, 5, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(243,235,214,0.95)';
+      ctx.fill();
+      ctx.strokeStyle = hexA(color, 0.9);
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+      if (f.kind === 'farm') {
+        // 农田：三道垄
+        ctx.strokeStyle = 'rgba(96,120,64,0.95)';
+        ctx.lineWidth = 1.1;
+        for (let i = -1; i <= 1; i++) {
+          ctx.beginPath();
+          ctx.moveTo(-3, i * 1.6);
+          ctx.lineTo(3, i * 1.6);
+          ctx.stroke();
+        }
+      } else if (f.kind === 'market') {
+        // 市场：方孔铜钱
+        ctx.fillStyle = 'rgba(168,124,62,0.95)';
+        ctx.beginPath();
+        ctx.arc(0, 0, 2.6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(243,235,214,0.95)';
+        ctx.fillRect(-0.8, -0.8, 1.6, 1.6);
+      } else if (f.kind === 'tower') {
+        // 箭楼：城门状小塔
+        ctx.fillStyle = 'rgba(70,58,40,0.92)';
+        ctx.fillRect(-2.4, -1.6, 4.8, 4.2);
+        ctx.fillRect(-3.2, -2.6, 6.4, 1.4);
+        ctx.fillRect(-1.6, 0.2, 1.4, 2.4);
+        ctx.fillRect(0.6, 0.2, 1.4, 2.4);
+      } else {
+        // 烽燧：一簇火苗
+        ctx.fillStyle = 'rgba(196,96,44,0.95)';
+        ctx.beginPath();
+        ctx.moveTo(0, -3.2);
+        ctx.quadraticCurveTo(2.4, 0, 0.8, 2.4);
+        ctx.quadraticCurveTo(0, 3.2, -0.8, 2.4);
+        ctx.quadraticCurveTo(-2.4, 0, 0, -3.2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
     // 城池节点
     for (const p of pts) {
       const c = p.city;
@@ -887,7 +956,11 @@ export function MapCanvas({
         ctx.stroke();
         ctx.setLineDash([]);
       };
-      if (isTarget) outline(4.5, 'rgba(150,54,40,0.85)', 1.2, [4, 3]);
+      if (isTarget) {
+        // 出征模式下目标城用实线金框，明确"点这里就出兵"
+        if (marchFrom) outline(5, 'rgba(214,178,96,0.95)', 2, []);
+        else outline(4.5, 'rgba(150,54,40,0.85)', 1.2, [4, 3]);
+      }
       if (isSel) outline(3, 'rgba(196,158,86,0.95)', 1.6, [5, 3]);
       if (isHover) {
         ctx.beginPath();
@@ -1025,14 +1098,17 @@ export function MapCanvas({
       }
     }
 
-    // 在途部队：沿剩余路线画虚线，标记用势力色小旗
+    // 在途部队：沿剩余网格路线画虚线，标记用势力色小旗
+    const armyTileScreen = (p: GridPoint) => {
+      const c = tileCenter(p.col, p.row);
+      return worldToScreen(c.x, c.y, size.w, size.h, view, layout);
+    };
     for (const army of state.armies ?? []) {
       const pos = armyWorldPos(state, army);
       if (!pos) continue;
       const cur = worldToScreen(pos.x, pos.y, size.w, size.h, view, layout);
       const color = state.factions[army.factionId]?.color ?? '#8a8274';
-      const routePts = [cur, ...army.path.map((id) => byId.get(id))]
-        .filter((p): p is { x: number; y: number } => Boolean(p));
+      const routePts = [cur, ...army.path.map(armyTileScreen)];
       if (routePts.length > 1) {
         ctx.beginPath();
         ctx.setLineDash([5, 5]);
@@ -1267,7 +1343,7 @@ export function MapCanvas({
         ctx.fillText('! 粮草已达上限 95%：征兵 / 卖粮 / 分城', x + 12, y + (hasSkill ? 136 : 120));
       }
     }
-  }, [state, selectedCityId, attackRoutes, hover, size, view]);
+  }, [state, selectedCityId, attackRoutes, hover, size, view, marchFrom, attackSet]);
 
   const hit = (clientX: number, clientY: number): string | null => {
     const canvas = canvasRef.current;
@@ -1278,7 +1354,10 @@ export function MapCanvas({
     let best: { id: string; d: number } | null = null;
     for (const p of pointsRef.current) {
       const d = Math.hypot(p.x - x, p.y - y);
-      const rr = Math.max(14, NODE_RADIUS[p.city.size] * 1.12 + 2);
+      // 出征模式下高亮目标画了更大的实线框，命中范围同比放大，点选更稳
+      const rr =
+        Math.max(14, NODE_RADIUS[p.city.size] * 1.12 + 2) +
+        (marchFrom && attackSet.has(p.city.id) ? 8 : 0);
       if (d <= rr && (!best || d < best.d)) best = { id: p.city.id, d };
     }
     return best?.id ?? null;
@@ -1340,7 +1419,10 @@ export function MapCanvas({
           setDragging(false);
           if (drag?.moved) return;
           const id = hit(e.clientX, e.clientY);
-          if (id) onSelect(id);
+          if (id) {
+            if (marchFrom && onMarchTarget && attackSet.has(id)) onMarchTarget(id);
+            else onSelect(id);
+          }
           if (e.pointerType !== 'mouse') setHover(null);
         }}
         onPointerCancel={() => {

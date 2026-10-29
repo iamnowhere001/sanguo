@@ -304,6 +304,26 @@ export const BALANCE = {
     frontThreatRatio: 1.25,
   },
 
+  // ── 大地图设施（L 档）─────────────────────────────────────
+  /**
+   * 设施占一格地形，归属由所在城的 ownerId 派生，随城易主。
+   * 每城有槽位上限；建造只花金，不占政令，避免与内政争夺同一资源。
+   */
+  FACILITY: {
+    /** 每城可同时拥有的设施数 */
+    slots: 3,
+    /** 农田：每月加粮 */
+    farm: { label: '农田', gold: 120, foodPerMonth: 160 },
+    /** 市场：每月加金 */
+    market: { label: '市场', gold: 150, goldPerMonth: 110 },
+    /** 箭楼：守城时提供城防加成 */
+    tower: { label: '箭楼', gold: 180, fortificationBonus: 8, cap: 24 },
+    /** 烽燧：为从本城出征的部队提速 */
+    beacon: { label: '烽燧', gold: 100, marchBonus: 0.1, marchBonusCap: 0.3 },
+    /** 设施只能在城周围这么多格内选址 */
+    radius: 4,
+  },
+
   // ── 现代重制：国策 / 政令 / 军令 / 事件 / 章节 ─────────────
   MODERN: {
     /** 国策每 3 回合重新三选一 */

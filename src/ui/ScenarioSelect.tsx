@@ -144,7 +144,7 @@ export function ScenarioSelect() {
             </div>
             <div>
               <dt>时间粒度</dt>
-              <dd>1 回合 = 1 个月</dd>
+              <dd>1 回合 = 1 旬（3 旬 = 1 月）</dd>
             </div>
             <div>
               <dt>胜利条件</dt>

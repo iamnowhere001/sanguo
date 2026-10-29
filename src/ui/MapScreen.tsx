@@ -6,7 +6,7 @@ import { gameStore, useGameStore } from '../store/gameStore';
 import { MapCanvas } from '../render/MapCanvas';
 import { audio } from '../audio';
 import { AudioSettingsButton } from './AudioSettings';
-import { CityPanel, DeployDialog } from './CityPanel';
+import { CityPanel } from './CityPanel';
 import { FactionDiplomacyDialog } from './FactionDiplomacyDialog';
 import { FactionRail } from './FactionRail';
 import { RosterDialog } from './RosterDialog';
@@ -47,7 +47,7 @@ export function MapScreen() {
       mine[0]?.id ??
       'jiangxia',
   );
-  const [deploy, setDeploy] = useState<{ from: string; target: string } | null>(null);
+  const [marchFrom, setMarchFrom] = useState<string | null>(null);
   const [saveOpen, setSaveOpen] = useState(false);
   const [rosterOpen, setRosterOpen] = useState(false);
   const [factionDipOpen, setFactionDipOpen] = useState(false);
@@ -57,23 +57,32 @@ export function MapScreen() {
   const [councilOpen, setCouncilOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
 
-  /** 能从选中城池发兵抵达的敌城（按旬回合沿己方道路推进） */
+  /** 当前规划用的出发城：出征模式下锁定出发城，否则跟随选中城池 */
+  const routeFromCityId = marchFrom ?? selectedCityId;
+
+  /** 能从出发城出征抵达的敌城（网格寻路，山岭水域不可通行） */
   const attackRoutes = useMemo(() => {
-    const c = state.cities[selectedCityId];
+    const c = state.cities[routeFromCityId];
     if (!c || c.ownerId !== state.playerFactionId) return [];
-    return reachableTargets(state, state.playerFactionId, selectedCityId).map((t) => ({
+    return reachableTargets(state, state.playerFactionId, routeFromCityId).map((t) => ({
       targetId: t.cityId,
       path: t.path,
       days: t.days,
     }));
-  }, [state, selectedCityId]);
+  }, [state, routeFromCityId]);
 
   const attackFromSelected = useMemo(
     () => attackRoutes.map((r) => r.targetId),
     [attackRoutes],
   );
 
-  /** 全图任意己方城池可发兵抵达的敌城：用于左侧列表标记 */
+  /** 地图上实际画出的路线：平常只画最近几条，出征模式再全量铺开 */
+  const visibleRoutes = useMemo(
+    () => (marchFrom ? attackRoutes.slice(0, 24) : attackRoutes.slice(0, 8)),
+    [attackRoutes, marchFrom],
+  );
+
+  /** 全图任意己方城池可出征抵达的敌城：用于左侧列表标记 */
   const attackableAny = useMemo(() => {
     const set = new Set<string>();
     for (const c of mine) {
@@ -119,13 +128,25 @@ export function MapScreen() {
     if (res.needConfirm) setConfirmTurn(res.message);
   };
 
+  /** 城池直接出征：从地图点选的敌城，按自动点将立即建队行军 */
+  const handleMarchTarget = (targetCityId: string) => {
+    if (!marchFrom) return;
+    const res = store.dispatch({ t: 'SORTIE', fromCityId: marchFrom, targetCityId });
+    if (res.ok) {
+      gameStore.notify(res.message, 'good');
+      setMarchFrom(null);
+      setSelectedCityId(targetCityId);
+    } else {
+      gameStore.notify(res.message, 'warn');
+    }
+  };
+
   /** 【优化】§5.2 键盘全流程：? 看快捷键，E 结束回合，Esc 关闭帮助 */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = document.activeElement as HTMLElement | null;
       if (el && ['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName)) return;
       const otherModal =
-        Boolean(deploy) ||
         saveOpen ||
         rosterOpen ||
         quitOpen ||
@@ -135,6 +156,10 @@ export function MapScreen() {
         Boolean(state.unifyReady) ||
         Boolean(state.pendingEvent) ||
         (state.policy?.offer?.length ?? 0) > 0;
+      if (e.key === 'Escape' && marchFrom) {
+        setMarchFrom(null);
+        return;
+      }
       if (e.key === '?') {
         if (!otherModal) {
           e.preventDefault();
@@ -161,7 +186,7 @@ export function MapScreen() {
     return () => window.removeEventListener('keydown', onKey);
   }, [
     helpOpen,
-    deploy,
+    marchFrom,
     saveOpen,
     rosterOpen,
     quitOpen,
@@ -460,23 +485,43 @@ export function MapScreen() {
         <main className="map-main">
           <MapCanvas
             state={state}
-            selectedCityId={selectedCityId}
-            attackRoutes={attackRoutes}
+            selectedCityId={routeFromCityId}
+            attackRoutes={visibleRoutes}
+            marchTargets={marchFrom ? attackFromSelected : undefined}
+            marchFrom={marchFrom}
+            onMarchTarget={handleMarchTarget}
             onSelect={(id) => {
               // 地图点选走画布，不经过按钮委托，这里单独补声
               if (id !== selectedCityId) audio.play('ui.select');
               setSelectedCityId(id);
+              // 出征模式下点了非目标城池：退出出征，避免路线锁定与右栏脱节
+              if (marchFrom) setMarchFrom(null);
             }}
           />
-          <div className={`map-hint${attackFromSelected.length > 0 ? ' accent' : ''}`}>
-            {state.cities[selectedCityId]?.ownerId === state.playerFactionId
-              ? attackFromSelected.length > 0
-                ? `可发兵：${attackFromSelected
-                    .map((id) => state.cities[id]?.name)
-                    .slice(0, 3)
-                    .join('、')} · 部队沿地图行军，抵达后接战`
-                : '此城暂无发兵路线 · 可经营、征兵或先打通己方道路'
-              : '点击己方城池经营 · 点击敌城查看守军与行军距离'}
+          {marchFrom ? (
+            <div className="march-banner" role="status">
+              <b>出征</b>
+              <span>
+                {state.cities[marchFrom]?.name} 已点将 · 点击高亮的敌城出征
+              </span>
+              <em>{attackRoutes.length} 个目标</em>
+              <button type="button" className="btn ghost sm" onClick={() => setMarchFrom(null)}>
+                取消
+              </button>
+            </div>
+          ) : null}
+          <div
+            className={`map-hint${
+              attackFromSelected.length > 0 || marchFrom ? ' accent' : ''
+            }`}
+          >
+            {marchFrom
+              ? '金色虚线为实际行军路线 · 山岭与水域不可通行 · Esc 取消出征'
+              : state.cities[selectedCityId]?.ownerId === state.playerFactionId
+                ? attackFromSelected.length > 0
+                  ? `${attackFromSelected.length} 座敌城可达 · 点「出征」后在地图上选目标`
+                  : '此城暂无出征路线 · 山岭水域阻隔或需先取道'
+                : '点击己方城池经营 · 点击敌城查看守军'}
           </div>
         </main>
 
@@ -484,7 +529,10 @@ export function MapScreen() {
           key={selectedCityId}
           state={state}
           cityId={selectedCityId}
-          onDeploy={(from, target) => setDeploy({ from, target })}
+          onMarch={(cityId) => {
+            setMarchFrom(cityId);
+            setSelectedCityId(cityId);
+          }}
         />
       </div>
 
@@ -508,7 +556,7 @@ export function MapScreen() {
             </span>
           ) : null}
           {attackFromSelected.length > 0 ? (
-            <span className="sb-flag">可发兵 {attackFromSelected.length} 城</span>
+            <span className="sb-flag">可出征 {attackFromSelected.length} 城</span>
           ) : (
             <span>点击地图切换城池</span>
           )}
@@ -526,15 +574,6 @@ export function MapScreen() {
       ) : null}
 
       {actCouncilOpen ? <ActCouncilModal state={state} /> : null}
-
-      {deploy ? (
-        <DeployDialog
-          state={state}
-          fromCityId={deploy.from}
-          initialTargetId={deploy.target}
-          onClose={() => setDeploy(null)}
-        />
-      ) : null}
 
       {factionDipOpen ? (
         <FactionDiplomacyDialog

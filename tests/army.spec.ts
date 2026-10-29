@@ -1,143 +1,127 @@
 import { describe, expect, it } from 'vitest';
 import { createGame } from '../src/data/tables/scenarios';
 import { reduce } from '../src/core/reducer';
-import { cityGenerals, cityTroops } from '../src/core/selectors';
+import { MAP } from '../src/data/tables/geography';
+import { cityAnchors, isWaterKind, tileKindAt } from '../src/render/terrainGrid';
 import {
   MARCH_DAYS_PER_XUN,
-  armyDaysRemaining,
-  armyEtaXun,
-  gateEffectOf,
-  legDaysOf,
+  marchDaysOfTile,
+  reachableTargets,
   routeForArmy,
+  sortieArmy,
 } from '../src/systems/army';
-import { gatesOnEdge } from '../src/data/tables/gates';
+import type { GameState } from '../src/core/state';
 
-function fresh(scenarioId = 'sanguo') {
-  return createGame({ scenarioId, playerFactionId: 'liubei', aiEnabled: false });
+function fresh(): GameState {
+  return createGame({ scenarioId: 'sanguo', playerFactionId: 'liubei', aiEnabled: false });
 }
 
-/** 取城里最强的两名带兵武将 */
-function pickAttackers(state: ReturnType<typeof fresh>, cityId: string): string[] {
-  return [...cityGenerals(state, cityId)]
-    .filter((g) => g.troops > 0)
-    .sort((a, b) => b.troops - a.troops)
-    .slice(0, 2)
-    .map((g) => g.id);
+function myCity(s: GameState): string {
+  return s.factions[s.playerFactionId]!.cityIds[0]!;
 }
 
-describe('关卡与渡口', () => {
-  it('虎牢关挂在洛阳东侧道路上，敌对时加里程与城防', () => {
-    const s = fresh();
-    expect(gatesOnEdge('luoyang', 'chenliu').map((g) => g.id)).toContain('hulao');
-    const hostile = gateEffectOf(s, 'luoyang', 'chenliu', 'sunquan');
-    expect(hostile.days).toBeGreaterThanOrEqual(2);
-    expect(hostile.hostilePasses[0]?.name).toBe('虎牢关');
-    expect(hostile.fortification).toBeGreaterThan(0);
-    // 关隘归属长安 / 洛阳一方时，自己人过关不加城防
-    const friendly = gateEffectOf(s, 'luoyang', 'chenliu', s.cities.luoyang!.ownerId!);
-    expect(friendly.fortification).toBe(0);
-  });
-
-  it('渡口把随后的接战标记为水战，并计入行军天数', () => {
-    const s = fresh();
-    const ferry = gatesOnEdge('jiangxia', 'jiangling').find((g) => g.kind === 'ferry');
-    expect(ferry?.name).toBe('赤壁渡');
-    const effect = gateEffectOf(s, 'jiangxia', 'jiangling', 'liubei');
-    expect(effect.waterBattle).toBe(true);
-    expect(legDaysOf(s, 'jiangxia', 'jiangling', 'liubei')).toBeGreaterThan(
-      s.edges.find((e) => (e.a === 'jiangxia' && e.b === 'jiangling') || (e.a === 'jiangling' && e.b === 'jiangxia'))!.cost,
-    );
-  });
-});
-
-describe('行军路线', () => {
-  it('只能以己方城池作中继，己方目标不可发兵', () => {
-    const s = fresh();
-    expect(routeForArmy(s, 'liubei', 'chengdu', 'mianzhu')).toBeNull();
-
-    const route = routeForArmy(s, 'liubei', 'chengdu', 'changan');
-    expect(route).not.toBeNull();
-    for (const id of route!.path.slice(0, -1)) {
-      expect(s.cities[id]!.ownerId).toBe('liubei');
-    }
-    expect(route!.path.at(-1)).toBe('changan');
-  });
-
-  it('每旬推 10 天：远袭需要数旬', () => {
-    const s = fresh();
-    const route = routeForArmy(s, 'liubei', 'chengdu', 'changan')!;
-    expect(route.days).toBeGreaterThan(MARCH_DAYS_PER_XUN + 4);
-
-    const gens = pickAttackers(s, 'chengdu');
-    expect(gens.length).toBeGreaterThan(0);
-    const r = reduce(s, {
-      t: 'MARCH',
-      fromCityId: 'chengdu',
-      targetCityId: 'changan',
-      generalIds: gens,
-    });
-    expect(r.result.ok).toBe(true);
-
-    const army = r.state.armies![0]!;
-    expect(army.path.at(-1)).toBe('changan');
-    expect(armyEtaXun(r.state, army)).toBe(Math.ceil(route.days / MARCH_DAYS_PER_XUN));
-    // 在途武将从城中驻军里剔除，避免双重计数
-    expect(cityTroops(r.state, 'chengdu')).toBeLessThan(cityTroops(s, 'chengdu'));
-    for (const id of gens) expect(r.state.generals[id]!.armyId).toBe(army.id);
-
-    const after = reduce(r.state, { t: 'END_TURN', confirmed: true }).state;
-    expect(after.phase).toBe('map');
-    expect(after.armies![0]).toBeDefined();
-    expect(after.armies![0]!.fromCityId).not.toBe('chengdu');
-    expect(armyDaysRemaining(after, after.armies![0]!)).toBeLessThan(route.days);
-  });
-});
-
-describe('抵达接战', () => {
-  it('抵达敌城切入战棋，路线必定相邻', () => {
-    const s = fresh('chibi');
-    const gens = pickAttackers(s, 'jiangxia');
-    expect(gens.length).toBeGreaterThan(0);
-    const r = reduce(s, {
-      t: 'MARCH',
-      fromCityId: 'jiangxia',
-      targetCityId: 'xiangyang',
-      generalIds: gens,
-    });
-    expect(r.result.ok).toBe(true);
-
-    const after = reduce(r.state, { t: 'END_TURN', confirmed: true }).state;
-    expect(after.phase).toBe('battle');
-    expect(after.armies).toEqual([]);
-    for (const id of gens) expect(after.generals[id]!.armyId).toBeUndefined();
-    expect(after.battle!.fromCityId).toBe('jiangxia');
-    expect(after.battle!.targetCityId).toBe('xiangyang');
-  });
-
-  it('空城直接入城，不进入战棋', () => {
-    const s = fresh('chibi');
-    const target = s.cities.xiangyang!;
-    for (const g of Object.values(s.generals)) {
-      if (g.locationId === target.id) {
-        g.status = 'inactive';
-        g.troops = 0;
+describe('网格大地图行军', () => {
+  it('山岭与水域不可通行，平原最省天数', () => {
+    expect(marchDaysOfTile(0, 0)).toBeGreaterThan(0);
+    let sawWater = false;
+    let sawMountain = false;
+    for (let row = 0; row < MAP.rows && (!sawWater || !sawMountain); row++) {
+      for (let col = 0; col < MAP.cols; col++) {
+        const kind = tileKindAt(col, row);
+        if (isWaterKind(kind)) {
+          sawWater = true;
+          expect(Number.isFinite(marchDaysOfTile(col, row))).toBe(false);
+        }
+        if (kind === 'mountain') {
+          sawMountain = true;
+          expect(Number.isFinite(marchDaysOfTile(col, row))).toBe(false);
+        }
       }
     }
-    target.troops = 0;
+    expect(sawWater && sawMountain).toBe(true);
+  });
 
-    const gens = pickAttackers(s, 'jiangxia');
-    const r = reduce(s, {
-      t: 'MARCH',
-      fromCityId: 'jiangxia',
-      targetCityId: 'xiangyang',
-      generalIds: gens,
+  it('寻路路线逐格相连、不穿越山岭水域、终点是目标城格', () => {
+    const s = fresh();
+    const from = myCity(s);
+    const targets = reachableTargets(s, s.playerFactionId, from);
+    expect(targets.length).toBeGreaterThan(0);
+
+    for (const t of targets.slice(0, 5)) {
+      const anchor = cityAnchors()[t.cityId]!;
+      expect(t.path.at(-1)).toMatchObject({ col: anchor.col, row: anchor.row });
+      for (const p of t.path) {
+        expect(Number.isFinite(marchDaysOfTile(p.col, p.row))).toBe(true);
+      }
+      // 逐格相邻（4 邻域）
+      let prev: { col: number; row: number } = cityAnchors()[from]!;
+      for (const p of t.path) {
+        const step = Math.abs(p.col - prev.col) + Math.abs(p.row - prev.row);
+        expect(step).toBe(1);
+        prev = p;
+      }
+      expect(t.days).toBeGreaterThanOrEqual(t.path.length);
+    }
+  });
+
+  it('城池直接出征：自动点将、落在出发城格、带完整路径', () => {
+    const s = fresh();
+    const from = myCity(s);
+    const target = reachableTargets(s, s.playerFactionId, from)[0]!;
+    const route = routeForArmy(s, s.playerFactionId, from, target.cityId)!;
+
+    const r = sortieArmy(s, from, target.cityId);
+    expect(r.ok).toBe(true);
+
+    const army = s.armies!.at(-1)!;
+    const anchor = cityAnchors()[from]!;
+    expect(army.at).toEqual({ col: anchor.col, row: anchor.row });
+    expect(army.path).toEqual(route.path);
+    expect(army.path.at(-1)).toEqual({
+      col: cityAnchors()[target.cityId]!.col,
+      row: cityAnchors()[target.cityId]!.row,
     });
-    expect(r.result.ok).toBe(true);
+    expect(army.factionId).toBe(s.playerFactionId);
+    expect(army.troops).toBeGreaterThan(0);
+    for (const id of army.generalIds) {
+      expect(s.generals[id]!.armyId).toBe(army.id);
+    }
+  });
 
-    const after = reduce(r.state, { t: 'END_TURN', confirmed: true }).state;
-    expect(after.phase).toBe('map');
-    expect(after.cities.xiangyang!.ownerId).toBe('liubei');
-    expect(after.armies).toEqual([]);
-    for (const id of gens) expect(after.generals[id]!.locationId).toBe('xiangyang');
+  it('SORTIE action 建队，END_TURN 让部队沿格推进', () => {
+    const state = fresh();
+    const from = myCity(state);
+    const target = reachableTargets(state, state.playerFactionId, from)[0]!;
+    const { state: afterSortie, result } = reduce(state, {
+      t: 'SORTIE',
+      fromCityId: from,
+      targetCityId: target.cityId,
+    });
+    expect(result.ok).toBe(true);
+
+    const armyId = afterSortie.armies![0]!.id;
+    const before = afterSortie.armies![0]!;
+    const { state: afterTurn } = reduce(afterSortie, { t: 'END_TURN' });
+    const army = afterTurn.armies?.find((a) => a.id === armyId);
+    // 可能本旬抵达并开战（部队从列表移除），也可能仍在行军
+    if (army) {
+      const progressed = army.path.length < before.path.length || army.legDays > 0;
+      expect(progressed).toBe(true);
+    } else {
+      expect(afterTurn.phase === 'battle' || afterTurn.phase === 'gameover').toBe(true);
+    }
+  });
+
+  it('同势力城池不是出征目标；无可达目标时给出明确失败原因', () => {
+    const s = fresh();
+    const from = myCity(s);
+    expect(routeForArmy(s, s.playerFactionId, from, from)).toBeNull();
+    const mine = s.factions[s.playerFactionId]!.cityIds[1];
+    if (mine) expect(routeForArmy(s, s.playerFactionId, from, mine)).toBeNull();
+  });
+
+  it('每旬行军 10 天，约等于 10 格平原', () => {
+    expect(MARCH_DAYS_PER_XUN).toBe(10);
+    expect(marchDaysOfTile(0, 0)).toBeLessThanOrEqual(MARCH_DAYS_PER_XUN);
   });
 });

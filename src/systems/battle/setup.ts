@@ -22,10 +22,12 @@ import { policyTacticBonus } from '../policy';
 import { checkActProgress, recordCityCaptured } from '../chapter';
 import { canAttackFactions } from '../factionDiplomacy';
 import { buildBattlefield } from './battlefield';
+import { WATER_BATTLE_SHARE, waterShareOf } from './mapSlice';
 import { moveRangeOf, SPAWN_ATTACKER, SPAWN_DEFENDER } from './grid';
 import { planBattleObjectives } from './objectives';
 import { checkGameOver, retreatCityFor } from './resolve';
 import { durabilityMaxOf } from '../logistics';
+import { towerFortificationOf } from '../facilities';
 import { topUpFromPool } from '../troops';
 
 /** 从指定战斗流掷天气；返回新流状态，避免偷用其它系统的随机数 */
@@ -263,11 +265,12 @@ export function createBattle(
     defenderFactionId: target.ownerId ?? 'neutral',
     playerSide,
     playerInvolved,
-    // 城池专属技能：守城城防加成（如濡须水寨 / 逍遥津固守）
+    // 城池专属技能 + 箭楼设施：守城城防加成（如濡须水寨 / 逍遥津固守）
     fortification: Math.min(
       100,
       target.fortification +
         (target.skill?.fortificationBonus ?? 0) +
+        towerFortificationOf(state, targetCityId) +
         (opts?.fortificationBonus ?? 0),
     ),
     cityDurabilityMax: durabilityMaxOf(target),
@@ -277,6 +280,11 @@ export function createBattle(
         : Math.round(durabilityMaxOf(target) * 0.8),
     grid,
     battlefield: battlefield.battlefield,
+    // 水战：渡口 / 水城引发的战斗，或战场水域占比超过阈值
+    waterBattle:
+      Boolean(opts?.waterCrossing) ||
+      Boolean(target.isWaterCity) ||
+      waterShareOf(grid) >= WATER_BATTLE_SHARE,
     units,
     side: playerSide,
     day: 1,

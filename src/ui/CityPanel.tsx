@@ -8,10 +8,10 @@ import {
 } from 'react';
 import { BALANCE } from '../data/tables/balance';
 import { CITY_SIZE_LABEL, fortificationLabel } from '../data/tables/cities';
-import { MOVE_RANGE, TERRAIN_LABEL, UNIT_CLASS_LABEL } from '../data/tables/unitClasses';
+import { MOVE_RANGE, TERRAIN_LABEL } from '../data/tables/unitClasses';
 import type { DomesticCmd, GameState, General } from '../core/state';
 import { effForce, effIntellect, neighborsOf } from '../core/state';
-import { MARCH_DAYS_PER_XUN, reachableTargets } from '../systems/army';
+import { reachableTargets } from '../systems/army';
 import {
   cityDamageMultiplier,
   foodOutput,
@@ -25,11 +25,17 @@ import {
 } from '../systems/formulas';
 import { edictCapOf, edictLeftOf, canMarchThisTurn, troopCapOf } from '../systems/domestic';
 import { canTransport, durabilityMaxOf, transportRoom } from '../systems/logistics';
-import { projectedTroops } from '../systems/troops';
 import { PROJECTS, PROJECT_ORDER } from '../data/tables/projects';
 import { projectStartReason } from '../systems/projects';
+import {
+  FACILITY_KIND_LABEL,
+  FACILITY_ORDER,
+  facilitiesOf,
+  facilityBuildReason,
+  facilityCostOf,
+  facilityEffectLabel,
+} from '../systems/facilities';
 import { persuadePlan } from '../systems/diplomacy';
-import { canAttackFactions } from '../systems/factionDiplomacy';
 import { canAbandonCity } from '../systems/abandon';
 import {
   policyFoodMult,
@@ -40,13 +46,6 @@ import {
   policyUpkeepMult,
 } from '../systems/policy';
 import { prisonerRecruitRate, prisonersIn } from '../systems/prisoners';
-import {
-  manualBattleReason,
-  objectiveRewardText,
-  planBattleObjectives,
-  planDelegatedAttack,
-} from '../systems/battle';
-import { actThreeActive } from '../systems/chapter';
 import { gameStore } from '../store/gameStore';
 import { DiplomacyDialog } from './DiplomacyDialog';
 import { ExplorePanel } from './ExplorePanel';
@@ -119,11 +118,12 @@ function recommendItemHolder(
 export function CityPanel({
   state,
   cityId,
-  onDeploy,
+  onMarch,
 }: {
   state: GameState;
   cityId: string;
-  onDeploy: (fromCityId: string, targetCityId: string) => void;
+  /** 进入出征模式：由地图点选目标，城池直接点将出征 */
+  onMarch: (cityId: string) => void;
 }) {
   const city = state.cities[cityId];
   const gens = city ? cityGenerals(state, cityId) : [];
@@ -298,6 +298,8 @@ export function CityPanel({
       : null;
   const projectSlots = BALANCE.MODERN.PROJECT.slots;
   const activeProjects = city.projects ?? [];
+  const cityFacilities = facilitiesOf(state, city.id);
+  const facilitySlots = BALANCE.FACILITY.slots;
   const landmarks = city.landmarks ?? [];
   const baseTradeLimit = tradeLimit(city.commerce, skill?.tradeLimitMult ?? 1);
   const tradeLimitValue = isMine ? policyTradeLimit(state, baseTradeLimit) : baseTradeLimit;
@@ -771,6 +773,72 @@ export function CityPanel({
                   ) : null}
                 </section>
               ) : null}
+
+              <section className="panel-section project-section">
+                <div className="section-title">
+                  <span>
+                    设施
+                    <em
+                      className={`edict-badge${
+                        cityFacilities.length >= facilitySlots ? ' empty' : ''
+                      }`}
+                    >
+                      设施位 {cityFacilities.length}/{facilitySlots}
+                    </em>
+                  </span>
+                </div>
+
+                {cityFacilities.length > 0 ? (
+                  <div className="project-active-list">
+                    {cityFacilities.map((f) => (
+                      <div className="project-active" key={f.id}>
+                        <div className="project-active-head">
+                          <b>{FACILITY_KIND_LABEL[f.kind]}</b>
+                          <span>
+                            ({f.col},{f.row})
+                          </span>
+                        </div>
+                        <div className="project-active-foot">
+                          <span>{facilityEffectLabel(f.kind)}</span>
+                          <span>归属随城</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="project-empty">
+                    在城池周围空地建造设施：农田与市场按月产出，箭楼与烽燧强化守备。
+                  </p>
+                )}
+
+                <div className="project-grid">
+                  {FACILITY_ORDER.map((kind) => {
+                    const reason = facilityBuildReason(state, cityId, kind);
+                    return (
+                      <button
+                        key={kind}
+                        className="project-card"
+                        disabled={Boolean(reason)}
+                        onClick={() =>
+                          gameStore.dispatch({ t: 'BUILD_FACILITY', cityId, kind })
+                        }
+                        title={`${FACILITY_KIND_LABEL[kind]}：${facilityEffectLabel(kind)} · ${facilityCostOf(
+                          kind,
+                        )} 金${reason ? ` · ${reason}` : ''}`}
+                      >
+                        <b>{FACILITY_KIND_LABEL[kind]}</b>
+                        <span className="project-cost">{facilityCostOf(kind)} 金</span>
+                        <span className="project-effect">{facilityEffectLabel(kind)}</span>
+                        {reason ? <span className="project-block">{reason}</span> : null}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="form-hint">
+                  每城最多 {facilitySlots} 个设施，各占一格；城池易主时设施随之易主。
+                </div>
+              </section>
 
               <section className="panel-section" ref={recruitRef}>
                 <div className="section-title">
@@ -1354,17 +1422,12 @@ export function CityPanel({
             }
             title={
               enemyTargets.length > 0
-                ? `发兵 ${enemyTargets.map((c) => c.name).join('、')}`
-                : '暂无发兵路线'
+                ? `出征：在地图上点选目标（可达 ${enemyTargets.length} 城）`
+                : '暂无可行军路线：山岭与水域不可通行'
             }
-            onClick={() => onDeploy(city.id, enemyTargets[0]?.id ?? '')}
+            onClick={() => onMarch(city.id)}
           >
-            {enemyTargets.length > 0
-              ? `发兵 · ${enemyTargets
-                  .slice(0, 2)
-                  .map((c) => c.name)
-                  .join('、')}${enemyTargets.length > 2 ? ` 等 ${enemyTargets.length} 城` : ''}`
-              : '暂无发兵路线'}
+            {enemyTargets.length > 0 ? `出征 · 选择目标（${enemyTargets.length}）` : '暂无出征路线'}
           </button>
           <button
             className="btn"
@@ -1443,254 +1506,3 @@ export function CityPanel({
   );
 }
 
-export function DeployDialog({
-  state,
-  fromCityId,
-  initialTargetId,
-  onClose,
-}: {
-  state: GameState;
-  fromCityId: string;
-  initialTargetId: string;
-  onClose: () => void;
-}) {
-  // M 档：目标不再限定相邻城，而是「沿己方道路可抵达」的敌城
-  const options = useMemo(
-    () => reachableTargets(state, state.playerFactionId, fromCityId),
-    [state, fromCityId],
-  );
-  const targets = options
-    .map((o) => state.cities[o.cityId]!)
-    .filter((c): c is NonNullable<typeof c> => Boolean(c));
-  const [targetId, setTargetId] = useState(initialTargetId || options[0]?.cityId || '');
-  const routeOption = options.find((o) => o.cityId === targetId);
-  useEscape(onClose);
-  const target = state.cities[targetId];
-  const maxAttackers = BALANCE.BATTLE_MAX_ATTACKERS;
-  // 【兵力池】预览按「出征时从城池兵力池补满」之后的兵力算，和实战一致
-  const attackerProjected = useMemo(
-    () => projectedTroops(state, fromCityId),
-    [state, fromCityId],
-  );
-  // 【适配】武将多了以后按兵力排序，默认带最强的两人，避免误选文官
-  const candidates = [...cityGenerals(state, fromCityId)]
-    .map((g) => ({ ...g, troops: attackerProjected.get(g.id) ?? g.troops }))
-    .filter((g) => g.troops > 0)
-    .sort((a, b) => b.troops - a.troops);
-  const [selected, setSelected] = useState<string[]>(
-    candidates.slice(0, 2).map((g) => g.id),
-  );
-
-  const attackerTroops = candidates
-    .filter((g) => selected.includes(g.id))
-    .reduce((sum, g) => sum + g.troops, 0);
-  const defenderProjected = useMemo(
-    () => (target ? projectedTroops(state, target.id) : new Map<string, number>()),
-    [state, target],
-  );
-  const allDefenders = target
-    ? cityGenerals(state, target.id)
-        .map((g) => ({ ...g, troops: defenderProjected.get(g.id) ?? g.troops }))
-        .filter((g) => g.troops > 0)
-        .sort((a, b) => b.troops - a.troops)
-    : [];
-  // 只有前 N 名会上场，其余是预备队：兵力比按实际上场者计算才准
-  const defenders = allDefenders.slice(0, BALANCE.BATTLE_MAX_DEFENDERS);
-  const reserveCount = allDefenders.length - defenders.length;
-  const defenderTroops = defenders.reduce((sum, g) => sum + g.troops, 0);
-  // 城防折算成“等效守军”：城防 100 时，同样兵力更难啃；技能与关隘加成同样计入
-  const gateFort = routeOption?.gate.fortification ?? 0;
-  const fortification = Math.min(
-    100,
-    (target?.fortification ?? 0) +
-      (target?.skill?.fortificationBonus ?? 0) +
-      gateFort,
-  );
-  const effectiveDefenders = defenderTroops * (1 + fortification / 150);
-  const ratio = attackerTroops / Math.max(1, effectiveDefenders);
-  const delegateActive = actThreeActive(state);
-  const manualReason = target ? manualBattleReason(state, target.id) : null;
-  // E7 第三幕快进：在状态副本上跑完整自动战，预览即实际结算结果。
-  const delegatePreview = useMemo(() => {
-    if (!target || !delegateActive) return null;
-    return planDelegatedAttack(state, fromCityId, target.id, selected);
-  }, [state, fromCityId, target, selected, delegateActive]);
-
-  // 部署预览与 createBattle 共用同一题目生成函数；经典模式不显示。
-  const objectivePreview = useMemo(() => {
-    if (!target || defenders.length === 0 || state.settings.ruleset === 'classic') {
-      return null;
-    }
-    const attackers = selected
-      .map((id) => candidates.find((g) => g.id === id))
-      .filter((g): g is General => Boolean(g));
-    if (attackers.length === 0) return null;
-    return planBattleObjectives(
-      state,
-      target.id,
-      attackers,
-      defenders,
-      state.playerFactionId,
-    );
-  }, [state, target, defenders, selected]);
-  const previewObjectives = objectivePreview?.attacker;
-
-  const assessment =
-    defenders.length === 0
-      ? { text: '无守军，可直接占领', tone: 'good' as const }
-      : ratio >= 1.8
-        ? { text: `兵力比 ${ratio.toFixed(1)} : 1，优势`, tone: 'good' as const }
-        : ratio >= 1.3
-          ? { text: `兵力比 ${ratio.toFixed(1)} : 1，可战但需操作`, tone: 'warn' as const }
-          : { text: `兵力比 ${ratio.toFixed(1)} : 1，风险较高`, tone: 'danger' as const };
-
-  const toggle = (id: string) =>
-    setSelected((cur) =>
-      cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id].slice(0, maxAttackers),
-    );
-
-  const launch = () => {
-    if (!target || selected.length === 0) return;
-    const result = gameStore.dispatch({
-      t: 'MARCH',
-      fromCityId,
-      targetCityId: target.id,
-      generalIds: selected,
-    });
-    if (result.ok) onClose();
-  };
-
-  return (
-    <div className="modal" onClick={onClose}>
-      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
-        <header className="modal-head">
-          <h3>发兵 · 地图行军</h3>
-          <button className="btn ghost sm" onClick={onClose}>
-            取消
-          </button>
-        </header>
-
-        {previewObjectives ? (
-          <div className="deploy-objectives">
-            <div className="deploy-objective-main">
-              <span className="bo-kicker">本战主目标</span>
-              <b>{previewObjectives.main.title}</b>
-              <span>{previewObjectives.main.description}</span>
-              <em>达成：{objectiveRewardText(previewObjectives.main)}</em>
-            </div>
-            {previewObjectives.side ? (
-              <div className="deploy-objective-side">
-                <span className="bo-kicker">支线</span>
-                <b>{previewObjectives.side.title}</b>
-                <span>{previewObjectives.side.description}</span>
-                <em>达成：{objectiveRewardText(previewObjectives.side)}</em>
-              </div>
-            ) : null}
-            <p>目标只影响战利与战报，不改变胜负条件；未达成不会额外扣兵。</p>
-          </div>
-        ) : null}
-
-        <div className="deploy-block">
-          <span className="label">目标城池</span>
-          <div className="target-list">
-            {targets.map((c) => {
-              const o = options.find((x) => x.cityId === c.id);
-              return (
-                <button
-                  key={c.id}
-                  className={`target target-stack${c.id === targetId ? ' on' : ''}`}
-                  onClick={() => setTargetId(c.id)}
-                >
-                  <b>{c.name}</b>
-                  <span>
-                    {factionName(state, c.ownerId)} · {cityTroops(state, c.id)} 兵 ·{' '}
-                    {cityGenerals(state, c.id).filter((g) => g.troops > 0).length} 将 · 城防{' '}
-                    {Math.min(100, c.fortification + (c.skill?.fortificationBonus ?? 0))}
-                  </span>
-                  <span className="target-route">
-                    {o ? `行军 ${o.days} 日 · 约 ${Math.ceil(o.days / MARCH_DAYS_PER_XUN)} 旬` : ''}
-                    {o?.gate.hostilePasses.length
-                      ? ` · 攻关 ${o.gate.hostilePasses.map((g) => g.name).join('、')}`
-                      : o?.gate.ferries.length
-                        ? ` · 渡 ${o.gate.ferries.map((g) => g.name).join('、')}`
-                        : ''}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-
-          {routeOption ? (
-            <p className="deploy-route">
-              路线：{state.cities[fromCityId]?.name}
-              {routeOption.path.slice(0, -1).map((id) => ` → ${state.cities[id]?.name}`)}
-              {` → ${state.cities[routeOption.cityId]?.name}`}；预计 {routeOption.days} 日（约{' '}
-              {Math.ceil(routeOption.days / MARCH_DAYS_PER_XUN)} 旬）。
-              {routeOption.gate.hostilePasses.length > 0
-                ? ` 途中强攻关隘，敌城城防 +${routeOption.gate.fortification}。`
-                : ''}
-              {routeOption.gate.ferries.length > 0 ? ' 末段渡河，接战按水战地形。' : ''}
-            </p>
-          ) : null}
-        </div>
-
-        <div className="deploy-block">
-          <div className="deploy-head">
-            <span className="label">
-              出战武将（已选 {selected.length} / {maxAttackers}）
-            </span>
-            <div className="deploy-quick">
-              <button
-                className="btn ghost sm"
-                disabled={candidates.length === 0}
-                onClick={() => setSelected(candidates.slice(0, maxAttackers).map((g) => g.id))}
-                title="按兵力从高到低带满"
-              >
-                补满主力
-              </button>
-              <button
-                className="btn ghost sm"
-                disabled={selected.length === 0}
-                onClick={() => setSelected([])}
-              >
-                清空
-              </button>
-            </div>
-          </div>
-          <div className="target-list">
-            {candidates.map((g) => (
-              <button
-                key={g.id}
-                className={`target${selected.includes(g.id) ? ' on' : ''}`}
-                onClick={() => toggle(g.id)}
-              >
-                <b>{g.name}</b>
-                <span>
-                  {g.troops} 兵 · {UNIT_CLASS_LABEL[g.unitClass]} · {MOVE_RANGE[g.unitClass]} 移动
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className={`ratio-bar tone-${assessment.tone}`}>
-          <span>我方 {fmt(attackerTroops)} 兵</span>
-          <b>{assessment.text}</b>
-          <span>
-            敌方 {fmt(defenderTroops)} 兵
-            {reserveCount > 0 ? `（另有 ${reserveCount} 将预备）` : ''}
-          </span>
-        </div>
-
-        <div className="modal-actions">
-          <button className="btn ghost" onClick={onClose}>
-            再想想
-          </button>
-          <button className="btn primary" disabled={selected.length === 0} onClick={launch}>
-            起兵
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}

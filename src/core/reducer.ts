@@ -3,6 +3,7 @@ import type {
   BattleCommand,
   DomesticCmd,
   ExploreDirection,
+  FacilityKind,
   GameState,
   InterActChoiceId,
   PolicyId,
@@ -54,7 +55,7 @@ import {
 } from '../systems/battle';
 import { continueAiPhase, startAiPhase, aiFactionIds } from '../systems/ai';
 import { tickDiplomacy } from '../systems/factionDiplomacy';
-import { launchArmy, playArmyTurn } from '../systems/army';
+import { playArmyTurn, sortieArmy } from '../systems/army';
 import { doDiplomacy, doPersuadeCity, type DiplomacyKind } from '../systems/diplomacy';
 import {
   doFactionDiplomacy,
@@ -78,12 +79,14 @@ import {
 import { runProjects, startProject } from '../systems/projects';
 import { runExplorations, startExploration } from '../systems/exploration';
 import { COUNCIL_PROFILES, planCouncilDelegation, type CouncilProfile } from '../systems/council';
+import { buildFacility, runFacilities } from '../systems/facilities';
 
 export type Action =
   | { t: 'DOMESTIC'; cityId: string; cmd: DomesticCmd; generalId: string }
   | { t: 'AUTO_GOVERN'; profile: CouncilProfile }
   | { t: 'START_PROJECT'; cityId: string; kind: ProjectKind; generalId: string }
   | { t: 'START_EXPLORATION'; cityId: string; direction: ExploreDirection; generalId: string; months: number }
+  | { t: 'BUILD_FACILITY'; cityId: string; kind: FacilityKind }
   | { t: 'RECRUIT'; cityId: string; generalId: string; amount: number }
   | { t: 'RECRUIT_ALL'; cityId: string }
   | { t: 'TRADE'; cityId: string; buyFood: boolean; amount: number }
@@ -102,7 +105,7 @@ export type Action =
   | { t: 'PERSUADE_CITY'; cityId: string }
   | { t: 'PRISONER'; prisonerId: string; action: PrisonerAction; agentId?: string }
   | { t: 'DEPLOY'; fromCityId: string; targetCityId: string; generalIds: string[] }
-  | { t: 'MARCH'; fromCityId: string; targetCityId: string; generalIds: string[] }
+  | { t: 'SORTIE'; fromCityId: string; targetCityId: string; generalIds?: string[] }
   | { t: 'BATTLE_MOVE'; unitId: string; x: number; y: number }
   | { t: 'BATTLE_UNDO_MOVE'; unitId: string }
   | { t: 'BATTLE_ATTACK'; attackerId: string; targetId: string }
@@ -154,6 +157,7 @@ export function runMonthStages(s: GameState, facts = emptyMonthFacts()): string[
   runDisaster(s, facts);
   runOutput(s, facts);
   runTax(s, facts);
+  runFacilities(s);
   applyPolicyMonthly(s);
   runProjects(s, facts);
   runExplorations(s, facts);
@@ -255,6 +259,13 @@ export function reduce(
         action.generalId,
         action.months,
       );
+      return { state: r.ok ? s : state, result: r };
+    }
+    case 'BUILD_FACILITY': {
+      if (s.phase !== 'map') {
+        return { state, result: { ok: false, message: '当前阶段无法建造设施' } };
+      }
+      const r = buildFacility(s, action.cityId, action.kind);
       return { state: r.ok ? s : state, result: r };
     }
     case 'RECRUIT': {
@@ -406,9 +417,9 @@ export function reduce(
       const { result } = createBattle(s, action.fromCityId, action.targetCityId, action.generalIds);
       return { state: result.ok ? s : state, result };
     }
-    case 'MARCH': {
+    case 'SORTIE': {
       if (s.phase !== 'map') return { state, result: { ok: false, message: '当前不在大地图阶段' } };
-      const r = launchArmy(s, action.fromCityId, action.targetCityId, action.generalIds);
+      const r = sortieArmy(s, action.fromCityId, action.targetCityId, action.generalIds);
       return { state: r.ok ? s : state, result: r };
     }
     case 'BATTLE_MOVE': {

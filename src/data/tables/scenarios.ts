@@ -748,6 +748,8 @@ export function createGame(opts: CreateGameOptions = {}): GameState {
     edges: structuredClone(scenario.edges),
     armies: [],
     armySerial: 0,
+    facilities: [],
+    facilitySerial: 0,
     phase: 'map',
     log: [],
     policy: { offer: [] },

@@ -243,9 +243,8 @@ export function MainMenu() {
 
       <div className="menu-grid">
         <div className="menu-inner">
-          <span className="eyebrow">步步高 9288T · WEB REMAKE</span>
           <h1>
-            三国霸业<span className="seal-mini">复刻</span>
+            三国霸业
           </h1>
           <p className="menu-sub">月度回合 · 城池经营 · 战棋征伐</p>
 

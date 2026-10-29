@@ -270,29 +270,55 @@ export interface MapEdge {
   cost: number;
 }
 
+/** 大地图格坐标 */
+export interface GridPoint {
+  col: number;
+  row: number;
+}
+
 /**
- * 大地图行军纵队（M 档）。
+ * 大地图行军纵队（L 档 · 网格移动）。
  *
- * 部队在城与城之间沿道路移动，每旬推进 10 天行程；抵达敌城才切入战棋。
- * 武将仍保留 `locationId`（出发城 / 最近己方城），用 `armyId` 标记为在途，
- * 避免同一支部队同时被算作守军。
+ * 部队在网格上自由行军：`at` 为当前格，`path` 为后续要走的格子（末项是目标城格）。
+ * 山岭与水域不可通行，其余地形按格计天数，每旬推进 10 天。
+ * 抵达敌城格才切入战棋；经过己方城池格不会解散。
+ * 武将仍保留 `locationId`（出发城 / 最近己方城），用 `armyId` 标记为在途。
  */
 export interface Army {
   id: string;
   factionId: string;
   /** 出发城：用于「出征 / 回师」文案 */
   originCityId: string;
-  /** 最近一个己方节点：战败撤退与中途受阻时回到这里 */
+  /** 最近经过的己方城：战败撤退与中途受阻时回到这里 */
   fromCityId: string;
   targetCityId: string;
   generalIds: string[];
-  /** 剩余路线（含目标城）；第一个元素是下一座城 */
-  path: string[];
-  /** 当前这一段路已经走了几天（0 ≤ legDays < 该段耗时） */
+  /** 当前格 */
+  at: GridPoint;
+  /** 剩余路径（不含当前格，末项为目标城格） */
+  path: GridPoint[];
+  /** 走向下一格已走的天数（0 ≤ legDays < 下一格耗时） */
   legDays: number;
+  /** 行军速度倍率：烽燧提速等加成，缺省为 1 */
+  speed?: number;
+  /** 行经关隘 / 渡口时累积的攻城城防加成与水战标记 */
+  fortificationBonus?: number;
+  waterCrossing?: boolean;
   /** 建队时的兵力快照，供地图标记展示 */
   troops: number;
   createdTurn: number;
+}
+
+/** 大地图设施：占一格地形，归属随所在城易主 */
+export type FacilityKind = 'farm' | 'market' | 'tower' | 'beacon';
+
+export interface Facility {
+  id: string;
+  kind: FacilityKind;
+  cityId: string;
+  /** 所在大地图格 */
+  col: number;
+  row: number;
 }
 
 /** 国策运行期状态：offer 非空时 UI 弹出三选一 */
@@ -537,6 +563,8 @@ export interface BattleState {
   grid: BattleTerrain[][];
   /** 本场战场的主题、专名与地标；旧存档可缺省 */
   battlefield?: BattlefieldInfo;
+  /** 水战：战场以水域为主或由渡口 / 水城引发，非水兵在水域会持续减员 */
+  waterBattle?: boolean;
   units: Record<string, BattleUnit>;
   side: BattleSide;
   day: number;
@@ -677,6 +705,10 @@ export interface GameState {
   armies?: Army[];
   /** 行军纵队的自增序号，保证 id 在同局唯一 */
   armySerial?: number;
+  /** 大地图设施（农田 / 市场 / 箭楼 / 烽燧）；旧档缺省视为空 */
+  facilities?: Facility[];
+  /** 设施自增序号 */
+  facilitySerial?: number;
   phase: GamePhase;
   log: LogEntry[];
   battle?: BattleState;
