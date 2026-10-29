@@ -15,6 +15,7 @@
     "map:check": "vite-node scripts/gen-map.ts",
     "map:gates": "vite-node scripts/gate-check.ts",
     "perf:check": "vite-node scripts/perf-check.ts",
+    "bench:render": "node scripts/render-bench.mjs",
     "contrast:check": "vite-node scripts/contrast-check.ts",
     "verify": "npm run typecheck && npm test && npm run contrast:check && npm run build"
   },

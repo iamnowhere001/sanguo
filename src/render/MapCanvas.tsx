@@ -35,6 +35,23 @@ import {
 import { gateAtCenter, gateSiteById, gateSites, gateWorldPos } from './gateGrid';
 import { drawFactionPattern, factionPattern, PATTERN_LABEL } from './factionPattern';
 import { PALETTE, paintTerrain } from './terrainPaint';
+import {
+  DEFAULT_ZOOM,
+  MAX_ZOOM,
+  MIN_ZOOM,
+  clamp,
+  clampPan,
+  layoutOf,
+  nextZoomStop,
+  pinchScale,
+  screenToWorld,
+  worldToScreen,
+  zoomAt,
+  type Layout,
+  type MapView,
+} from './camera';
+import { territoryField, territorySignature } from '../systems/territory';
+import { territoryPaint, territoryWash } from './territoryPaint';
 
 interface ProjectedCity {
   city: City;
@@ -48,28 +65,6 @@ interface ProjectedCity {
   bw: number;
   bh: number;
 }
-
-interface MapView {
-  zoom: number;
-  x: number;
-  y: number;
-}
-
-interface Layout {
-  scale: number;
-  ox: number;
-  oy: number;
-}
-
-const MIN_ZOOM = 0.2;
-/**
- * 缩放口径：
- * - 20% = 全图（相机基准尺度是整图的 1/5）
- * - 100% = 默认州郡视角，城池、关港、部队都看得清
- * - 720% = 城池特写，一格约 28px
- */
-const DEFAULT_ZOOM = 1;
-const MAX_ZOOM = 7.2;
 
 /** #rrggbb → rgba()，用于给势力色叠透明度 */
 function hexA(hex: string, alpha: number): string {
@@ -95,60 +90,6 @@ const SIZE_RANK: Record<CitySize, number> = {
   medium: 2,
   small: 3,
 };
-
-const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
-
-/** 限制平移范围：地图边缘不会被拖出视野 */
-function clampPan(view: MapView, w: number, h: number): MapView {
-  // 地图在屏幕上以视口中心为基准缩放；可平移量 = 地图超出视口的一半
-  const { scale } = layoutOf(w, h);
-  const mapW = MAP.width * scale * view.zoom;
-  const mapH = MAP.height * scale * view.zoom;
-  const maxX = Math.max(0, (mapW - w) / 2);
-  const maxY = Math.max(0, (mapH - h) / 2);
-  return {
-    zoom: view.zoom,
-    x: clamp(view.x, -maxX, maxX),
-    y: clamp(view.y, -maxY, maxY),
-  };
-}
-
-/**
- * 相机基准：整张地图铺满视口的缩放 = 20%。
- * 乘 5 后，默认 100% 只显示约 1/5 地图，正好是州郡视角。
- */
-const CAMERA_BASE = 5;
-
-/** 世界矩形固定为 MAP.width × MAP.height，换剧本时海岸线不会跟着缩放 */
-function layoutOf(w: number, h: number): Layout {
-  const padX = w < 560 ? 6 : 12;
-  const padY = h < 300 ? 5 : 10;
-  const scale =
-    Math.min((w - padX * 2) / MAP.width, (h - padY * 2) / MAP.height) * CAMERA_BASE;
-  return {
-    scale,
-    ox: (w - MAP.width * scale) / 2,
-    oy: (h - MAP.height * scale) / 2,
-  };
-}
-
-function worldToScreen(
-  wx: number,
-  wy: number,
-  w: number,
-  h: number,
-  view: MapView,
-  layout: Layout,
-): { x: number; y: number } {
-  const bx = layout.ox + wx * layout.scale;
-  const by = layout.oy + wy * layout.scale;
-  const cx = w / 2;
-  const cy = h / 2;
-  return {
-    x: cx + (bx - cx) * view.zoom + view.x,
-    y: cy + (by - cy) * view.zoom + view.y,
-  };
-}
 
 function project(
   state: GameState,
@@ -205,6 +146,50 @@ const TERRAIN_CHUNK_WORLD = 384;
 const TERRAIN_CHUNK_SCALE = 1.5;
 const TERRAIN_CHUNK_LIMIT = 32;
 
+/**
+ * 每帧最多现烘几块地形。
+ *
+ * 一次缩放会同时需要几十块；以前是"缺几块烘几块"，于是缩到中间倍率时
+ * 出现 150–260ms 的长帧（实测见 `reports/render-bench.csv`）。
+ * 现在缺块先拿总览图垫底，真正的烘焙按预算分摊到后续帧。
+ */
+const CHUNK_BAKE_BUDGET = 6;
+/** 距上一帧小于这个间隔，视为"用户还在连续操作"，本轮不烘新块 */
+const RAPID_PAINT_MS = 110;
+/** 补烘的间隔 */
+const REFINE_DELAY_MS = 90;
+
+/**
+ * 势力光晕精灵缓存。
+ *
+ * 原来是每城每帧 `createRadialGradient` + `arc().fill()`，61 座城就是 61 次渐变对象创建。
+ * 渐变本身不贵，贵在每帧重建：烘焙成 128×128 的小图后只剩 `drawImage`。
+ */
+const glowCache = new Map<string, HTMLCanvasElement>();
+
+function glowSprite(hex: string): HTMLCanvasElement | null {
+  const hit = glowCache.get(hex);
+  if (hit) return hit;
+  if (typeof document === 'undefined') return null;
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
+  const r = size / 2;
+  const g = ctx.createRadialGradient(r, r, r * 0.35, r, r, r);
+  g.addColorStop(0, hexA(hex, 0.1));
+  g.addColorStop(0.65, hexA(hex, 0.04));
+  g.addColorStop(1, hexA(hex, 0));
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(r, r, r, 0, Math.PI * 2);
+  ctx.fill();
+  glowCache.set(hex, canvas);
+  return canvas;
+}
+
 interface TerrainChunk {
   canvas: HTMLCanvasElement;
   x: number;
@@ -216,14 +201,18 @@ interface TerrainChunk {
 
 const terrainChunks = new Map<string, TerrainChunk>();
 let terrainChunkTick = 0;
+/** 本帧还能现烘几块；<=0 时缺块直接返回 null，由调用方拿总览图垫底 */
+let chunkBakeBudget = 0;
 
-function terrainChunkAt(cx: number, cy: number): TerrainChunk {
+function terrainChunkAt(cx: number, cy: number): TerrainChunk | null {
   const key = `${cx},${cy}`;
   const hit = terrainChunks.get(key);
   if (hit) {
     hit.used = ++terrainChunkTick;
     return hit;
   }
+  if (chunkBakeBudget <= 0) return null;
+  chunkBakeBudget -= 1;
 
   const x = cx * TERRAIN_CHUNK_WORLD;
   const y = cy * TERRAIN_CHUNK_WORLD;
@@ -287,22 +276,6 @@ function terrainOverview(): HTMLCanvasElement {
   }
   overviewCanvas = canvas;
   return canvas;
-}
-
-function screenToWorld(
-  sx: number,
-  sy: number,
-  w: number,
-  h: number,
-  view: MapView,
-  layout: Layout,
-): { x: number; y: number } {
-  const cx = w / 2;
-  const cy = h / 2;
-  return {
-    x: ((sx - cx - view.x) / view.zoom + cx - layout.ox) / layout.scale,
-    y: ((sy - cy - view.y) / view.zoom + cy - layout.oy) / layout.scale,
-  };
 }
 
 function visibleWorldRect(
@@ -1028,8 +1001,63 @@ export function MapCanvas({
     originX: number;
     originY: number;
     moved: boolean;
+    lastX: number;
+    lastY: number;
+    lastT: number;
+    vx: number;
+    vy: number;
   } | null>(null);
+  /** 多指手势：pointerId → 位置；两根手指时进入捏合 */
+  const pointersRef = useRef(new Map<number, { x: number; y: number }>());
+  const pinchRef = useRef<{
+    dist: number;
+    midX: number;
+    midY: number;
+    zoom: number;
+    view: MapView;
+  } | null>(null);
+  /** 惯性滑行速度（px/帧） */
+  const flingRef = useRef<{ vx: number; vy: number } | null>(null);
+  const flingRaf = useRef(0);
+  /** 惯性循环里读最新值，避免闭包拿到旧 view */
+  const viewRef = useRef<MapView>(view);
+  const sizeRef = useRef(size);
+  viewRef.current = view;
+  sizeRef.current = size;
+  /** hover 节流：指针每动一次就全量重绘太浪费，30ms 一次足够 */
+  const lastHoverAt = useRef(0);
   const mobileInit = useRef(false);
+
+  /** 抬手甩动：每帧衰减，撞到地图边缘立刻停 */
+  const startFling = (vx: number, vy: number): void => {
+    flingRef.current = { vx, vy };
+    if (flingRaf.current) return;
+    const step = (): void => {
+      const f = flingRef.current;
+      if (!f) {
+        flingRaf.current = 0;
+        return;
+      }
+      const v = viewRef.current;
+      const raw = { zoom: v.zoom, x: v.x + f.vx, y: v.y + f.vy };
+      const next = clampPan(raw, sizeRef.current.w, sizeRef.current.h);
+      const hitEdge =
+        Math.abs(next.x - raw.x) > 0.5 || Math.abs(next.y - raw.y) > 0.5;
+      setView(next);
+      f.vx *= 0.9;
+      f.vy *= 0.9;
+      if (hitEdge || Math.hypot(f.vx, f.vy) < 0.2) {
+        flingRef.current = null;
+        flingRaf.current = 0;
+        return;
+      }
+      flingRaf.current = requestAnimationFrame(step);
+    };
+    flingRaf.current = requestAnimationFrame(step);
+  };
+
+  useEffect(() => () => cancelAnimationFrame(flingRaf.current), []);
+  useEffect(() => () => window.clearTimeout(refineTimer.current), []);
 
   const attackSet = useMemo(
     () => new Set(marchTargets ?? attackRoutes.map((r) => r.targetId)),
@@ -1053,6 +1081,24 @@ export function MapCanvas({
     if (hoverTile.col === selectedArmy.at.col && hoverTile.row === selectedArmy.at.row) return null;
     return armyPreviewPathTiles(state, selectedArmy, hoverTile);
   }, [state, selectedArmy, hoverTile]);
+
+  /**
+   * 势力版图烘焙结果。
+   *
+   * 只在"城池归属"变化时重算：`territoryField` 与 `territoryPaint` 内部都按签名缓存，
+   * 所以 hover / 选中 / 部队移动导致的 state 变化在这里是零成本（直接命中缓存）。
+   */
+  const territory = useMemo(() => {
+    const sig = territorySignature(state);
+    const colors: Record<string, string> = {};
+    for (const f of Object.values(state.factions)) colors[f.id] = f.color;
+    return territoryPaint(sig, territoryField(state), colors);
+  }, [state]);
+
+  /** 补烘用：自增一次就触发重绘 */
+  const [paintTick, setPaintTick] = useState(0);
+  const refineTimer = useRef(0);
+  const lastPaintAt = useRef(0);
 
   useEffect(() => {
     const el = wrapRef.current;
@@ -1151,6 +1197,13 @@ export function MapCanvas({
     canvas.style.width = `${size.w}px`;
     canvas.style.height = `${size.h}px`;
 
+    // 连续操作（拖拽 / 滚动缩放）期间不现烘地形，先用总览图垫底
+    const paintAt = performance.now();
+    const rapid = paintAt - lastPaintAt.current < RAPID_PAINT_MS;
+    lastPaintAt.current = paintAt;
+    chunkBakeBudget = rapid ? 0 : CHUNK_BAKE_BUDGET;
+    let missingChunks = 0;
+
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -1188,7 +1241,8 @@ export function MapCanvas({
     ctx.translate(-size.w / 2, -size.h / 2);
     ctx.translate(layout.ox, layout.oy);
     ctx.scale(layout.scale, layout.scale);
-    ctx.imageSmoothingEnabled = true;
+    // 像素美术：低倍率是缩图（要平滑），高倍率是放大（必须关掉插值，否则糊成一团）
+    ctx.imageSmoothingEnabled = view.zoom < 2;
     if (view.zoom < 0.4) {
       ctx.drawImage(terrainOverview(), 0, 0, MAP.width, MAP.height);
     } else {
@@ -1205,10 +1259,48 @@ export function MapCanvas({
       for (let cy = chunkY0; cy <= chunkY1; cy++) {
         for (let cx = chunkX0; cx <= chunkX1; cx++) {
           const chunk = terrainChunkAt(cx, cy);
-          // 0.5 世界单位外扩，遮住块缝
-          ctx.drawImage(chunk.canvas, chunk.x - 0.5, chunk.y - 0.5, chunk.w + 1, chunk.h + 1);
+          if (chunk) {
+            // 0.5 世界单位外扩，遮住块缝
+            ctx.drawImage(chunk.canvas, chunk.x - 0.5, chunk.y - 0.5, chunk.w + 1, chunk.h + 1);
+          } else {
+            missingChunks += 1;
+            // 还没烘到：先拿总览图的对应区域垫底，下一帧再补细节。
+            // 用低清图顶着，比"卡住 200ms 再出图"体感好得多。
+            const ox = cx * TERRAIN_CHUNK_WORLD;
+            const oy = cy * TERRAIN_CHUNK_WORLD;
+            const ow = Math.min(TERRAIN_CHUNK_WORLD, MAP.width - ox);
+            const oh = Math.min(TERRAIN_CHUNK_WORLD, MAP.height - oy);
+            if (ow > 0 && oh > 0) {
+              ctx.drawImage(
+                terrainOverview(),
+                ox * OVERVIEW_SCALE,
+                oy * OVERVIEW_SCALE,
+                ow * OVERVIEW_SCALE,
+                oh * OVERVIEW_SCALE,
+                ox,
+                oy,
+                ow,
+                oh,
+              );
+            }
+          }
         }
       }
+    }
+    // 势力版图（P0-1）：整张图只画两次 drawImage，与城池数量无关。
+    // 低倍率重铺色（看大势），高倍率淡出（让地形与城池细节读得出来）。
+    if (territory) {
+      // 版图是墨晕，永远要平滑
+      ctx.imageSmoothingEnabled = true;
+      // multiply：保留宣纸底图的明暗起伏，只染色相
+      const wash = territoryWash(view.zoom);
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.globalAlpha = wash;
+      ctx.drawImage(territory.fill, 0, 0, MAP.width, MAP.height);
+      ctx.globalAlpha = Math.min(1, wash * 0.9);
+      ctx.drawImage(territory.edge, 0, 0, MAP.width, MAP.height);
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = 1;
     }
     if (view.zoom >= 4.5) {
       ctx.strokeStyle = `rgba(58,48,32,${0.05 * Math.min(1, (view.zoom - 4.5) / 0.8)})`;
@@ -1236,19 +1328,13 @@ export function MapCanvas({
     pointsRef.current = pts;
     const byId = new Map(pts.map((p) => [p.city.id, p]));
 
-    // 势力色晕
+    // 势力色晕：走预烘精灵，避免每帧为 61 座城重建 61 个径向渐变
     for (const p of pts) {
       if (!p.city.ownerId) continue;
       const color = state.factions[p.city.ownerId]?.color ?? '#8a8274';
       const halo = Math.max(p.bw, p.bh) * 0.78;
-      const g = ctx.createRadialGradient(p.x, p.y, halo * 0.35, p.x, p.y, halo);
-      g.addColorStop(0, hexA(color, 0.15));
-      g.addColorStop(0.65, hexA(color, 0.06));
-      g.addColorStop(1, hexA(color, 0));
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, halo, 0, Math.PI * 2);
-      ctx.fill();
+      const sprite = glowSprite(color);
+      if (sprite) ctx.drawImage(sprite, p.x - halo, p.y - halo, halo * 2, halo * 2);
     }
 
     const rumorMarks = new Map<string, 'true' | 'false'>();
@@ -1898,6 +1984,14 @@ export function MapCanvas({
         );
       }
     }
+
+    // 有块没烘完，或者预算用完还有缺口：过一会儿再补一帧。
+    if (missingChunks > 0 && !refineTimer.current) {
+      refineTimer.current = window.setTimeout(() => {
+        refineTimer.current = 0;
+        setPaintTick((t) => t + 1);
+      }, REFINE_DELAY_MS);
+    }
   }, [
     state,
     selectedCityId,
@@ -1915,6 +2009,8 @@ export function MapCanvas({
     selectedArmyId,
     selectedGateId,
     hoverGate,
+    territory,
+    paintTick,
   ]);
 
   /** 屏幕坐标 → 城池（用城墙矩形做命中，比圆心距离更准） */
@@ -1990,11 +2086,34 @@ export function MapCanvas({
                   : 'default',
         }}
         onWheel={(e) => {
-          const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
-          centerView(view.zoom * factor);
+          if (size.w < 10) return;
+          const rect = e.currentTarget.getBoundingClientRect();
+          const sx = e.clientX - rect.left;
+          const sy = e.clientY - rect.top;
+          const dir = e.deltaY < 0 ? 1 : -1;
+          // 函数式更新：触控板一帧能发好几个 wheel，用闭包里的 view 会互相覆盖
+          setView((v) => zoomAt(v, nextZoomStop(v.zoom, dir), sx, sy, size.w, size.h));
         }}
         onPointerDown={(e) => {
           if (e.button !== 0 || size.w < 10) return;
+          pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+          if (pointersRef.current.size === 2) {
+            // 进入捏合：以两指中点与间距为基准
+            const [a, b] = [...pointersRef.current.values()];
+            pinchRef.current = {
+              dist: Math.hypot(a!.x - b!.x, a!.y - b!.y),
+              midX: (a!.x + b!.x) / 2,
+              midY: (a!.y + b!.y) / 2,
+              zoom: view.zoom,
+              view,
+            };
+            dragRef.current = null;
+            flingRef.current = null;
+            setDragging(false);
+            return;
+          }
+          if (pointersRef.current.size > 2) return;
+          flingRef.current = null;
           // 未放大时也允许拖动，全图浏览更顺手
           dragRef.current = {
             startX: e.clientX,
@@ -2002,16 +2121,65 @@ export function MapCanvas({
             originX: view.x,
             originY: view.y,
             moved: false,
+            lastX: e.clientX,
+            lastY: e.clientY,
+            lastT: performance.now(),
+            vx: 0,
+            vy: 0,
           };
           setDragging(true);
           e.currentTarget.setPointerCapture(e.pointerId);
         }}
         onPointerMove={(e) => {
+          if (pointersRef.current.has(e.pointerId)) {
+            pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+          }
+
+          // ① 双指捏合
+          const pinch = pinchRef.current;
+          if (pinch && pointersRef.current.size === 2) {
+            const [a, b] = [...pointersRef.current.values()];
+            const dist = Math.hypot(a!.x - b!.x, a!.y - b!.y);
+            const midX = (a!.x + b!.x) / 2;
+            const midY = (a!.y + b!.y) / 2;
+            const box = e.currentTarget.getBoundingClientRect();
+            const scale = pinchScale(pinch.dist, dist);
+            const zoom = clamp(pinch.zoom * scale, MIN_ZOOM, MAX_ZOOM);
+            const zoomed = zoomAt(
+              pinch.view,
+              zoom,
+              pinch.midX - box.left,
+              pinch.midY - box.top,
+              size.w,
+              size.h,
+            );
+            // 中点的位移直接换算成平移，两指一起拖也能带走地图
+            setView(
+              clampPan(
+                { zoom: zoomed.zoom, x: zoomed.x + (midX - pinch.midX), y: zoomed.y + (midY - pinch.midY) },
+                size.w,
+                size.h,
+              ),
+            );
+            setHover(null);
+            setHoverArmy(null);
+            setHoverGate(null);
+            return;
+          }
+
           const drag = dragRef.current;
           if (drag) {
             const dx = e.clientX - drag.startX;
             const dy = e.clientY - drag.startY;
             if (Math.hypot(dx, dy) > 4) drag.moved = true;
+            // 速度用指数滑动平均，抬手时才有稳定的甩动方向
+            const now = performance.now();
+            const dt = Math.max(1, now - drag.lastT);
+            drag.vx = drag.vx * 0.7 + ((e.clientX - drag.lastX) / dt) * 16.7 * 0.3;
+            drag.vy = drag.vy * 0.7 + ((e.clientY - drag.lastY) / dt) * 16.7 * 0.3;
+            drag.lastX = e.clientX;
+            drag.lastY = e.clientY;
+            drag.lastT = now;
             if (drag.moved && view.zoom > MIN_ZOOM + 0.01) {
               setView(
                 clampPan(
@@ -2026,6 +2194,12 @@ export function MapCanvas({
             }
             return;
           }
+
+          // hover 节流：拖动时不需要，静止悬停 30ms 一次足够
+          const now = performance.now();
+          if (now - lastHoverAt.current < 30) return;
+          lastHoverAt.current = now;
+
           const box = e.currentTarget.getBoundingClientRect();
           const sx = e.clientX - box.left;
           const sy = e.clientY - box.top;
@@ -2039,10 +2213,19 @@ export function MapCanvas({
           else if (hoverTile) setHoverTile(null);
         }}
         onPointerUp={(e) => {
+          pointersRef.current.delete(e.pointerId);
+          pinchRef.current = null;
           const drag = dragRef.current;
           dragRef.current = null;
           setDragging(false);
-          if (drag?.moved) return;
+          if (drag?.moved) {
+            // 甩动：速度足够就交给惯性，自己衰减
+            const speed = Math.hypot(drag.vx, drag.vy);
+            if (speed > 2 && view.zoom > MIN_ZOOM + 0.01) {
+              startFling(drag.vx, drag.vy);
+            }
+            return;
+          }
 
           const rect = e.currentTarget.getBoundingClientRect();
           const sx = e.clientX - rect.left;
@@ -2100,10 +2283,14 @@ export function MapCanvas({
           }
         }}
         onPointerCancel={() => {
+          pointersRef.current.clear();
+          pinchRef.current = null;
           dragRef.current = null;
           setDragging(false);
         }}
         onPointerLeave={() => {
+          pointersRef.current.clear();
+          pinchRef.current = null;
           if (!dragRef.current) {
             setHover(null);
             setHoverArmy(null);

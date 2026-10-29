@@ -2,7 +2,7 @@
 
 一款以《三国演义》为背景的回合制策略 Web 游戏：576×432 全地图、3×3 城郭与四门、31 处关隘 / 港口 / 小路、部队逐格调度、武将五维养成、一队三将编制、外交策反，以及直接在大地图上展开的回合制战斗。
 
-当前处于**可玩垂直切片**阶段：开局 → 经营 → 出征 → 大地图列阵 → 占城 → 月报 → 存档全链路已打通，409 项单元测试（5 项既有失败，集中在章节目标与章节推进）。
+当前处于**可玩垂直切片**阶段：开局 → 经营 → 出征 → 大地图列阵 → 占城 → 月报 → 存档全链路已打通，426 项单元测试（5 项既有失败，集中在章节目标与章节推进）。
 
 ## 设计主线
 
@@ -22,6 +22,7 @@
 - **Vite 8**（Rolldown 内核）开发与构建
 - **Vitest 5** 单元测试
 - **Canvas 2D** 绘制大地图与战场
+- **势力版图场**：多源 Dijkstra 按真实行军代价扩张，低分辨率铺色 + 模糊成墨迹边界
 - **Web Audio API** 程序化音效与生成式 BGM（无音频素材）
 - **IndexedDB** 存档，**zod** 配表校验
 
@@ -51,6 +52,7 @@ npm run dev
 | `npm run map:check` | 地形图 ASCII 预览 + 落位校验；`-- --json` 导出 `reports/map-grid.json` |
 | `npm run map:gates` | 关隘 / 港口通行线、真渡口与图标落点校验 |
 | `npm run perf:check` | 建局 / AI 月结 / 存档序列化性能冒烟 |
+| `npm run bench:render` | 无头 Chrome 测地图渲染帧耗时，输出 `reports/render-bench.csv` |
 | `npm run contrast:check` | 设计 token 的 WCAG 对比度检查 |
 | `npm run verify` | 完整校验（类型 + 测试 + 对比度 + 构建） |
 
@@ -67,7 +69,7 @@ src/
 ├── systems/         # 规则层：内政、经济、外交、俘虏、AI、行军、城池格
 │   └── battle/      # 战棋拆分模块（grid/combat/tactics/ai/objectives/setup/turn/resolve/auto）
 ├── audio/           # 音效：参数表、合成配方、混音总线、事件映射
-├── render/          # Canvas 渲染
+├── render/          # Canvas 渲染（camera 相机数学 / territoryPaint 版图烘焙 / 地形与关防格网）
 ├── ui/              # React 界面
 └── styles/          # 全局样式
 tests/               # Vitest 测试

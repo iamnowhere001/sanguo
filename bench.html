@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>渲染基准 · 地图</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: #12110d;
+        overflow: hidden;
+      }
+      #stage {
+        position: relative;
+        width: 1280px;
+        height: 800px;
+      }
+      #out {
+        position: fixed;
+        left: 0;
+        top: 0;
+        color: #0f0;
+        font: 12px monospace;
+        white-space: pre;
+        margin: 0;
+        padding: 4px;
+        z-index: 10;
+        background: rgba(0, 0, 0, 0.7);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage"></div>
+    <pre id="out">booting…</pre>
+    <script type="module" src="/src/bench/main.tsx"></script>
+  </body>
+</html>
