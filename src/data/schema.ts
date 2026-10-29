@@ -25,8 +25,11 @@ const ItemSchema = z.object({
 const GeneralSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
+  leadership: z.number().int().min(0).max(100),
   force: z.number().int().min(0).max(200),
   intellect: z.number().int().min(0).max(200),
+  politics: z.number().int().min(0).max(100),
+  charm: z.number().int().min(0).max(100),
   loyalty: z.number().int().min(0).max(100),
   stamina: z.number().int().min(0).max(100),
   level: z.number().int().min(1).max(20),

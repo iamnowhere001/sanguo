@@ -88,7 +88,6 @@ const MAP_EDGES: MapEdge[] = [
   { a: 'shouchun', b: 'pengcheng', cost: 3 },
   { a: 'shouchun', b: 'hefei', cost: 1 },
   { a: 'hefei', b: 'lujiang', cost: 2 },
-  { a: 'hefei', b: 'ruxukou', cost: 1 },
 
   // 中原
   { a: 'luoyang', b: 'chenliu', cost: 2 },
@@ -144,8 +143,6 @@ const MAP_EDGES: MapEdge[] = [
   { a: 'jianye', b: 'wu', cost: 2 },
   { a: 'wu', b: 'kuaiji', cost: 2 },
   { a: 'kuaiji', b: 'lujiang', cost: 3 },
-  { a: 'ruxukou', b: 'jianye', cost: 2 },
-  { a: 'ruxukou', b: 'lujiang', cost: 2 },
   { a: 'danyang', b: 'jianye', cost: 2 },
   { a: 'danyang', b: 'wu', cost: 2 },
   { a: 'yuzhang', b: 'chaisang', cost: 2 },
@@ -154,16 +151,16 @@ const MAP_EDGES: MapEdge[] = [
   { a: 'poyang', b: 'kuaiji', cost: 3 },
 
   // 益州
-  { a: 'hanzhong', b: 'yangping', cost: 1 },
-  { a: 'yangping', b: 'zhangtong', cost: 2 },
+  // 阳平关不再是城：汉中—梓潼一线由阳平关、剑阁两座关隘控扼
+  { a: 'hanzhong', b: 'zhangtong', cost: 3 },
   { a: 'zhangtong', b: 'mianzhu', cost: 2 },
   { a: 'mianzhu', b: 'chengdu', cost: 1 },
   { a: 'chengdu', b: 'jiangzhou', cost: 2 },
   { a: 'jiangzhou', b: 'changsha', cost: 5 },
-  { a: 'shangyong', b: 'yangping', cost: 2 },
   { a: 'shangyong', b: 'hanzhong', cost: 3 },
   { a: 'shangyong', b: 'jiangzhou', cost: 4 },
   { a: 'shangyong', b: 'badong', cost: 3 },
+  { a: 'wudu', b: 'mianzhu', cost: 7 },
   { a: 'langzhong', b: 'zhangtong', cost: 2 },
   { a: 'langzhong', b: 'mianzhu', cost: 2 },
   { a: 'langzhong', b: 'jiangzhou', cost: 3 },
@@ -301,7 +298,12 @@ function fillGarrisons(
         g.loyalty = Math.max(g.loyalty, 70);
         g.troops = Math.min(
           BALANCE.GARRISON.reserveTroops,
-          troopCap({ force: g.force, intellect: g.intellect, level: g.level }),
+          troopCap({
+            leadership: g.leadership,
+            force: g.force,
+            intellect: g.intellect,
+            level: g.level,
+          }),
         );
         load.set(cityId, load.get(cityId)! + 1);
       }
@@ -335,7 +337,7 @@ const DONGZHUO_OWNERS: Record<string, string> = {
   shouchun: 'yuanshu', hefei: 'yuanshu', runan: 'yuanshu',
   xiapi: 'taoqian', pengcheng: 'taoqian', xiaopei: 'taoqian', beihai: 'taoqian',
   linzi: 'taoqian', langya: 'taoqian', guangling: 'taoqian',
-  ruxukou: 'sunjian', danyang: 'sunjian', chaisang: 'sunjian', lujiang: 'sunjian',
+  danyang: 'sunjian', chaisang: 'sunjian', lujiang: 'sunjian',
   jianye: 'sunjian', wu: 'sunjian', kuaiji: 'sunjian', changsha: 'sunjian',
   guiyang: 'sunjian', lingling: 'sunjian', yuzhang: 'sunjian', poyang: 'sunjian',
   xiangyang: 'liubiao', jiangling: 'liubiao', jiangxia: 'liubiao',
@@ -343,7 +345,7 @@ const DONGZHUO_OWNERS: Record<string, string> = {
   chengdu: 'liuzhang', mianzhu: 'liuzhang', zhangtong: 'liuzhang', jiangzhou: 'liuzhang',
   langzhong: 'liuzhang', badong: 'liuzhang', jianning: 'liuzhang', yunnan: 'liuzhang',
   tianshui: 'mateng', wuwei: 'mateng', anding: 'mateng', jincheng: 'mateng', wudu: 'mateng',
-  hanzhong: 'zhanglu', yangping: 'zhanglu', shangyong: 'zhanglu',
+  hanzhong: 'zhanglu', shangyong: 'zhanglu',
   xiangping: 'gongsundu',
   xinye: 'liubei',
 };
@@ -403,12 +405,12 @@ const GUANDU_OWNERS: Record<string, string> = {
   xinye: 'liubei',
   xiangyang: 'liubiao', jiangling: 'liubiao', jiangxia: 'liubiao', changsha: 'liubiao',
   gongan: 'liubiao', yiling: 'liubiao', wuling: 'liubiao',
-  ruxukou: 'sunquan', danyang: 'sunquan', chaisang: 'sunquan', lujiang: 'sunquan',
+  danyang: 'sunquan', chaisang: 'sunquan', lujiang: 'sunquan',
   jianye: 'sunquan', wu: 'sunquan', kuaiji: 'sunquan', yuzhang: 'sunquan', poyang: 'sunquan',
   chengdu: 'liuzhang', mianzhu: 'liuzhang', zhangtong: 'liuzhang', jiangzhou: 'liuzhang',
   langzhong: 'liuzhang', badong: 'liuzhang', jianning: 'liuzhang', yunnan: 'liuzhang',
   tianshui: 'mateng', wuwei: 'mateng', anding: 'mateng', jincheng: 'mateng', wudu: 'mateng',
-  hanzhong: 'zhanglu', yangping: 'zhanglu', shangyong: 'zhanglu',
+  hanzhong: 'zhanglu', shangyong: 'zhanglu',
   guiyang: 'hanxuan', lingling: 'hanxuan',
   xiangping: 'gongsundu',
 };
@@ -478,8 +480,8 @@ const SANGUO_OWNERS: Record<string, string> = {
   jincheng: 'caocao', xiangping: 'caocao',
   chengdu: 'liubei', hanzhong: 'liubei', mianzhu: 'liubei', zhangtong: 'liubei',
   jiangzhou: 'liubei', langzhong: 'liubei', badong: 'liubei', jianning: 'liubei',
-  yunnan: 'liubei', yangping: 'liubei',
-  ruxukou: 'sunquan', jiangling: 'sunquan', jiangxia: 'sunquan', yiling: 'sunquan',
+  yunnan: 'liubei',
+  jiangling: 'sunquan', jiangxia: 'sunquan', yiling: 'sunquan',
   gongan: 'sunquan', changsha: 'sunquan', guiyang: 'sunquan', lingling: 'sunquan',
   wuling: 'sunquan', chaisang: 'sunquan', lujiang: 'sunquan', jianye: 'sunquan',
   wu: 'sunquan', kuaiji: 'sunquan', danyang: 'sunquan', yuzhang: 'sunquan',

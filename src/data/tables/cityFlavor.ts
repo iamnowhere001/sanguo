@@ -118,15 +118,6 @@ export const CITY_FLAVOR: Record<string, CityFlavor> = {
       fortificationBonus: 10,
     },
   },
-  ruxukou: {
-    history:
-      '濡须水入江之口，孙权在此筑坞屯水军，与曹魏隔江对峙，是江东的门户要塞。',
-    skill: {
-      name: '濡须水寨',
-      description: '水寨与山险相连，守城城防 +12。',
-      fortificationBonus: 12,
-    },
-  },
   danyang: {
     history:
       '丹阳郡，山越与精兵之地。汉代丹阳兵以骁勇善战闻名，是江东重要的兵源。',

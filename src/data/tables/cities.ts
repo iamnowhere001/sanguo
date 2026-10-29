@@ -2,7 +2,7 @@ import type { City, CitySize } from '../../core/state';
 import { CITY_FLAVOR } from './cityFlavor';
 
 /**
- * 城池表：赤壁剧本 61 城。
+ * 城池表：赤壁剧本 59 城（阳平关、濡须口为关防，已并入 `gates.ts`，不重复设城）。
  *
  * 城池不再只是资源容器，而是有三种可感知的差异：
  * - `size`：都城 / 大城 / 中城 / 小城，决定单城驻军上限；
@@ -280,13 +280,6 @@ export const CITY_TABLE: Record<string, City> = {
     gold: 400, food: 1100, population: 34000,
     searchPool: [{ result: 'food', weight: 25 }],
   },
-  ruxukou: {
-    id: 'ruxukou', name: '濡须口', x: 770, y: 535, terrain: 'plain', isWaterCity: true,
-    size: 'small', fortification: 86,
-    ownerId: 'sunquan', agriculture: 100, commerce: 90, loyalty: 74, defense: 40,
-    gold: 200, food: 700, population: 14000,
-    searchPool: [{ result: 'food', weight: 25 }],
-  },
   danyang: {
     id: 'danyang', name: '丹阳', x: 850, y: 500, terrain: 'plain',
     size: 'medium', fortification: 58,
@@ -471,13 +464,6 @@ export const CITY_TABLE: Record<string, City> = {
     ownerId: 'zhanglu', agriculture: 220, commerce: 200, loyalty: 76, defense: 60,
     gold: 500, food: 1400, population: 40000,
     searchPool: [{ result: 'gold', weight: 30 }],
-  },
-  yangping: {
-    id: 'yangping', name: '阳平关', x: 365, y: 462, terrain: 'mountain',
-    size: 'small', fortification: 92,
-    ownerId: 'zhanglu', agriculture: 120, commerce: 100, loyalty: 72, defense: 65,
-    gold: 300, food: 800, population: 20000,
-    searchPool: [{ result: 'food', weight: 30 }],
   },
   shangyong: {
     id: 'shangyong', name: '上庸', x: 435, y: 485, terrain: 'mountain',

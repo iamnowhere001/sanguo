@@ -41,6 +41,7 @@ import { checkGameOver, retreatCityFor } from './resolve';
 import { durabilityMaxOf } from '../logistics';
 import { towerFortificationOf } from '../facilities';
 import { topUpFromPool } from '../troops';
+import { buildSquads, squadMembers, squadShares, type SquadConfig, type SquadSpec } from '../squads';
 
 /** 从指定战斗流掷天气；返回新流状态，避免偷用其它系统的随机数 */
 function rollWeather(rng: RngState): { weather: Weather; rng: RngState } {
@@ -94,6 +95,38 @@ function unitFromGeneral(
   u.force = effForce(state, g);
   u.intellect = effIntellect(state, g);
   u.training = state.cities[g.locationId]?.training ?? 0;
+  return u;
+}
+
+/**
+ * 编队单位：兵力合并，武力 / 智力取队内最高，兵种与移动跟随主将。
+ * 只有主将 + 副将 ≥ 2 人才记录副将信息，单将队伍与旧版完全一致。
+ */
+function unitFromSquad(
+  state: GameState,
+  squad: SquadSpec,
+  side: BattleSide,
+  x: number,
+  y: number,
+  isCommander: boolean,
+): BattleUnit {
+  const commander = state.generals[squad.commanderId]!;
+  const members = squadMembers(squad)
+    .map((id) => state.generals[id])
+    .filter((g): g is General => Boolean(g));
+  const u = unitFromGeneral(state, commander, side, x, y, isCommander);
+  if (members.length <= 1) return u;
+
+  const troops = members.reduce((n, g) => n + Math.max(0, g.troops), 0);
+  u.troops = troops;
+  u.maxTroops = Math.max(1, troops);
+  u.force = Math.max(...members.map((g) => effForce(state, g)));
+  u.intellect = Math.max(...members.map((g) => effIntellect(state, g)));
+  u.deputyIds = [...squad.deputyIds];
+  u.deputyNames = squad.deputyIds
+    .map((id) => state.generals[id]?.name ?? '')
+    .filter(Boolean);
+  u.squadShares = squadShares(state, squad);
   return u;
 }
 
@@ -398,6 +431,11 @@ export function createBattle(
     skipAdjacency?: boolean;
     /** 攻城部队在大地图上的实际位置：攻方从此处展开 */
     attackerAt?: { x: number; y: number };
+    /**
+     * 出征编队（主将 → 副将）：缺省时每名武将各自成队。
+     * 见 `systems/squads.ts`；编队不合法时按单将成队兜底。
+     */
+    squads?: SquadConfig;
   },
 ): { result: OpResult; battle?: BattleState } {
   const from = state.cities[fromCityId];
@@ -453,12 +491,16 @@ export function createBattle(
     .sort((a, b) => b.troops - a.troops)
     .slice(0, BALANCE.BATTLE_MAX_DEFENDERS);
 
+  // 【队伍编制】显式配置优先；缺省时每将一队（旧行为）。
+  // 编队只影响攻方：守方按「上场上限」取兵最多的 N 将，各自成队。
+  const squads = buildSquads(generalIds, opts?.squads);
+
   // 大地图战斗：直接在 576×432 真实地形上列阵，不再裁切 12×8 战术图。
   const setup = setupMapBattle(
     state,
     fromCityId,
     targetCityId,
-    attackers.length,
+    squads.length,
     fielded.length,
     {
       attackerAt: opts?.attackerAt,
@@ -471,12 +513,15 @@ export function createBattle(
   if (!setup) return { result: fail('地图缺少目标城池落位') };
 
   const units: Record<string, BattleUnit> = {};
-  const atkCommander = attackers.find((g) => g.isRuler)?.id ?? attackers[0]!.id;
+  const ruler = attackers.find((g) => g.isRuler);
+  const atkCommander =
+    squads.find((squad) => squad.commanderId === ruler?.id)?.commanderId ??
+    squads[0]!.commanderId;
   const defCommander = fielded[0]!.id;
 
-  attackers.forEach((g, i) => {
+  squads.forEach((squad, i) => {
     const p = setup.attackerSpawns[Math.min(i, setup.attackerSpawns.length - 1)]!;
-    const u = unitFromGeneral(state, g, 'attacker', p.x, p.y, g.id === atkCommander);
+    const u = unitFromSquad(state, squad, 'attacker', p.x, p.y, squad.commanderId === atkCommander);
     units[u.id] = u;
   });
   fielded.forEach((g, i) => {
@@ -484,6 +529,11 @@ export function createBattle(
     const u = unitFromGeneral(state, g, 'defender', p.x, p.y, g.id === defCommander);
     units[u.id] = u;
   });
+
+  // 题目只认「有独立单位的武将」：编队副将的 id 不在 units 里，不能当斩将目标
+  const attackerLeaders = squads
+    .map((squad) => state.generals[squad.commanderId])
+    .filter((g): g is General => Boolean(g));
 
   const playerInvolved =
     attackerFactionId === state.playerFactionId || target.ownerId === state.playerFactionId;
@@ -496,7 +546,7 @@ export function createBattle(
       ? planBattleObjectives(
           state,
           targetCityId,
-          attackers,
+          attackerLeaders,
           fielded,
           attackerFactionId,
           state.battleSerial,

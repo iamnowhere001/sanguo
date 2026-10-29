@@ -25,6 +25,7 @@ import {
 } from '../chapter';
 import { grantExp } from './combat';
 import { durabilityMaxOf } from '../logistics';
+import { splitSquadTroops } from '../squads';
 import { activeUnits, otherSide } from './grid';
 import {
   objectiveFailureText,
@@ -47,6 +48,16 @@ export function battleOutcome(b: BattleState): BattleOutcome | null {
   return null;
 }
 
+/** 单位对应的全部武将：主将 + 副将（无编队时只有主将） */
+function unitMembers(u: BattleUnit): string[] {
+  return [u.generalId, ...(u.deputyIds ?? [])];
+}
+
+/** 按出阵份额把单位的战后兵力分回各将 */
+function splitUnitTroops(u: BattleUnit, total: number): Record<string, number> {
+  return splitSquadTroops(unitMembers(u), u.squadShares ?? {}, total);
+}
+
 /** 【优化】E09 事件化忠诚：出征 −2，战败/撤退再 −4 */
 function applyBattleLoyalty(
   state: GameState,
@@ -54,18 +65,17 @@ function applyBattleLoyalty(
   outcome: BattleOutcome,
 ): { delta: number; count: number } {
   let count = 0;
-  for (const u of attackers) {
-    const g = state.generals[u.generalId];
-    if (!g || g.status !== 'active' || g.isRuler) continue;
-    const delta =
-      BALANCE.LOYALTY.battleReturn +
-      (outcome === 'victory' ? 0 : BALANCE.LOYALTY.battleDefeat);
-    g.loyalty = Math.max(0, g.loyalty + delta);
-    count += 1;
-  }
   const delta =
     BALANCE.LOYALTY.battleReturn +
     (outcome === 'victory' ? 0 : BALANCE.LOYALTY.battleDefeat);
+  for (const u of attackers) {
+    for (const id of unitMembers(u)) {
+      const g = state.generals[id];
+      if (!g || g.status !== 'active' || g.isRuler) continue;
+      g.loyalty = Math.max(0, g.loyalty + delta);
+      count += 1;
+    }
+  }
   return { delta, count };
 }
 
@@ -111,8 +121,10 @@ function grantObjectiveReward(
   if (objective.reward.exp) {
     for (const u of Object.values(b.units)) {
       if (u.side !== b.playerSide || u.routed || u.troops <= 0) continue;
-      const g = state.generals[u.generalId];
-      if (g?.status === 'active') grantExp(g, objective.reward.exp);
+      for (const id of unitMembers(u)) {
+        const g = state.generals[id];
+        if (g?.status === 'active') grantExp(g, objective.reward.exp);
+      }
     }
   }
   return objectiveRewardText(objective);
@@ -170,27 +182,29 @@ export function resolveBattle(
   let retreatedTroops = 0;
 
   for (const u of attackerUnits) {
-    const g = state.generals[u.generalId];
-    if (!g) continue;
-    g.stamina = clamp(u.stamina, 0, BALANCE.STAMINA_MAX);
-    if (outcome === 'victory') {
-      g.troops = u.troops;
-      g.locationId = b.targetCityId;
-      if (!u.routed) {
-        grantExp(g, BALANCE.EXP.victory);
-        grantExp(g, BALANCE.EXP.captureCity);
+    const shares = splitUnitTroops(
+      u,
+      outcome === 'victory' ? u.troops : Math.floor(u.troops * BALANCE.RETREAT_KEEP_RATE),
+    );
+    for (const id of unitMembers(u)) {
+      const g = state.generals[id];
+      if (!g) continue;
+      g.stamina = clamp(u.stamina, 0, BALANCE.STAMINA_MAX);
+      g.troops = shares[id] ?? 0;
+      g.locationId = outcome === 'victory' ? b.targetCityId : b.fromCityId;
+      if (outcome === 'victory') {
+        if (!u.routed) {
+          grantExp(g, BALANCE.EXP.victory);
+          grantExp(g, BALANCE.EXP.captureCity);
+        }
+      } else if (!u.routed) {
+        grantExp(g, 50);
       }
-    } else {
-      g.troops = Math.floor(u.troops * BALANCE.RETREAT_KEEP_RATE);
-      g.locationId = b.fromCityId;
-      if (!u.routed) grantExp(g, 50);
     }
   }
 
   for (const u of defenderUnits) {
-    const g = state.generals[u.generalId];
-    if (!g) continue;
-    g.stamina = clamp(u.stamina, 0, BALANCE.STAMINA_MAX);
+    const members = unitMembers(u);
     if (outcome === 'victory') {
       // 主将只有在保住一定兵力时才能突围；残兵主将仍可能被俘
       const commanderCanEscape = !u.isCommander || u.troops >= u.maxTroops * 0.25;
@@ -198,34 +212,47 @@ export function resolveBattle(
         retreatCity !== null && !u.routed && u.troops > 0 && commanderCanEscape;
 
       if (canRetreat) {
-        g.status = 'active';
-        g.locationId = retreatCity.id;
-        g.troops = Math.max(
-          1,
+        const shares = splitUnitTroops(
+          u,
           Math.floor(u.troops * BALANCE.DEFENDER_RETREAT_KEEP_RATE),
         );
-        retreated += 1;
-        retreatedTroops += g.troops;
+        for (const id of members) {
+          const g = state.generals[id];
+          if (!g) continue;
+          g.stamina = clamp(u.stamina, 0, BALANCE.STAMINA_MAX);
+          g.status = 'active';
+          g.locationId = retreatCity!.id;
+          g.troops = Math.max(1, shares[id] ?? 0);
+          retreated += 1;
+          retreatedTroops += g.troops;
+        }
       } else {
-        g.troops = u.troops;
         let captured = u.isCommander;
         if (!captured) {
           const [hit, next] = chance(b.rng, BALANCE.CAPTURE_RATE_SUBORDINATE);
           b.rng = next;
           captured = hit;
         }
-        if (captured) {
-          g.status = 'captured';
-          g.locationId = b.targetCityId;
-        } else {
-          g.status = 'inactive';
+        const shares = splitUnitTroops(u, u.troops);
+        for (const id of members) {
+          const g = state.generals[id];
+          if (!g) continue;
+          g.stamina = clamp(u.stamina, 0, BALANCE.STAMINA_MAX);
+          g.troops = shares[id] ?? 0;
+          g.status = captured ? 'captured' : 'inactive';
           g.locationId = b.targetCityId;
         }
       }
     } else {
-      g.troops = u.troops;
-      g.locationId = b.targetCityId;
-      if (!u.routed) grantExp(g, BALANCE.EXP.victory);
+      const shares = splitUnitTroops(u, u.troops);
+      for (const id of members) {
+        const g = state.generals[id];
+        if (!g) continue;
+        g.stamina = clamp(u.stamina, 0, BALANCE.STAMINA_MAX);
+        g.troops = shares[id] ?? 0;
+        g.locationId = b.targetCityId;
+        if (!u.routed) grantExp(g, BALANCE.EXP.victory);
+      }
     }
   }
 
@@ -241,9 +268,11 @@ export function resolveBattle(
   if (outcome === 'victory' && target) {
     // 【适配】预备队：超出上场上限的守将没进战场。
     // 城破时有相邻友城则随败军撤退，否则才溃散。
+    // 编队里没单独单位的副将也要算「上过场」，不能被当成预备队遣散。
+    const inBattle = new Set(Object.values(b.units).flatMap((u) => unitMembers(u)));
     for (const g of Object.values(state.generals)) {
       if (g.status !== 'active' || g.locationId !== b.targetCityId) continue;
-      if (b.units[`defender:${g.id}`] || b.units[`attacker:${g.id}`]) continue;
+      if (inBattle.has(g.id)) continue;
       if (retreatCity && g.troops > 0) {
         g.locationId = retreatCity.id;
         g.troops = Math.max(
@@ -322,8 +351,11 @@ export function resolveBattle(
     Object.values(b.units)
       .filter((u) => u.side === side)
       .reduce((sum, u) => {
-        const g = state.generals[u.generalId];
-        return sum + (g?.status === 'active' ? g.troops : 0);
+        const memberSum = unitMembers(u).reduce((n, id) => {
+          const g = state.generals[id];
+          return n + (g?.status === 'active' ? g.troops : 0);
+        }, 0);
+        return sum + memberSum;
       }, 0);
   const playerTroopsNow = survivingTroops(b.playerSide);
   const foeTroopsNow = survivingTroops(otherSide(b.playerSide));
@@ -387,8 +419,9 @@ export function resolveBattle(
       });
     }
     const levels = playerUnits
-      .map((u) => {
-        const g = state.generals[u.generalId];
+      .flatMap((u) => unitMembers(u))
+      .map((id) => {
+        const g = state.generals[id];
         return g ? `${g.name} Lv${g.level}` : '';
       })
       .filter(Boolean)

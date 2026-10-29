@@ -583,7 +583,6 @@ export const CITY_COORDS: Record<string, Pt> = {
   jiangzhou: [106.55, 29.56],
   badong: [110.34, 31.04],
   hanzhong: [107.02, 33.07],
-  yangping: [106.2, 33.45],
   shangyong: [110.23, 32.23],
   jianning: [103.8, 25.49],
   yunnan: [100.56, 25.47],
@@ -628,7 +627,6 @@ export const CITY_COORDS: Record<string, Pt> = {
   poyang: [116.7, 29.0],
   chaisang: [115.99, 29.71],
   lujiang: [117.05, 31.1],
-  ruxukou: [117.9, 31.45],
 
   // 凉州
   tianshui: [105.72, 34.58],

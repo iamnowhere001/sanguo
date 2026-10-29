@@ -132,11 +132,6 @@ const SPECIAL_BATTLEFIELDS: Record<string, SpecialBattlefield> = {
     name: '逍遥津',
     subtitle: '水网与芦荡交错，轻骑难展，步卒可借堤岸逼近。',
   },
-  ruxukou: {
-    theme: 'watertown',
-    name: '濡须水寨',
-    subtitle: '夹江立寨，港汊密布，水军可绕袭后阵。',
-  },
   jianye: {
     theme: 'river',
     name: '建业江防',
@@ -171,11 +166,6 @@ const SPECIAL_BATTLEFIELDS: Record<string, SpecialBattlefield> = {
     theme: 'pass',
     name: '汉中门户',
     subtitle: '秦岭余脉横断，关隘与山道是唯一快路。',
-  },
-  yangping: {
-    theme: 'pass',
-    name: '阳平关',
-    subtitle: '雄关据险，正面强攻代价极高，侧翼山道可绕。',
   },
   shangdang: {
     theme: 'pass',

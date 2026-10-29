@@ -105,8 +105,11 @@ export function RosterDialog({
                   <b>{g.name}</b>
                   {g.isRuler ? <span className="mini">君主</span> : null}
                   <ClassTag c={g.unitClass} />
+                  <span className="roster-stat">统 {g.leadership}</span>
                   <span className="roster-stat">武 {g.force}</span>
                   <span className="roster-stat">智 {g.intellect}</span>
+                  <span className="roster-stat">政 {g.politics}</span>
+                  <span className="roster-stat">魅 {g.charm}</span>
                   <span className="roster-stat">忠 {g.loyalty}</span>
                   <span className="roster-stat">体 {g.stamina}</span>
                   <span className="roster-troops">

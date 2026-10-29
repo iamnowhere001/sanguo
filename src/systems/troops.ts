@@ -16,7 +16,12 @@ import { troopCap } from './formulas';
 
 /** 武将当前带兵上限（含装备加成） */
 export function troopCapOf(s: GameState, g: General): number {
-  return troopCap({ force: effForce(s, g), intellect: effIntellect(s, g), level: g.level });
+  return troopCap({
+    leadership: g.leadership,
+    force: effForce(s, g),
+    intellect: effIntellect(s, g),
+    level: g.level,
+  });
 }
 
 /** 城内未分配兵力池 */

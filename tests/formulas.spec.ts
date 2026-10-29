@@ -48,14 +48,14 @@ function damageSample(
 }
 
 describe('核心公式样例（GDD + 报告 v2）', () => {
-  it('带兵上限：1 级吕布（武100/智26）= 1788，20 级 = 3308', () => {
-    expect(troopCap({ force: 100, intellect: 26, level: 1 })).toBe(1788);
-    expect(troopCap({ force: 100, intellect: 26, level: 20 })).toBe(3308);
+  it('带兵上限：1 级吕布（统89/武100/智26）= 1874，20 级 = 3394', () => {
+    expect(troopCap({ leadership: 89, force: 100, intellect: 26, level: 1 })).toBe(1874);
+    expect(troopCap({ leadership: 89, force: 100, intellect: 26, level: 20 })).toBe(3394);
   });
 
-  it('带兵上限：1 级诸葛亮（武38/智100）= 1450，20 级 = 2970', () => {
-    expect(troopCap({ force: 38, intellect: 100, level: 1 })).toBe(1450);
-    expect(troopCap({ force: 38, intellect: 100, level: 20 })).toBe(2970);
+  it('带兵上限：1 级诸葛亮（统92/武38/智100）= 1704，20 级 = 3224', () => {
+    expect(troopCap({ leadership: 92, force: 38, intellect: 100, level: 1 })).toBe(1704);
+    expect(troopCap({ leadership: 92, force: 38, intellect: 100, level: 20 })).toBe(3224);
   });
 
   it('月产粮：农业 250、民忠 80 → 200', () => {

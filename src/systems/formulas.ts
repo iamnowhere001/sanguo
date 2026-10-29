@@ -33,11 +33,19 @@ export function statGain(field: StatField, value: number): number {
 }
 
 /**
- * 带兵上限 = 武力×15 + 智力×8 + 等级×80
+ * 带兵上限 = 统率×10 + 武力×8 + 智力×4 + 等级×80
+ *
+ * 五维口径（参考《三国志 11》）：统率是带兵的主属性，武力 / 智力各占一部分，
+ * 避免「武力流」和「智力流」在兵力上拉开太大差距。
  * 注意：传入的 force / intellect 应是**含装备加成**的有效值（GDD §5.2 注）。
  */
-export function troopCap(g: { force: number; intellect: number; level: number }): number {
-  return g.force * 15 + g.intellect * 8 + g.level * 80;
+export function troopCap(g: {
+  leadership: number;
+  force: number;
+  intellect: number;
+  level: number;
+}): number {
+  return g.leadership * 10 + g.force * 8 + g.intellect * 4 + g.level * 80;
 }
 
 /** 每月粮产 = floor(农业 × 民忠 / 100 × 灾害系数) */

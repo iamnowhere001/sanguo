@@ -56,7 +56,6 @@ describe('大地图 AI：多城协同', () => {
     setCityTroops(s, 'jianye', 100);
     setCityTroops(s, 'danyang', 100);
     setCityTroops(s, 'lujiang', 100);
-    setCityTroops(s, 'ruxukou', 100);
 
     const candidates = planAttackCandidates(s, 'caocao', difficultyOf('normal'));
     const sources = new Set(candidates.map((c) => c.fromId));
@@ -76,7 +75,6 @@ describe('大地图 AI：多城协同', () => {
     setCityTroops(s, 'jianye', 100);
     setCityTroops(s, 'danyang', 100);
     setCityTroops(s, 'lujiang', 100);
-    setCityTroops(s, 'ruxukou', 100);
 
     const before = Object.values(s.cities).filter((c) => c.ownerId === 'sunquan').length;
     const result = runAiFaction(s, 'caocao');

@@ -5,9 +5,9 @@ const IDS = ['dongzhuo', 'guandu', 'chibi', 'sanguo'];
 
 describe('四剧本建局', () => {
   for (const id of IDS) {
-    it(`${id}: 61 城、势力完整、君主在位且在本势力城中`, () => {
+    it(`${id}: 59 城、势力完整、君主在位且在本势力城中`, () => {
       const s = createGame({ scenarioId: id, playerFactionId: 'liubei', aiEnabled: false });
-      expect(Object.keys(s.cities)).toHaveLength(61);
+      expect(Object.keys(s.cities)).toHaveLength(59);
       expect(Object.keys(s.factions).length).toBeGreaterThan(0);
       expect(s.factions[s.playerFactionId]!.cityIds.length).toBeGreaterThan(0);
 
@@ -31,7 +31,7 @@ describe('四剧本建局', () => {
     expect(s.factions.dongzhuo!.cityIds).toHaveLength(4);
     expect(s.cities.luoyang!.ownerId).toBe('dongzhuo');
     expect(s.generals.lvbu!.locationId).toBe('changan');
-    expect(s.factions.sunjian!.cityIds).toHaveLength(12);
+    expect(s.factions.sunjian!.cityIds).toHaveLength(11);
     expect(s.factions.caocao!.cityIds).toHaveLength(2);
   });
 
@@ -45,17 +45,17 @@ describe('四剧本建局', () => {
     expect(s.generals.zhaoyun!.locationId).toBe('xinye');
   });
 
-  it('220：魏 34 / 蜀 10 / 吴 17，黄忠、马超入蜀', () => {
+  it('220：魏 34 / 蜀 9 / 吴 16，黄忠、马超入蜀', () => {
     const s = createGame({ scenarioId: 'sanguo', playerFactionId: 'liubei', aiEnabled: false });
     expect(s.factions.caocao!.cityIds).toHaveLength(34);
-    expect(s.factions.liubei!.cityIds).toHaveLength(10);
-    expect(s.factions.sunquan!.cityIds).toHaveLength(17);
+    expect(s.factions.liubei!.cityIds).toHaveLength(9);
+    expect(s.factions.sunquan!.cityIds).toHaveLength(16);
     expect(s.generals.huangzhong!.locationId).toBe('chengdu');
     expect(s.generals.machao!.locationId).toBe('hanzhong');
     expect(s.factions.liubei!.name).toBe('蜀');
   });
 
-  it('四剧本的 61 城道路图全部连通', () => {
+  it('四剧本的 59 城道路图全部连通', () => {
     for (const id of IDS) {
       const s = createGame({ scenarioId: id, playerFactionId: 'liubei', aiEnabled: false });
       const ids = Object.keys(s.cities);

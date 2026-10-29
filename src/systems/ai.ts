@@ -23,7 +23,7 @@ import {
   canAttackFactions,
   tickDiplomacy,
 } from './factionDiplomacy';
-import { gatesOnEdge, type GateFeature } from '../data/tables/gates';
+import { gatesOnEdge, isTrail, type GateFeature } from '../data/tables/gates';
 import { assaultGateWithForce, gateOwnerOf } from './gates';
 import { sortieArmy } from './army';
 import { abandonCity, planAbandonment } from './abandon';
@@ -160,6 +160,7 @@ function claimNeutralGatesOnEdge(
   generalIds: string[],
 ): void {
   for (const gate of gatesOnEdge(fromId, targetId)) {
+    if (isTrail(gate)) continue;
     if (gateOwnerOf(state, gate.id)) continue;
     assaultGateWithForce(state, factionId, gate.id, generalIds);
   }

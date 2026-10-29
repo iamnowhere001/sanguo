@@ -542,7 +542,21 @@ function findNearest(
   return null;
 }
 
+/**
+ * 关港落位的参考点。
+ *
+ * 默认取道路中点；配表写了 `anchor` 的关港按锚点落位 —— 成对港口靠锚点
+ * 错开成斜向（同一段江面两条渡线不会叠在一起），同一道路上的多处关隘
+ * （如汉中—梓潼的阳平关与剑阁）也能各占一道山脊。
+ */
 function midpointOf(gate: GateFeature): { col: number; row: number } | null {
+  if (gate.anchor) {
+    const world = projectLonLat(gate.anchor[0], gate.anchor[1]);
+    return {
+      col: Math.floor(world.x / MAP.tile),
+      row: Math.floor(world.y / MAP.tile),
+    };
+  }
   const [aId, bId] = gate.edges[0] ?? [];
   if (!aId || !bId) return null;
   const a: Pt | undefined = CITY_COORDS[aId];
@@ -572,9 +586,10 @@ export function gateSites(): Record<string, GateSite> {
   // 先占住城墙：关防通行线不得穿过任何城池的 3×3 城墙
   for (const key of cityTileIndex().wall.keys()) used.add(key);
   const out: Record<string, GateSite> = {};
-  const ordered = [...GATES].sort(
-    (a, b) => Number(a.kind === 'port') - Number(b.kind === 'port'),
-  );
+  // 关隘先占山脊，其次小路（同样走山脊，但落位锚点各不相同），最后港口。
+  const rank = (kind: GateFeature['kind']): number =>
+    kind === 'port' ? 2 : kind === 'trail' ? 1 : 0;
+  const ordered = [...GATES].sort((a, b) => rank(a.kind) - rank(b.kind));
 
   for (const gate of ordered) {
     const mid = midpointOf(gate);

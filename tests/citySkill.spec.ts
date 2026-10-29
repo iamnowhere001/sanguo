@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { emptyMonthFacts } from '../src/core/state';
 import { CITY_TABLE } from '../src/data/tables/cities';
 import { CITY_FLAVOR } from '../src/data/tables/cityFlavor';
+import { GATES } from '../src/data/tables/gates';
 import { createGame } from '../src/data/tables/scenarios';
 import { doRecruit } from '../src/systems/domestic';
 import { runOutput, runTax } from '../src/systems/economy';
 import { foodOutput, taxIncome, tradeLimit } from '../src/systems/formulas';
-import { createBattle } from '../src/systems/battle';
 
 const EFFECT_KEYS = [
   'foodMult',
@@ -30,8 +30,8 @@ function soloCity(cityId: string) {
 }
 
 describe('新增城池的历史背景与专属技能', () => {
-  it('26 座新增城池都有历史背景、技能名与至少一项实际效果', () => {
-    expect(Object.keys(CITY_FLAVOR)).toHaveLength(26);
+  it('25 座新增城池都有历史背景、技能名与至少一项实际效果', () => {
+    expect(Object.keys(CITY_FLAVOR)).toHaveLength(25);
     for (const [id, flavor] of Object.entries(CITY_FLAVOR)) {
       const city = CITY_TABLE[id];
       expect(city, id).toBeDefined();
@@ -85,18 +85,14 @@ describe('新增城池的历史背景与专属技能', () => {
     expect(city.food).toBe(1000 - 85);
   });
 
-  it('守城技能：濡须水寨给濡须口额外 +12 城防', () => {
+  it('濡须口改为港口：濡须坞城防并入关防数值', () => {
     const s = createGame({ scenarioId: 'chibi', aiEnabled: false });
-    s.generals.caocao!.status = 'active';
-    s.generals.caocao!.locationId = 'hefei';
-    s.generals.caocao!.troops = 800;
-    s.generals.sunquan!.status = 'active';
-    s.generals.sunquan!.locationId = 'ruxukou';
-    s.generals.sunquan!.troops = 500;
-
-    const { battle } = createBattle(s, 'hefei', 'ruxukou', ['caocao'], 'caocao');
-    expect(battle).toBeDefined();
-    expect(battle!.fortification).toBe(s.cities.ruxukou!.fortification + 12);
+    const gate = GATES.find((g) => g.id === 'ruxukou')!;
+    expect(gate.kind).toBe('port');
+    expect(gate.fortification).toBe(12);
+    // 港口不再作为城池存在，濡须口一线改由合肥—庐江道路承载
+    expect(s.cities.ruxukou).toBeUndefined();
+    expect(s.cities.lujiang).toBeDefined();
   });
 
   it('交易额度技能：江淮漕运的倍率进入公式', () => {

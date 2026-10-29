@@ -1,6 +1,11 @@
 import { useEffect, useMemo } from 'react';
 import type { GameState } from '../core/state';
-import { GATE_KIND_LABEL } from '../data/tables/gates';
+import {
+  GATE_KIND_LABEL,
+  gateById,
+  pairedGateOf,
+  type GateFeature,
+} from '../data/tables/gates';
 import {
   armiesAtGate,
   gateAccessLabel,
@@ -56,7 +61,9 @@ export function GatePanel({
   const guardCity = gate.guardCityId ? state.cities[gate.guardCityId] : undefined;
   const supplyCity = supplyCityId ? state.cities[supplyCityId] : undefined;
   const blocked = access === 'blocked';
-  const canAct = !mine && access !== 'open';
+  const trail = gate.kind === 'trail';
+  const pair = pairedGateOf(gate);
+  const canAct = !trail && !mine && access !== 'open';
   const actionLabel = access === 'neutral' ? '接管' : '攻关';
 
   return (
@@ -65,7 +72,9 @@ export function GatePanel({
         <div className="cp-head-top">
           <div className="cp-title">
             <div className="gate-title-row">
-              <span className="gate-kind-mark">{gate.kind === 'port' ? '港' : '关'}</span>
+              <span className="gate-kind-mark">
+                {gate.kind === 'port' ? '港' : trail ? '径' : '关'}
+              </span>
               <h2>{gate.name}</h2>
             </div>
             <div className="sub-line">
@@ -75,7 +84,8 @@ export function GatePanel({
               </span>
               <span className="dot-sep">·</span>
               <span className="muted">
-                {GATE_KIND_LABEL[gate.kind]} · {site?.water ? '江面渡线' : '山脊通道'}
+                {GATE_KIND_LABEL[gate.kind]} ·{' '}
+                {trail ? '山径' : site?.water ? '江面渡线' : '山脊通道'}
               </span>
             </div>
           </div>
@@ -92,21 +102,21 @@ export function GatePanel({
             </div>
           </div>
           <div className="cp-metric">
-            <span>月金</span>
+            <span>{trail ? '行军' : '月金'}</span>
             <div className="v">
-              <b>+{gate.gold}</b>
+              <b>{trail ? `+${gate.extraDays}日` : `+${gate.gold}`}</b>
             </div>
           </div>
           <div className="cp-metric">
-            <span>月粮</span>
+            <span>{trail ? '可绕' : '月粮'}</span>
             <div className="v">
-              <b>+{gate.food}</b>
+              <b>{trail ? pairedBypassName(gate) : `+${gate.food}`}</b>
             </div>
           </div>
           <div className="cp-metric">
-            <span>工事</span>
+            <span>{trail ? '封锁' : '工事'}</span>
             <div className="v">
-              <b>{gate.fortification}</b>
+              <b>{trail ? '不可' : gate.fortification}</b>
             </div>
           </div>
         </div>
@@ -150,6 +160,15 @@ export function GatePanel({
               <span>守军回补</span>
               <b>每月 +{Math.max(1, Math.round(gate.garrison * 0.03))}</b>
             </div>
+            {pair ? (
+              <div>
+                <span>对岸港口</span>
+                <b>
+                  {pair.name}
+                  {pair.guardCityId ? ` · 法理 ${state.cities[pair.guardCityId]?.name ?? ''}` : ' · 无主'}
+                </b>
+              </div>
+            ) : null}
           </div>
           <p className="gate-note">
             {mine
@@ -170,7 +189,9 @@ export function GatePanel({
           <div className="gate-lines">
             <div>
               <span>类型</span>
-              <b>{site?.water ? '渡线（水战）' : '山道（隘口）'}</b>
+              <b>
+                {trail ? '山径（绕关）' : site?.water ? '渡线（水战）' : '山道（隘口）'}
+              </b>
             </div>
             <div>
               <span>长度</span>
@@ -263,9 +284,11 @@ export function GatePanel({
           </div>
           <p className="gate-note">{gate.note}</p>
           <p className="gate-note">
-            {gate.kind === 'port'
-              ? '由港口发起的攻城战按水战处理；水军与陆军在江面交汇时，非水兵会持续减员。'
-              : '关隘工事参与攻关守备；攻下后可作为前进基地，按月解送钱粮。'}
+            {trail
+              ? '小路只能过人、不能驻守：不受敌关封锁，但绕行多用 4—6 日，且无法阻止敌军同样走这条路。'
+              : gate.kind === 'port'
+                ? '由港口发起的攻城战按水战处理；水军与陆军在江面交汇时，非水兵会持续减员。'
+                : '关隘工事参与攻关守备；攻下后可作为前进基地，按月解送钱粮。'}
           </p>
         </section>
       </div>
@@ -275,9 +298,18 @@ export function GatePanel({
           返回城池
         </button>
         <span className="muted small gate-foot-hint">
-          {blocked ? '敌关封锁：先攻关，再进军' : '关防无内政，只产出与守备'}
+          {trail
+            ? '小路不可驻守，只用于绕关奇袭'
+            : blocked
+              ? '敌关封锁：先攻关，再进军'
+              : '关防无内政，只产出与守备'}
         </span>
       </footer>
     </aside>
   );
+}
+
+/** 小路绕过的关隘名（无 bypassOf 时留空） */
+function pairedBypassName(gate: GateFeature): string {
+  return gate.bypassOf ? gateById(gate.bypassOf)?.name ?? '—' : '—';
 }

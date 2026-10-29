@@ -416,6 +416,39 @@ function drawPassIcon(
   ctx.stroke();
 }
 
+/** 小路图标：虚线山径 + 双三角，提示“可绕关但不可驻守” */
+function drawTrailIcon(
+  ctx: CanvasRenderingContext2D,
+  r: number,
+  color: string,
+): void {
+  ctx.beginPath();
+  ctx.moveTo(-r * 1.3, r * 0.75);
+  ctx.quadraticCurveTo(-r * 0.4, -r * 0.35, r * 0.35, -r * 0.15);
+  ctx.quadraticCurveTo(r * 0.95, -r * 0.02, r * 1.3, -r * 0.75);
+  ctx.setLineDash([r * 0.42, r * 0.34]);
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = color;
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  for (const [x, y, s] of [
+    [-r * 0.75, r * 0.35, 1],
+    [r * 0.6, -r * 0.05, 0.85],
+  ] as Array<[number, number, number]>) {
+    ctx.beginPath();
+    ctx.moveTo(x, y - r * 0.34 * s);
+    ctx.lineTo(x - r * 0.3 * s, y + r * 0.2 * s);
+    ctx.lineTo(x + r * 0.3 * s, y + r * 0.2 * s);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(226,212,180,0.92)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(52,43,28,0.8)';
+    ctx.lineWidth = 0.7;
+    ctx.stroke();
+  }
+}
+
 /** 港口图标：蓝色渡口令牌 + 渡船剪影 */
 function drawPortIcon(
   ctx: CanvasRenderingContext2D,
@@ -1347,11 +1380,12 @@ export function MapCanvas({
       const owner = gateOwnerOf(state, gate.id);
       const color = owner ? state.factions[owner]?.color ?? '#8a8274' : '';
       const blocked = gateBlockedFor(state, gate.id, state.playerFactionId);
-      const r = gate.kind === 'pass' ? 7.2 : 7.6;
+      const r = gate.kind === 'port' ? 7.6 : 7.2;
       ctx.save();
       ctx.translate(sp.x, sp.y);
-      if (gate.kind === 'pass') drawPassIcon(ctx, r, color || '#8a8274', blocked);
-      else drawPortIcon(ctx, r, color, blocked);
+      if (gate.kind === 'port') drawPortIcon(ctx, r, color, blocked);
+      else if (gate.kind === 'trail') drawTrailIcon(ctx, r, color || '#8a8274');
+      else drawPassIcon(ctx, r, color || '#8a8274', blocked);
 
       // 敌对封锁：红圈 + 斜杠，全图一眼能看出此路不通
       if (blocked) {

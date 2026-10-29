@@ -297,7 +297,7 @@ function buildGeneral(
   factionId: string,
   capital: string,
   [id, name, force, intellect, unitClass]: Spec,
-): General {
+): Omit<General, 'leadership' | 'politics' | 'charm'> {
   return {
     id,
     name,
@@ -317,8 +317,10 @@ function buildGeneral(
   };
 }
 
-const PAIRS: Array<[string, General]> = Object.entries(RESERVES).flatMap(([fid, def]) =>
-  def.specs.map((spec): [string, General] => [spec[0], buildGeneral(fid, def.capital, spec)]),
+type BaseGeneral = Omit<General, 'leadership' | 'politics' | 'charm'>;
+
+const PAIRS: Array<[string, BaseGeneral]> = Object.entries(RESERVES).flatMap(([fid, def]) =>
+  def.specs.map((spec): [string, BaseGeneral] => [spec[0], buildGeneral(fid, def.capital, spec)]),
 );
 
 // 防呆：重复 id 会被 Object.fromEntries 静默吞掉（后写的覆盖先写的），必须在建表时就炸
@@ -328,7 +330,7 @@ if (DUP_IDS.length > 0) {
 }
 
 /** 补位将领（全部 inactive，建局时按势力激活并铺城） */
-export const EXTRA_GENERALS: Record<string, General> = Object.fromEntries(PAIRS);
+export const EXTRA_GENERALS: Record<string, BaseGeneral> = Object.fromEntries(PAIRS);
 
 /** 势力 → 补位将领 id 列表（按表内顺序，越靠前越优先上场） */
 export const FACTION_RESERVES: Record<string, string[]> = Object.fromEntries(

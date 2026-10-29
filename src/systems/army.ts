@@ -7,6 +7,7 @@ import { done, fail, type OpResult } from '../core/result';
 import { canAttackFactions } from './factionDiplomacy';
 import { createBattle } from './battle/setup';
 import { topUpFromPool } from './troops';
+import { defaultSquads, type SquadConfig } from './squads';
 import { log } from './economy';
 import { beaconMarchBonusOf } from './facilities';
 import { gateSiteAt, gateSites } from '../render/gateGrid';
@@ -688,6 +689,7 @@ export function sortieArmy(
   targetCityId: string,
   generalIds?: string[],
   factionId: string = s.playerFactionId,
+  squads?: SquadConfig,
 ): OpResult {
   const from = s.cities[fromCityId];
   const target = s.cities[targetCityId];
@@ -737,6 +739,8 @@ export function sortieArmy(
     fromCityId,
     targetCityId,
     generalIds: [...ids],
+    // 出征即编队：主将 + 最多 2 名副将（未显式配置时按统率自动成队）
+    squads: squads ?? defaultSquads(s, ids),
     // 出生在门外：城内不摆部队，城墙只画守军旗
     at: { col: route.exit.col, row: route.exit.row },
     path: route.path,
@@ -818,6 +822,7 @@ export function assaultCity(s: GameState, armyId: string): OpResult {
       fortificationBonus: army.fortificationBonus,
       skipAdjacency: true,
       attackerAt: { x: army.at.col, y: army.at.row },
+      squads: army.squads,
     },
   );
 
@@ -898,6 +903,7 @@ export function playArmyTurn(s: GameState): { battleStarted: boolean } {
           fortificationBonus: army.fortificationBonus,
           skipAdjacency: true,
           attackerAt: { x: army.at.col, y: army.at.row },
+          squads: army.squads,
         },
       );
       if (battle.result.ok) {

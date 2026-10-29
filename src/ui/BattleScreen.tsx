@@ -62,6 +62,9 @@ function UnitCard({
         <b>{u.name}</b>
         <ClassTag c={u.unitClass} />
         {u.isCommander ? <span className="mini gold">主将</span> : null}
+        {u.deputyNames?.length ? (
+          <span className="mini">副将 {u.deputyNames.join('、')}</span>
+        ) : null}
       </div>
       <div className="uc-troops">
         <span>

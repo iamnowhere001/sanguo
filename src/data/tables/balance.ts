@@ -28,6 +28,69 @@ export const BALANCE = {
   FORTIFICATION_MAX_REDUCTION: 0.2,
   FORTIFICATION_MIN_MULT: 0.3,
 
+  // ── 关防数值分档 【新增】关隘 / 港口 / 小路 ────────────────
+  /**
+   * `gates.ts` 每处关港只声明 `tier`（1 大型 / 2 中型 / 3 小型），
+   * 具体数值必须落在下表区间，由 `tests/gates.spec.ts` 强制校验。
+   *
+   * 口径：大型 = 演义主战场（潼关、虎牢、剑阁、濡须口）；中型 = 一郡咽喉；
+   * 小型 = 偏师可争的隘口与渡头。港口吃粮多、给钱少（养水军），关隘反之。
+   */
+  GATE: {
+    TIER: {
+      pass: {
+        1: {
+          fortification: [15, 18],
+          garrison: [2600, 3200],
+          gold: [38, 46],
+          food: [100, 125],
+          extraDays: [3, 3],
+        },
+        2: {
+          fortification: [9, 13],
+          garrison: [1700, 2300],
+          gold: [24, 32],
+          food: [60, 90],
+          extraDays: [2, 2],
+        },
+        3: {
+          fortification: [6, 9],
+          garrison: [1300, 1700],
+          gold: [15, 23],
+          food: [40, 60],
+          extraDays: [2, 2],
+        },
+      },
+      port: {
+        1: {
+          fortification: [8, 12],
+          garrison: [1700, 2200],
+          gold: [26, 36],
+          food: [100, 145],
+          extraDays: [2, 2],
+        },
+        2: {
+          fortification: [5, 7],
+          garrison: [1200, 1600],
+          gold: [18, 24],
+          food: [80, 100],
+          extraDays: [2, 2],
+        },
+        3: {
+          fortification: [4, 6],
+          garrison: [900, 1300],
+          gold: [14, 18],
+          food: [55, 80],
+          extraDays: [2, 2],
+        },
+      },
+    },
+    /** 对岸配对的港口，两处锚点经纬度距离下限：低于此值视作“同格渡线” */
+    PAIR_MIN_OFFSET: 0.25,
+    /** 小路绕关的额外行军天数区间（不可驻守，故无工事与守军） */
+    TRAIL_EXTRA_DAYS: [4, 7] as [number, number],
+  },
+
   // ── 城池耐久 【新增】破城的第二个条件 ─────────────────────
   /**
    * 耐久上限 = 规模基础 + 城防 × 系数 + 城墙工程加成。
@@ -217,6 +280,13 @@ export const BALANCE = {
    */
   BATTLE_MAX_ATTACKERS: 5,
   BATTLE_MAX_DEFENDERS: 8,
+  /**
+   * ── 队伍编制 【新增】一个队伍 = 1 主将 + 最多 2 副将 ──────
+   * 副将不单独占上场位：其兵力并入主将队伍，武力 / 智力取队伍最高值；
+   * 伤亡按各将出战前的带兵比例分摊，避免“副将当肉盾”刷损。
+   * 因此攻方最多 5 队 × 3 将 = 15 人出征，守方最多 8 队 × 3 将。
+   */
+  SQUAD_DEPUTIES_MAX: 2,
   /**
    * 【优化】E06 守城方每天恢复兵力，让“拖”对攻方不利。
    * 报告建议 2%；I3 用 432 万场沙盒复核：2% 会把 1.8:1 攻方胜率压到 42.2%、2:1 只有 50%，

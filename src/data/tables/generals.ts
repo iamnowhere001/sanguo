@@ -1,5 +1,6 @@
 import type { General } from '../../core/state';
 import { EXTRA_GENERALS } from './generalsExtra';
+import { withRoiStats } from './generalStats';
 
 /**
  * 武将表：赤壁 208 的默认布防 + 各年代专属将领，共 160 人
@@ -14,7 +15,7 @@ import { EXTRA_GENERALS } from './generalsExtra';
  * 便于四个剧本共用同一份人物表；如需严格史实排期，另开一轮年代校准。
  * 属性为 GDD 初值与推导值，正式数值仍需按原版校准。
  */
-const CORE_GENERALS: Record<string, General> = {
+const CORE_GENERALS: Record<string, Omit<General, 'leadership' | 'politics' | 'charm'>> = {
   // ── 刘备（208：江夏 / 新野）──────────────────────────────
   liubei: {
     id: 'liubei', name: '刘备', force: 73, intellect: 74, loyalty: 100, stamina: 100,
@@ -506,12 +507,12 @@ const CORE_GENERALS: Record<string, General> = {
   zhangwei: {
     id: 'zhangwei', name: '张卫', force: 78, intellect: 50, loyalty: 88, stamina: 100,
     level: 1, exp: 0, unitClass: 'infantry', troops: 600, items: [],
-    status: 'active', locationId: 'yangping',
+    status: 'active', locationId: 'hanzhong',
   },
   yangren: {
     id: 'yangren', name: '杨任', force: 80, intellect: 55, loyalty: 82, stamina: 100,
     level: 1, exp: 0, unitClass: 'infantry', troops: 500, items: [],
-    status: 'active', locationId: 'yangping',
+    status: 'active', locationId: 'hanzhong',
   },
   yangang: {
     id: 'yangang', name: '杨昂', force: 78, intellect: 50, loyalty: 80, stamina: 100,
@@ -933,7 +934,7 @@ if (RESERVE_CLASH.length > 0) {
   throw new Error(`补位武将 id 与主表冲突：${RESERVE_CLASH.join('、')}`);
 }
 
-export const GENERAL_TABLE: Record<string, General> = {
+export const GENERAL_TABLE: Record<string, General> = withRoiStats({
   ...CORE_GENERALS,
   ...EXTRA_GENERALS,
-};
+});

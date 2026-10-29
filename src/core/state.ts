@@ -47,8 +47,16 @@ export interface Item {
 export interface General {
   id: string;
   name: string;
+  /** 统率 0–100：部队上限与统御系数（三国志 11 五维口径） */
+  leadership: number;
+  /** 武力 0–100：普攻与单挑输出 */
   force: number;
+  /** 智力 0–100：计策成功率与计策减免 */
   intellect: number;
+  /** 政治 0–100：内政开发 / 征税 / 外交 */
+  politics: number;
+  /** 魅力 0–100：征兵上限、登用与民忠 */
+  charm: number;
   /** 0–100 */
   loyalty: number;
   /** 0–100，内政与计策共用 */
@@ -311,6 +319,11 @@ export interface Army {
   waterCrossing?: boolean;
   /** 建队时的兵力快照，供地图标记展示 */
   troops: number;
+  /**
+   * 出征编队：主将 id → 副将 id 列表（最多 `BALANCE.SQUAD_DEPUTIES_MAX` 名）。
+   * 缺省时每位武将各自成队（旧行为）；见 `systems/squads.ts`。
+   */
+  squads?: Record<string, string[]>;
   createdTurn: number;
 }
 
@@ -513,6 +526,12 @@ export interface BattleUnit {
   chargeUsed?: boolean;
   /** 军令「急袭」提供的额外移动力，次日清除 */
   bonusMove?: number;
+  /** 队伍副将 id（主将即 generalId）；最多 `BALANCE.SQUAD_DEPUTIES_MAX` 名 */
+  deputyIds?: string[];
+  /** 副将姓名，供战报 / 单位卡直接展示 */
+  deputyNames?: string[];
+  /** 出阵时的兵力份额：战后按此比例把剩余兵力分回各将 */
+  squadShares?: Record<string, number>;
 }
 
 /** 战场主题：决定地表质感、植被密度与整体色调 */

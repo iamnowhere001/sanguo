@@ -1,4 +1,4 @@
-import { GATES, GATE_KIND_LABEL, gateById, type GateFeature } from '../data/tables/gates';
+import { GATES, GATE_KIND_LABEL, gateById, isTrail, type GateFeature } from '../data/tables/gates';
 import type { Army, GameState, General, GridPoint } from '../core/state';
 import { done, fail, type OpResult } from '../core/result';
 import { draw, nextFloat } from '../core/rng';
@@ -37,10 +37,10 @@ export interface GateAssaultResult extends OpResult {
   defenderLoss?: number;
 }
 
-/** 关防法理归属城 / 独立归属覆盖后的当前归属 */
+/** 关防法理归属城 / 独立归属覆盖后的当前归属（小路恒为无主） */
 export function gateOwnerOf(s: GameState, gateId: string): string | null {
   const gate = gateById(gateId);
-  if (!gate) return null;
+  if (!gate || isTrail(gate)) return null;
   const runtime = s.gates?.[gateId];
   if (runtime && Object.prototype.hasOwnProperty.call(runtime, 'ownerId')) {
     return runtime.ownerId ?? null;
@@ -48,10 +48,10 @@ export function gateOwnerOf(s: GameState, gateId: string): string | null {
   return gate.guardCityId ? (s.cities[gate.guardCityId]?.ownerId ?? null) : null;
 }
 
-/** 当前守军：缺省按配表满编 */
+/** 当前守军：缺省按配表满编（小路无常驻守军） */
 export function gateGarrisonOf(s: GameState, gateId: string): number {
   const gate = gateById(gateId);
-  if (!gate) return 0;
+  if (!gate || isTrail(gate)) return 0;
   const runtime = s.gates?.[gateId];
   return Math.max(0, Math.round(runtime?.troops ?? gate.garrison));
 }
@@ -338,6 +338,7 @@ export function assaultGate(
   const gate = gateById(gateId);
   const site = gateSiteById(gateId);
   if (!gate || !site) return fail('关防不存在');
+  if (isTrail(gate)) return fail(`${gate.name}是山间小路，无法驻守封锁`);
   if (!armyAtGate(s, army, gateId)) {
     return fail(`部队须抵近${GATE_KIND_LABEL[gate.kind]}前才能行动`);
   }
@@ -369,6 +370,7 @@ export function assaultGateWithForce(
   const gate = gateById(gateId);
   const site = gateSiteById(gateId);
   if (!gate || !site) return fail('关防不存在');
+  if (isTrail(gate)) return fail(`${gate.name}是山间小路，无法驻守封锁`);
   const gens = activeGenerals(s, generalIds);
   if (gens.length === 0) return fail('部队没有可战之将');
   return resolveGateAssault(s, factionId, gate, site, gens);
@@ -384,6 +386,7 @@ export function runGateProduction(s: GameState): void {
   let playerCount = 0;
 
   for (const gate of GATES) {
+    if (isTrail(gate)) continue;
     const owner = gateOwnerOf(s, gate.id);
     if (!owner) continue;
 

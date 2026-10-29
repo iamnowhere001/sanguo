@@ -57,11 +57,11 @@ function prepareRunner(s: GameState, cityId: string) {
 }
 
 describe('探索派遣', () => {
-  it('州域完整覆盖 61 城且不重复', () => {
+  it('州域完整覆盖 59 城且不重复', () => {
     const ids = PROVINCES.flatMap((p) => p.cityIds);
     const s = fresh();
-    expect(ids.length).toBe(61);
-    expect(new Set(ids).size).toBe(61);
+    expect(ids.length).toBe(59);
+    expect(new Set(ids).size).toBe(59);
     for (const cityId of Object.keys(s.cities)) expect(ids).toContain(cityId);
   });
 

@@ -84,7 +84,6 @@ export const PROVINCES: ProvinceDef[] = [
       'kuaiji',
       'chaisang',
       'lujiang',
-      'ruxukou',
       'danyang',
       'yuzhang',
       'poyang',
@@ -103,7 +102,6 @@ export const PROVINCES: ProvinceDef[] = [
       'jianning',
       'yunnan',
       'hanzhong',
-      'yangping',
     ],
   },
 ];

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { BALANCE } from '../src/data/tables/balance';
+import { CITY_TABLE } from '../src/data/tables/cities';
+import { GATES, gateById, isTrail } from '../src/data/tables/gates';
 import { createGame } from '../src/data/tables/scenarios';
-import { GATES } from '../src/data/tables/gates';
 import type { Army, GameState } from '../src/core/state';
 import { gateAtCenter, gateSiteAt, gateSiteById, isGateLane } from '../src/render/gateGrid';
 import { routeForArmy } from '../src/systems/army';
@@ -40,9 +42,21 @@ function armyAt(s: GameState, at: { col: number; row: number }, factionId: strin
   return army;
 }
 
+const KINDS = ['pass', 'port'] as const;
+type GateKind = (typeof KINDS)[number];
+type Band = readonly [number, number];
+
+function bandsOf(kind: GateKind): Record<string, Record<string, Band>> {
+  return BALANCE.GATE.TIER[kind] as unknown as Record<string, Record<string, Band>>;
+}
+
+function inBand(value: number, band: Band): boolean {
+  return value >= band[0] && value <= band[1];
+}
+
 describe('关防 · 地图落位', () => {
-  it('19 处关港全部落位，通行线逐格相连且可通行', () => {
-    expect(GATES).toHaveLength(19);
+  it('31 处关港小路全部落位，通行线逐格相连且可通行', () => {
+    expect(GATES).toHaveLength(31);
     for (const gate of GATES) {
       const site = gateSiteById(gate.id);
       expect(site, gate.id).not.toBeNull();
@@ -91,7 +105,7 @@ describe('关防 · 地图落位', () => {
         .map((p) => gateSiteAt(p.col, p.row)?.gate.name)
         .filter((n): n is string => Boolean(n)),
     );
-    expect(names.has('夏口渡')).toBe(true);
+    expect(names.has('夏口渡') || names.has('汉阳渡')).toBe(true);
     // 绕行整条水系时超过 600 格；真正渡江后应在一百多格内
     expect(route!.path.length).toBeLessThan(200);
   });
@@ -178,7 +192,7 @@ describe('关防 · 月产', () => {
     let expectedGold = 0;
     let expectedFood = 0;
     for (const g of GATES) {
-      if (gateOwnerOf(s, g.id) === owner && gateSupplyCityOf(s, g.id) === city.id) {
+      if (!isTrail(g) && gateOwnerOf(s, g.id) === owner && gateSupplyCityOf(s, g.id) === city.id) {
         expectedGold += g.gold;
         expectedFood += g.food;
       }
@@ -191,5 +205,88 @@ describe('关防 · 月产', () => {
     expect(city.food).toBe(food + expectedFood);
     expect(gateGarrisonOf(s, gate.id)).toBeGreaterThan(100);
     expect(gateGarrisonOf(s, gate.id)).toBeLessThanOrEqual(gate.garrison);
+  });
+});
+
+describe('关防 · 数值基准', () => {
+  it('关防 id 唯一，且每处关防都挂在已存在的道路上', () => {
+    expect(new Set(GATES.map((g) => g.id)).size).toBe(GATES.length);
+    const s = fresh();
+    const edges = new Set(s.edges.map((e) => (e.a < e.b ? `${e.a}|${e.b}` : `${e.b}|${e.a}`)));
+    for (const gate of GATES) {
+      expect(gate.edges.length, `${gate.name} 缺少道路`).toBeGreaterThan(0);
+      for (const [a, b] of gate.edges) {
+        const key = a < b ? `${a}|${b}` : `${b}|${a}`;
+        expect(edges.has(key), `${gate.name} 挂在不存在的道路 ${a}-${b}`).toBe(true);
+      }
+    }
+  });
+
+  it('法理归属城都是已存在的城池；小路不设归属', () => {
+    for (const gate of GATES) {
+      if (gate.kind === 'trail') {
+        expect(gate.guardCityId, `${gate.name} 小路不应有归属城`).toBeNull();
+        expect(gate.garrison).toBe(0);
+        expect(gate.fortification).toBe(0);
+      } else if (gate.guardCityId) {
+        expect(CITY_TABLE[gate.guardCityId], `${gate.name} 归属城不存在`).toBeDefined();
+      }
+    }
+  });
+
+  it('数值落在对应分档区间内（关隘 / 港口 / 小路）', () => {
+    for (const gate of GATES) {
+      if (gate.kind === 'trail') {
+        expect(gate.extraDays).toBeGreaterThanOrEqual(4);
+        expect(gate.extraDays).toBeLessThanOrEqual(7);
+        continue;
+      }
+      const band = bandsOf(gate.kind)[String(gate.tier)];
+      expect(band, `${gate.name} 缺少 ${gate.kind} tier${gate.tier} 区间`).toBeDefined();
+      for (const key of ['fortification', 'garrison', 'gold', 'food', 'extraDays']) {
+        const value = (gate as unknown as Record<string, number>)[key]!;
+        const range = band[key]!;
+        expect(
+          inBand(value, range),
+          `${gate.name} 的 ${key}=${value} 不在 ${range[0]}–${range[1]}`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  it('港口两岸配对：pairId 双向一致，且两港斜向错开', () => {
+    for (const port of GATES.filter((g) => g.kind === 'port')) {
+      if (!port.pairId) continue;
+      const peer = gateById(port.pairId);
+      expect(peer, `${port.name} 的对岸港口不存在`).toBeDefined();
+      expect(peer!.kind).toBe('port');
+      expect(peer!.pairId, `${port.name} 与 ${peer!.name} 未双向配对`).toBe(port.id);
+      if (port.anchor && peer!.anchor) {
+        const d = Math.hypot(port.anchor[0] - peer!.anchor[0], port.anchor[1] - peer!.anchor[1]);
+        expect(d, `${port.name} 与 ${peer!.name} 落点过近`).toBeGreaterThan(0.25);
+      }
+    }
+  });
+
+  it('小路必须指向真实存在的关隘 / 港口', () => {
+    for (const trail of GATES.filter((g) => g.kind === 'trail')) {
+      expect(trail.bypassOf, `${trail.name} 未声明绕过的关卡`).toBeTruthy();
+      expect(gateById(trail.bypassOf!), `${trail.name} 绕过的关卡不存在`).toBeDefined();
+      expect(isTrail(gateById(trail.bypassOf!)!)).toBe(false);
+    }
+  });
+
+  it('关隘与港口数量符合演义体量，且已消除“城即关”的重复', () => {
+    const passes = GATES.filter((g) => g.kind === 'pass');
+    const ports = GATES.filter((g) => g.kind === 'port');
+    const trails = GATES.filter((g) => g.kind === 'trail');
+    expect(passes.length).toBeGreaterThanOrEqual(12);
+    expect(ports.length).toBeGreaterThanOrEqual(16);
+    expect(trails.length).toBeGreaterThanOrEqual(3);
+    // 阳平关 / 濡须口曾经既是城又是关，现在只保留关防
+    expect(CITY_TABLE.yangping).toBeUndefined();
+    expect(CITY_TABLE.ruxukou).toBeUndefined();
+    expect(gateById('yangping')).toBeDefined();
+    expect(gateById('ruxukou')).toBeDefined();
   });
 });

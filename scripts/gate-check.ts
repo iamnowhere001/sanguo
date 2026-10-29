@@ -1,10 +1,10 @@
 /**
- * 关防落位验收：确认 19 处关隘 / 港口都真正接在路网上。
+ * 关防落位验收：确认关隘 / 港口 / 小路都真正接在路网上。
  *
  * 用法：npm run map:gates
  * 检查项：
  * - 每条通行线至少包含中心格，且格与格连续相邻；
- * - 关隘中心在山地 / 丘陵，港口中心在江 / 湖水面；
+ * - 关隘 / 小路中心在山地 / 丘陵，港口中心在江 / 湖水面；
  * - 通行线不压城墙，两端滩头是可站立的陆地；
  * - 两座滩头能沿通行线互通，线外山体 / 水面不会把关门变成孤岛；
  * - 关港之间不重叠。
@@ -52,10 +52,10 @@ for (const gate of GATES) {
     seen.set(key(p), gate.id);
   }
 
-  if (gate.kind === 'pass') {
+  if (gate.kind !== 'port') {
     const kind = tileKindAt(center.col, center.row);
     if (kind !== 'mountain' && kind !== 'hill') {
-      problems.push(`${gate.name}：关隘中心落在 ${kind}，不是山口`);
+      problems.push(`${gate.name}：${gate.kind === 'trail' ? '小路' : '关隘'}中心落在 ${kind}，不是山口`);
     }
     if (icon.col !== center.col || icon.row !== center.row) {
       problems.push(`${gate.name}：关隘图标 ${key(icon)} 与中心 ${key(center)} 不一致`);
@@ -106,7 +106,7 @@ for (const gate of GATES) {
       ? site.approaches.map((p) => `${p.col},${p.row}`).join(' → ')
       : '无滩头';
   line(
-    `  ${site.gate.kind === 'pass' ? '关' : '港'} ${gate.name.padEnd(4, '　')} ` +
+    `  ${site.gate.kind === 'port' ? '港' : site.gate.kind === 'trail' ? '径' : '关'} ${gate.name.padEnd(4, '　')} ` +
       `中心 ${site.center.col},${site.center.row} · 图标 ${site.icon.col},${site.icon.row} · 线 ${site.lane.length} 格 · ${ends}`,
   );
 }

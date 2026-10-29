@@ -3,6 +3,7 @@ import { emptyMonthFacts } from '../core/state';
 import { createStreams, RANDOM_STREAMS, streamFor, type RngState } from '../core/rng';
 import { createChapter, ensureChapterShape } from '../systems/chapter';
 import { cityMaxDurability } from '../systems/formulas';
+import { deriveRoiStats } from '../data/tables/generalStats';
 import {
   describeLegacyBattlefield,
   identityOfBattlefield,
@@ -113,6 +114,14 @@ export function migrateSave(state: GameState): GameState {
   state.settings.classicSpawn ??= DEFAULT_SETTINGS.classicSpawn;
   state.settings.aiEnabled ??= DEFAULT_SETTINGS.aiEnabled;
   state.settings.difficulty ??= DEFAULT_SETTINGS.difficulty;
+
+  // 五维口径（统率 / 政治 / 魅力）是后加字段：旧档按武力 / 智力折算补齐
+  for (const g of Object.values(state.generals ?? {})) {
+    const [leadership, politics, charm] = deriveRoiStats(g.force, g.intellect);
+    g.leadership ??= leadership;
+    g.politics ??= politics;
+    g.charm ??= charm;
+  }
 
   state.policy ??= { offer: [] };
   state.chapter ??= createChapter(state);

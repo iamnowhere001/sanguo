@@ -1127,8 +1127,11 @@ export function CityPanel({
                           <span className="g-lv">Lv{g.level}</span>
                         </div>
                         <div className="g-stats">
+                          <span>统 {g.leadership}</span>
                           <span>武 {g.force}</span>
                           <span>智 {g.intellect}</span>
+                          <span>政 {g.politics}</span>
+                          <span>魅 {g.charm}</span>
                           <span>忠 {g.loyalty}</span>
                           <span>体 {g.stamina}</span>
                         </div>
@@ -1278,8 +1281,11 @@ export function CityPanel({
                             <ClassTag c={p.unitClass} />
                           </div>
                           <div className="g-stats">
+                            <span>统 {p.leadership}</span>
                             <span>武 {p.force}</span>
                             <span>智 {p.intellect}</span>
+                            <span>政 {p.politics}</span>
+                            <span>魅 {p.charm}</span>
                             <span>忠 {p.loyalty}</span>
                           </div>
                           <div className="prisoner-actions">
@@ -1380,8 +1386,11 @@ export function CityPanel({
                           <span className="g-lv">Lv{g.level}</span>
                         </div>
                         <div className="g-stats">
+                          <span>统 {g.leadership}</span>
                           <span>武 {g.force}</span>
                           <span>智 {g.intellect}</span>
+                          <span>政 {g.politics}</span>
+                          <span>魅 {g.charm}</span>
                           <span>体 {g.stamina}</span>
                         </div>
                         <div className="g-troops">
