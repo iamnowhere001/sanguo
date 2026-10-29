@@ -23,7 +23,7 @@ describe('存档序列化', () => {
     const restored: SaveFile = JSON.parse(JSON.stringify(file));
 
     expect(restored.schemaVersion).toBe(SAVE_VERSION);
-    expect(SAVE_VERSION).toBe(5);
+    expect(SAVE_VERSION).toBe(6);
     expect(restored.runSeed).toBe(s.seed);
     expect(restored.state.generals.guanyu!.loyalty).toBe(77);
     expect(restored.state.cities.jiangxia!.food).toBe(4321);

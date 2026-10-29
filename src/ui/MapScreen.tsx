@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BALANCE } from '../data/tables/balance';
 import { difficultyOf } from '../data/tables/difficulty';
-import type { GameState } from '../core/state';
+import type { GameState, GridPoint } from '../core/state';
 import { gameStore, useGameStore } from '../store/gameStore';
 import { MapCanvas } from '../render/MapCanvas';
 import { audio } from '../audio';
@@ -18,7 +18,21 @@ import { ActCouncilModal } from './ActCouncilModal';
 import { ConfirmDialog, cityTroops, factionColor, factionName, fmt } from './common';
 import { activePolicy } from '../systems/policy';
 import { buildCouncilBrief } from '../systems/council';
-import { armyEtaXun, armyMp, armyMaxMp, openGateCount, reachableTargets, sortieBlocked } from '../systems/army';
+import {
+  armyEtaXun,
+  armyMp,
+  armyMaxMp,
+  dispatchField,
+  dispatchReachOf,
+  openGateCount,
+  plainDestLabel,
+  planDispatch,
+  reachableTargets,
+  resolveDispatchDest,
+  sortieBlocked,
+  type DispatchPlan,
+} from '../systems/army';
+import { DispatchBar } from './DispatchBar';
 import { gatesOf, siegeTargetOf } from '../systems/cityGrid';
 import {
   gateAccessLabel,
@@ -73,7 +87,14 @@ export function MapScreen() {
       mine[0]?.id ??
       'jiangxia',
   );
-  const [marchFrom, setMarchFrom] = useState<string | null>(null);
+  /**
+   * 派遣模式：选好出发城后，目的地是一个**格**，不是一个攻击目标。
+   * `dest` 为空表示还没点过格，此时预览跟随鼠标。
+   */
+  const [dispatch, setDispatch] = useState<{ fromCityId: string; dest: GridPoint | null } | null>(
+    null,
+  );
+  const [dispatchHover, setDispatchHover] = useState<GridPoint | null>(null);
   const [selectedArmyId, setSelectedArmyId] = useState<string | null>(null);
   const [selectedGateId, setSelectedGateId] = useState<string | null>(null);
   const [saveOpen, setSaveOpen] = useState(false);
@@ -111,8 +132,8 @@ export function MapScreen() {
     if (next && phoneWidth()) setLeftCollapsed(true);
   };
 
-  /** 当前规划用的出发城：出征模式下锁定出发城，否则跟随选中城池 */
-  const routeFromCityId = marchFrom ?? selectedCityId;
+  /** 当前规划用的出发城：派遣模式下锁定出发城，否则跟随选中城池 */
+  const routeFromCityId = dispatch?.fromCityId ?? selectedCityId;
 
   /** 能从出发城出征抵达的敌城（网格寻路，山岭水域不可通行） */
   const attackRoutes = useMemo(() => {
@@ -130,11 +151,39 @@ export function MapScreen() {
     [attackRoutes],
   );
 
-  /** 地图上实际画出的路线：平常只画最近几条，出征模式再全量铺开 */
-  const visibleRoutes = useMemo(
-    () => (marchFrom ? attackRoutes.slice(0, 24) : attackRoutes.slice(0, 8)),
-    [attackRoutes, marchFrom],
+  /** 派遣模式的行军场：进入模式算一次，hover 只做路径回溯 */
+  const dispatchDf = useMemo(
+    () =>
+      dispatch ? dispatchField(state, state.playerFactionId, dispatch.fromCityId) : null,
+    [state, dispatch],
   );
+
+  /** 两档可达范围：本旬实色，后续只画虚线边界 */
+  const dispatchReach = useMemo(
+    () =>
+      dispatchDf && dispatch
+        ? dispatchReachOf(state, dispatchDf, dispatch.fromCityId, state.playerFactionId)
+        : null,
+    [state, dispatchDf, dispatch],
+  );
+
+  /** 当前指向（锁定优先，否则跟随鼠标）的方案与拒绝原因 */
+  const dispatchView = useMemo((): { plan: DispatchPlan | null; reason?: string } | null => {
+    if (!dispatch || !dispatchDf) return null;
+    const tile = dispatch.dest ?? dispatchHover;
+    if (!tile) return { plan: null };
+    const resolved = resolveDispatchDest(state, state.playerFactionId, tile);
+    if (!resolved.ok || !resolved.target) return { plan: null, reason: resolved.reason };
+    const plan = planDispatch(
+      state,
+      state.playerFactionId,
+      dispatch.fromCityId,
+      resolved.target,
+      dispatchDf.field,
+    );
+    if (!plan) return { plan: null, reason: '此处没有可用的行军路线' };
+    return { plan };
+  }, [state, dispatch, dispatchDf, dispatchHover]);
 
   /** 全图任意己方城池可出征抵达的敌城：用于左侧列表标记 */
   const attackableAny = useMemo(() => {
@@ -212,7 +261,7 @@ export function MapScreen() {
     setSelectedGateId(gateId);
     if (gateId) {
       setSelectedArmyId(null);
-      setMarchFrom(null);
+      closeDispatch();
       audio.play('ui.select');
     }
   };
@@ -249,17 +298,48 @@ export function MapScreen() {
     store.dispatch({ t: 'END_TURN' });
   };
 
-  /** 城池直接出征：从地图点选的敌城，按自动点将立即建队行军 */
-  const handleMarchTarget = (targetCityId: string) => {
-    if (!marchFrom) return;
-    const res = store.dispatch({ t: 'SORTIE', fromCityId: marchFrom, targetCityId });
-    if (res.ok) {
-      gameStore.notify(res.message, 'good');
-      setMarchFrom(null);
-      selectCity(targetCityId);
-    } else {
-      gameStore.notify(res.message, 'warn');
+  /** 进入派遣模式：城池面板点「出征」，之后在地图上选一格作为目的地 */
+  const openDispatch = (cityId: string) => {
+    setDispatch({ fromCityId: cityId, dest: null });
+    setDispatchHover(null);
+    setSelectedArmyId(null);
+    setSelectedGateId(null);
+    setSelectedCityId(cityId);
+  };
+
+  const closeDispatch = () => {
+    setDispatch(null);
+    setDispatchHover(null);
+  };
+
+  /** 确认出征：目的地已在 `dispatchView.plan` 里算好，这里只负责下单 */
+  const confirmDispatch = () => {
+    if (!dispatch) return;
+    const plan = dispatchView?.plan;
+    if (!plan) {
+      gameStore.notify(dispatchView?.reason ?? '先在地图上选一个目的地', 'warn');
+      return;
     }
+    const res = store.dispatch({ t: 'SORTIE', fromCityId: dispatch.fromCityId, dest: plan.dest });
+    if (!res.ok) {
+      gameStore.notify(res.message, 'warn');
+      return;
+    }
+    gameStore.notify(res.message, 'good');
+    const siegeCityId = plan.siegeCityId;
+    closeDispatch();
+    if (siegeCityId) selectCity(siegeCityId);
+  };
+
+  /** 点地图格：第一次点锁定目的地，再点同一格直接出征（省掉一次点按钮） */
+  const pickDispatchTile = (tile: GridPoint) => {
+    if (!dispatch) return;
+    if (dispatch.dest?.col === tile.col && dispatch.dest?.row === tile.row) {
+      confirmDispatch();
+      return;
+    }
+    setDispatch({ ...dispatch, dest: tile });
+    audio.play('ui.select');
   };
 
   /** 【优化】§5.2 键盘全流程：? 看快捷键，E 结束回合，Esc 关闭帮助 */
@@ -277,8 +357,10 @@ export function MapScreen() {
         Boolean(state.unifyReady) ||
         Boolean(state.pendingEvent) ||
         (state.policy?.offer?.length ?? 0) > 0;
-      if (e.key === 'Escape' && marchFrom) {
-        setMarchFrom(null);
+      if (e.key === 'Escape' && dispatch) {
+        // 先收回已锁定的目的地，再按一次才退出派遣模式
+        if (dispatch.dest) setDispatch({ ...dispatch, dest: null });
+        else closeDispatch();
         return;
       }
       if (e.key === 'Escape' && selectedArmyId) {
@@ -315,7 +397,7 @@ export function MapScreen() {
     return () => window.removeEventListener('keydown', onKey);
   }, [
     helpOpen,
-    marchFrom,
+    dispatch,
     selectedArmyId,
     selectedGateId,
     saveOpen,
@@ -563,32 +645,39 @@ export function MapScreen() {
                 <span className="muted small">{myArmies.length}</span>
               </div>
               <div className="city-list">
-                {myArmies.map((a) => (
-                  <button
-                    key={a.id}
-                    className={`city-row${a.id === selectedArmyId ? ' on' : ''}`}
-                    onClick={() => {
-                      setSelectedArmyId(a.id);
-                      setSelectedGateId(null);
-                      setMarchFrom(null);
-                      audio.play('ui.select');
-                    }}
-                    title={`${a.generalIds
-                      .map((id) => state.generals[id]?.name)
-                      .filter(Boolean)
-                      .join('、')} → ${state.cities[a.targetCityId]?.name ?? a.targetCityId}（点击调度）`}
-                  >
-                    <i
-                      className="fdot"
-                      style={{ background: factionColor(state, a.factionId) }}
-                    />
-                    <span className="cname">{state.cities[a.targetCityId]?.name ?? a.targetCityId}</span>
-                    <span className="cmeta">{fmt(a.troops)} 兵</span>
-                    <span className="cres">
-                      <em>约</em> {armyEtaXun(state, a)} 旬
-                    </span>
-                  </button>
-                ))}
+                {myArmies.map((a) => {
+                  // 目的地可能是城下，也可能是野地：城名优先，野地按「近城 + 方位」读
+                  const destTile = a.dest ?? a.path.at(-1) ?? a.at;
+                  const destName = a.targetCityId
+                    ? state.cities[a.targetCityId]?.name ?? a.targetCityId
+                    : plainDestLabel(state, destTile);
+                  return (
+                    <button
+                      key={a.id}
+                      className={`city-row${a.id === selectedArmyId ? ' on' : ''}`}
+                      onClick={() => {
+                        setSelectedArmyId(a.id);
+                        setSelectedGateId(null);
+                        closeDispatch();
+                        audio.play('ui.select');
+                      }}
+                      title={`${a.generalIds
+                        .map((id) => state.generals[id]?.name)
+                        .filter(Boolean)
+                        .join('、')} → ${destName}（点击调度）`}
+                    >
+                      <i
+                        className="fdot"
+                        style={{ background: factionColor(state, a.factionId) }}
+                      />
+                      <span className="cname">{destName}</span>
+                      <span className="cmeta">{fmt(a.troops)} 兵</span>
+                      <span className="cres">
+                        <em>约</em> {armyEtaXun(state, a)} 旬
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </section>
           ) : null}
@@ -682,18 +771,27 @@ export function MapScreen() {
           <MapCanvas
             state={state}
             selectedCityId={routeFromCityId}
-            attackRoutes={visibleRoutes}
-            marchTargets={marchFrom ? attackFromSelected : undefined}
-            marchFrom={marchFrom}
+            dispatch={
+              dispatch && dispatchReach && dispatchDf
+                ? {
+                    fromCityId: dispatch.fromCityId,
+                    mp: dispatchDf.mp,
+                    within: dispatchReach.within,
+                    beyond: dispatchReach.beyond,
+                    plan: dispatchView?.plan ?? null,
+                    onHover: setDispatchHover,
+                    onPick: pickDispatchTile,
+                  }
+                : null
+            }
             selectedArmyId={selectedArmyId}
-            onMarchTarget={handleMarchTarget}
             selectedGateId={selectedGateId}
             onSelectArmy={(id) => {
               setSelectedArmyId(id);
               setSelectedGateId(null);
               if (id) {
                 audio.play('ui.select');
-                setMarchFrom(null);
+                closeDispatch();
               }
             }}
             onMoveArmy={handleMoveArmy}
@@ -703,8 +801,6 @@ export function MapScreen() {
               if (id !== selectedCityId) audio.play('ui.select');
               selectCity(id);
               setSelectedArmyId(null);
-              // 出征模式下点了非目标城池：退出出征，避免路线锁定与右栏脱节
-              if (marchFrom) setMarchFrom(null);
             }}
           />
           {selectedArmy ? (
@@ -736,21 +832,20 @@ export function MapScreen() {
               </button>
             </div>
           ) : null}
-          {marchFrom ? (
-            <div className="march-banner" role="status">
-              <b>出征</b>
-              <span>
-                {state.cities[marchFrom]?.name} 已点将 · 点击高亮的敌城出征
-              </span>
-              <em>{attackRoutes.length} 个目标</em>
-              <button type="button" className="btn ghost sm" onClick={() => setMarchFrom(null)}>
-                取消
-              </button>
-            </div>
+          {dispatch ? (
+            <DispatchBar
+              state={state}
+              cityId={dispatch.fromCityId}
+              plan={dispatchView?.plan ?? null}
+              reason={dispatchView?.reason}
+              df={dispatchDf}
+              onCancel={closeDispatch}
+              onConfirm={confirmDispatch}
+            />
           ) : null}
           <div
             className={`map-hint${
-              attackFromSelected.length > 0 || marchFrom || selectedArmy || selectedGate
+              attackFromSelected.length > 0 || dispatch || selectedArmy || selectedGate
                 ? ' accent'
                 : ''
             }`}
@@ -767,15 +862,15 @@ export function MapScreen() {
                 } · Esc 返回城池`
               : selectedArmy
               ? '点地图任意格移动（亮色为移动力范围）· 走到敌城门外可下令攻城 · Esc 取消选中'
-              : marchFrom
-                ? '金色虚线为实际行军路线 · 山岭与水域不可通行 · Esc 取消出征'
+              : dispatch
+                ? '点地图任意格选目的地 · 再点同一格或按「确认出征」 · 山岭与水域不可通行 · Esc 返回'
                 : selectedSortieBlocked
                   ? '四门皆被堵死，守军出不了城 · 先击退门外敌军'
                   : selectedBlocked.length > 0
                     ? `${selectedBlocked.length} 座城门被堵 · 剩余 ${openGateCount(state, selectedCityId)} 门可出`
                     : state.cities[selectedCityId]?.ownerId === state.playerFactionId
                       ? attackFromSelected.length > 0
-                        ? `${attackFromSelected.length} 座敌城可达 · 点「出征」后在地图上选目标 · 点部队可手动调度`
+                        ? `${attackFromSelected.length} 座敌城可达 · 点「出征」后在地图上选目的地 · 点部队可手动调度`
                         : '此城暂无出征路线 · 山岭水域阻隔或需先取道'
                       : '点击己方城池经营 · 点击敌城查看守军 · 点部队调度行军'}
           </div>
@@ -790,7 +885,7 @@ export function MapScreen() {
             onAssault={handleAssaultGate}
             onSelectArmy={(armyId) => {
               setSelectedArmyId(armyId);
-              setMarchFrom(null);
+              closeDispatch();
               audio.play('ui.select');
             }}
           />
@@ -799,11 +894,7 @@ export function MapScreen() {
             key={selectedCityId}
             state={state}
             cityId={selectedCityId}
-            onMarch={(cityId) => {
-              setMarchFrom(cityId);
-              setSelectedGateId(null);
-              setSelectedCityId(cityId);
-            }}
+            onMarch={(cityId) => openDispatch(cityId)}
           />
         )}
       </div>

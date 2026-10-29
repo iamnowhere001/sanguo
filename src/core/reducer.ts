@@ -106,7 +106,7 @@ export type Action =
   | { t: 'PERSUADE_CITY'; cityId: string }
   | { t: 'PRISONER'; prisonerId: string; action: PrisonerAction; agentId?: string }
   | { t: 'DEPLOY'; fromCityId: string; targetCityId: string; generalIds: string[] }
-  | { t: 'SORTIE'; fromCityId: string; targetCityId: string; generalIds?: string[] }
+  | { t: 'SORTIE'; fromCityId: string; targetCityId?: string; dest?: GridPoint; generalIds?: string[] }
   | { t: 'MOVE_ARMY'; armyId: string; to: GridPoint }
   | { t: 'ASSAULT'; armyId: string }
   | { t: 'ASSAULT_GATE'; armyId: string; gateId: string }
@@ -425,7 +425,10 @@ export function reduce(
     }
     case 'SORTIE': {
       if (s.phase !== 'map') return { state, result: { ok: false, message: '当前不在大地图阶段' } };
-      const r = sortieArmy(s, action.fromCityId, action.targetCityId, action.generalIds);
+      // 目的地两种写法：`dest`（格，新语义）优先，`targetCityId`（城，旧语义）兜底
+      const target = action.dest ?? action.targetCityId;
+      if (!target) return { state, result: { ok: false, message: '未指定出征目的地' } };
+      const r = sortieArmy(s, action.fromCityId, target, action.generalIds);
       return { state: r.ok ? s : state, result: r };
     }
     case 'MOVE_ARMY': {

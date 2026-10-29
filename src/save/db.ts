@@ -1,7 +1,9 @@
 import type { GameState } from '../core/state';
 import { migrateSave } from './migrate';
 
-export const SAVE_VERSION = 5;
+export const SAVE_VERSION = 6;
+/** IndexedDB 结构版本：v6 起旧档一律作废，升级时清空存档库 */
+const DB_VERSION = 2;
 export const DB_NAME = 'sanguo-baye';
 export const STORE_NAME = 'saves';
 
@@ -72,6 +74,16 @@ const migrations: Record<number, (file: StoredSaveFile) => StoredSaveFile> = {
     ...file,
     schemaVersion: 5,
   }),
+  /**
+   * v5 → v6：行军目的地从「城」下沉为「格」（`Army.dest`）。
+   *
+   * 旧档的部队没有 `dest`，读档后按 `targetCityId` 的门外格兜底即可，
+   * 因此这里只补版本号，不做字段回填 —— 旧存档本身也在 DB 升级时被清空。
+   */
+  5: (file) => ({
+    ...file,
+    schemaVersion: 6,
+  }),
 };
 
 export function migrateSaveFile(row: StoredSaveFile): SaveFile {
@@ -134,12 +146,16 @@ function openDb(): Promise<IDBDatabase> {
       return;
     }
 
-    const req = indexedDB.open(DB_NAME, 1);
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME, { keyPath: 'slot' });
+        return;
       }
+      // v6 起不再兼容旧档：库结构升级时把历史存档整批清掉，
+      // 避免玩家读到「部队没有目的地」的半旧状态。
+      req.transaction?.objectStore(STORE_NAME).clear();
     };
     req.onsuccess = () => {
       const db = req.result;

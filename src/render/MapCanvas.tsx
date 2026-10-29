@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { City, CitySize, GameState, GridPoint } from '../core/state';
+import type { City, CitySize, GameState, GridPoint, UnitClass } from '../core/state';
 import { cityTroops } from '../core/selectors';
 import { CITY_SIZE_LABEL, fortificationLabel } from '../data/tables/cities';
 import { MAP } from '../data/tables/geography';
 import { GATE_KIND_LABEL } from '../data/tables/gates';
 import {
+  armyFieldOf,
   armyMaxMp,
   armyMp,
   armyPreviewPath as armyPreviewPathTiles,
   armyReach as armyReachTiles,
   armyWorldPos,
+  firstLegEndOf,
+  type DispatchPlan,
 } from '../systems/army';
 import {
   gateAccessFor,
@@ -661,8 +664,6 @@ function drawCityBlock(
   opts: {
     selected: boolean;
     hovered: boolean;
-    target: boolean;
-    marchFrom: boolean;
     gates: ReturnType<typeof gatesOf>;
     detail: boolean;
   },
@@ -873,16 +874,7 @@ function drawCityBlock(
     ctx.stroke();
   }
 
-  // 选中 / 悬停 / 出征目标：三圈不同语义的框
-  if (opts.target) {
-    ctx.beginPath();
-    ctx.roundRect(x - cell * 0.16, y - cell * 0.16, w + cell * 0.32, h + cell * 0.32, cell * 0.2);
-    ctx.strokeStyle = opts.marchFrom ? 'rgba(214,178,96,0.95)' : 'rgba(150,54,40,0.85)';
-    ctx.lineWidth = opts.marchFrom ? 2 : 1.2;
-    ctx.setLineDash(opts.marchFrom ? [] : [4, 3]);
-    ctx.stroke();
-    ctx.setLineDash([]);
-  }
+  // 选中 / 悬停：两圈不同语义的框
   if (opts.selected) {
     ctx.beginPath();
     ctx.roundRect(x - cell * 0.22, y - cell * 0.22, w + cell * 0.44, h + cell * 0.44, cell * 0.22);
@@ -901,8 +893,172 @@ function drawCityBlock(
 }
 
 // ── 部队棋子 ───────────────────────────────────────────────
+/** 兵种徽记的中文短标：中缩放档直接写单字，任何字体栈都读得出 */
+const CLASS_CHAR: Record<UnitClass, string> = {
+  infantry: '步',
+  cavalry: '骑',
+  archer: '弓',
+  navy: '水',
+  elite: '极',
+  mystic: '玄',
+};
+
+/** 小缩放档的兵种色点：低饱和，免得跟势力色描边抢注意力 */
+const CLASS_DOT: Record<UnitClass, string> = {
+  infantry: '#6b7a8f',
+  cavalry: '#a8563c',
+  archer: '#4e7f5b',
+  navy: '#3f6f8f',
+  elite: '#8a6a2f',
+  mystic: '#6b4a7a',
+};
+
+const CLASS_INK = 'rgba(52,42,26,0.88)';
+const CLASS_PAPER = 'rgba(242,233,210,0.92)';
+
 /**
- * 部队棋子：纸底圆牌 + 势力色描边 + 军旗。
+ * 兵种徽记，三档 LOD。
+ *
+ * - 棋子半径 < 6px（全图 20% 档）：任何字形都会糊成一团，退化成色点；
+ * - 6–12px（州郡 100% 档）：单字，汉字在这个尺寸比图形更易读，也贴三国志系列传统；
+ * - ≥ 12px（720% 近景）：矢量图徽，盾 / 蹄铁 / 弓 / 帆 / 双戟 / 卦爻。
+ */
+export function drawUnitClassMark(
+  ctx: CanvasRenderingContext2D,
+  px: number,
+  py: number,
+  r: number,
+  cls: UnitClass,
+): void {
+  if (r < 6) {
+    // 这个尺寸画什么都不成形：把棋子内部直接染成兵种色，
+    // 远看是「势力色环 + 兵种色芯」的小点，靠色相分辨
+    ctx.beginPath();
+    ctx.arc(px, py, r * 0.56, 0, Math.PI * 2);
+    ctx.fillStyle = CLASS_DOT[cls];
+    ctx.fill();
+    return;
+  }
+
+  if (r < 12) {
+    ctx.font = `700 ${Math.round(r * 1.02)}px "PingFang SC", "Noto Sans SC", sans-serif`;
+    ctx.fillStyle = CLASS_INK;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(CLASS_CHAR[cls], px, py + r * 0.04);
+    return;
+  }
+
+  ctx.save();
+  ctx.strokeStyle = CLASS_INK;
+  ctx.fillStyle = CLASS_INK;
+  ctx.lineWidth = Math.max(1.2, r * 0.09);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  const u = r / 16;
+
+  if (cls === 'infantry') {
+    // 盾：上方平肩、下方收成一尖
+    ctx.beginPath();
+    ctx.moveTo(px - 6.6 * u, py - 6.2 * u);
+    ctx.lineTo(px + 6.6 * u, py - 6.2 * u);
+    ctx.lineTo(px + 5.4 * u, py + 0.8 * u);
+    ctx.quadraticCurveTo(px, py + 8.2 * u, px - 5.4 * u, py + 0.8 * u);
+    ctx.closePath();
+    ctx.fillStyle = CLASS_PAPER;
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(px, py - 5.2 * u);
+    ctx.lineTo(px, py + 4.2 * u);
+    ctx.stroke();
+  } else if (cls === 'cavalry') {
+    // 蹄铁：开口朝下的粗弧
+    ctx.beginPath();
+    ctx.arc(px, py + 0.6 * u, 6.2 * u, Math.PI * 0.82, Math.PI * 0.18, false);
+    ctx.lineWidth = Math.max(1.8, r * 0.2);
+    ctx.stroke();
+    ctx.lineWidth = Math.max(1.2, r * 0.09);
+    for (const dir of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(px + dir * 4.9 * u, py + 2.6 * u);
+      ctx.lineTo(px + dir * 5.6 * u, py + 5.4 * u);
+      ctx.stroke();
+    }
+  } else if (cls === 'archer') {
+    // 弓：左弯弓臂 + 弦，箭只露出弦外那一段，免得横线把弓身劈断
+    ctx.beginPath();
+    ctx.moveTo(px + 4.2 * u, py - 7.4 * u);
+    ctx.quadraticCurveTo(px - 8 * u, py, px + 4.2 * u, py + 7.4 * u);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(px + 4.2 * u, py - 7.4 * u);
+    ctx.lineTo(px + 4.2 * u, py + 7.4 * u);
+    ctx.lineWidth = Math.max(1, r * 0.07);
+    ctx.stroke();
+    ctx.lineWidth = Math.max(1.2, r * 0.09);
+    ctx.beginPath();
+    ctx.moveTo(px + 4.2 * u, py);
+    ctx.lineTo(px + 8.4 * u, py);
+    ctx.moveTo(px + 6 * u, py - 1.9 * u);
+    ctx.lineTo(px + 8.4 * u, py);
+    ctx.lineTo(px + 6 * u, py + 1.9 * u);
+    ctx.stroke();
+  } else if (cls === 'navy') {
+    // 帆：桅杆 + 横帆 + 船身
+    ctx.beginPath();
+    ctx.moveTo(px + 0.4 * u, py - 7.6 * u);
+    ctx.lineTo(px + 0.4 * u, py + 3.4 * u);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(px + 1.2 * u, py - 6.8 * u);
+    ctx.lineTo(px + 7.2 * u, py + 1.6 * u);
+    ctx.lineTo(px + 1.2 * u, py + 1.6 * u);
+    ctx.closePath();
+    ctx.fillStyle = CLASS_PAPER;
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(px - 7.4 * u, py + 4.4 * u);
+    ctx.quadraticCurveTo(px, py + 9 * u, px + 7.4 * u, py + 4.4 * u);
+    ctx.stroke();
+  } else if (cls === 'elite') {
+    // 双戟：交叉双杆 + 两端短横
+    for (const dir of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(px + dir * 6 * u, py - 6.4 * u);
+      ctx.lineTo(px - dir * 5 * u, py + 6.4 * u);
+      ctx.moveTo(px + dir * 6 * u, py - 6.4 * u);
+      ctx.lineTo(px + dir * 1.6 * u, py - 6.4 * u);
+      ctx.stroke();
+    }
+  } else {
+    // 玄：三爻，中爻断开
+    for (const [dy, broken] of [
+      [-6.4, false],
+      [0, true],
+      [6.4, false],
+    ] as const) {
+      if (!broken) {
+        ctx.beginPath();
+        ctx.moveTo(px - 6.6 * u, py + dy * u);
+        ctx.lineTo(px + 6.6 * u, py + dy * u);
+        ctx.stroke();
+      } else {
+        for (const dir of [-1, 1]) {
+          ctx.beginPath();
+          ctx.moveTo(px + dir * 6.6 * u, py + dy * u);
+          ctx.lineTo(px + dir * 1.6 * u, py + dy * u);
+          ctx.stroke();
+        }
+      }
+    }
+  }
+  ctx.restore();
+}
+
+/**
+ * 部队棋子：纸底圆牌 + 势力色描边 + 兵种徽记。
  * 与城池的方形城郭形成形状区分，一眼分得清「城」与「军」。
  */
 function drawArmyToken(
@@ -919,6 +1075,7 @@ function drawArmyToken(
     name: string;
     mp: number;
     maxMp: number;
+    unitClass: UnitClass;
   },
 ): void {
   const r = opts.r;
@@ -954,24 +1111,8 @@ function drawArmyToken(
   ctx.lineWidth = 0.7;
   ctx.stroke();
 
-  // 兵种符号：一杆枪 + 一面小旗（简笔，任何缩放都读得出）
-  ctx.beginPath();
-  ctx.moveTo(px - r * 0.34, py + r * 0.36);
-  ctx.lineTo(px + r * 0.22, py - r * 0.4);
-  ctx.strokeStyle = 'rgba(58,48,30,0.85)';
-  ctx.lineWidth = Math.max(0.8, r * 0.12);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(px + r * 0.22, py - r * 0.4);
-  ctx.lineTo(px + r * 0.2, py - r * 0.8);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.moveTo(px + r * 0.2, py - r * 0.8);
-  ctx.lineTo(px + r * 0.62, py - r * 0.64);
-  ctx.lineTo(px + r * 0.2, py - r * 0.46);
-  ctx.closePath();
-  ctx.fillStyle = opts.color;
-  ctx.fill();
+  // 兵种徽记
+  drawUnitClassMark(ctx, px, py, r, opts.unitClass);
 
   // 悬停光圈
   if (opts.hovered && !opts.selected) {
@@ -1028,34 +1169,46 @@ function drawArmyToken(
   }
 }
 
+/**
+ * 派遣模式：从某城出征，目的地是**格**。
+ *
+ * 可达范围由父级用 `dispatchField` 算一次后传进来（画布内不做 Dijkstra），
+ * 这里只负责画和收点击。
+ */
+export interface DispatchOverlay {
+  fromCityId: string;
+  /** 本旬移动力（天）：画「旬」标记用 */
+  mp: number;
+  /** 本旬可达（实色填充 + 实线边界） */
+  within: Set<string>;
+  /** 后续可达（仅虚线边界） */
+  beyond: Set<string>;
+  /** 当前锁定 / 悬停的方案；为空表示指向的格不可作为目的地 */
+  plan: DispatchPlan | null;
+  onHover: (tile: GridPoint | null) => void;
+  onPick: (tile: GridPoint) => void;
+}
+
 export function MapCanvas({
   state,
   selectedCityId,
-  attackRoutes,
-  marchFrom,
-  marchTargets,
+  dispatch,
   selectedArmyId,
   selectedGateId,
   onSelect,
-  onMarchTarget,
   onSelectArmy,
   onMoveArmy,
   onSelectGate,
 }: {
   state: GameState;
   selectedCityId: string;
-  /** 从选中城池可出征抵达的路线（网格逐格） */
-  attackRoutes: Array<{ targetId: string; path: GridPoint[]; days: number }>;
-  /** 出征模式：从哪座城出兵；非空时点击可抵达的敌城即出征 */
-  marchFrom?: string | null;
-  /** 出征模式下的全部可选目标（路线过多时只画一部分，但全部可点） */
-  marchTargets?: string[];
+  /** 派遣模式：点选目的地格，替代旧的「点敌城即出征」 */
+  dispatch?: DispatchOverlay | null;
   /** 选中的部队 id：非空时进入「部队调度」模式 */
   selectedArmyId?: string | null;
   /** 选中的关防 id：显示高亮与关防提示 */
   selectedGateId?: string | null;
   onSelect: (id: string) => void;
-  onMarchTarget?: (cityId: string) => void;
   onSelectArmy?: (id: string | null) => void;
   onMoveArmy?: (armyId: string, to: GridPoint) => void;
   onSelectGate?: (gateId: string | null) => void;
@@ -1136,28 +1289,29 @@ export function MapCanvas({
   useEffect(() => () => cancelAnimationFrame(flingRaf.current), []);
   useEffect(() => () => window.clearTimeout(refineTimer.current), []);
 
-  const attackSet = useMemo(
-    () => new Set(marchTargets ?? attackRoutes.map((r) => r.targetId)),
-    [marchTargets, attackRoutes],
-  );
-
   const selectedArmy = useMemo(
     () => (state.armies ?? []).find((a) => a.id === selectedArmyId) ?? null,
     [state.armies, selectedArmyId],
   );
 
+  /** 选中部队的行军场：可达范围与悬停预览共用一次 Dijkstra */
+  const armyField = useMemo(() => {
+    if (!selectedArmy) return null;
+    return armyFieldOf(state, selectedArmy);
+  }, [state, selectedArmy]);
+
   /** 选中部队可走到的格子（移动力范围内） */
   const reach = useMemo(() => {
-    if (!selectedArmy) return null;
-    return armyReachTiles(state, selectedArmy);
-  }, [state, selectedArmy]);
+    if (!selectedArmy || !armyField) return null;
+    return armyReachTiles(state, selectedArmy, armyField);
+  }, [state, selectedArmy, armyField]);
 
   /** 鼠标悬停格 → 预览路径 */
   const previewPath = useMemo(() => {
-    if (!selectedArmy || !hoverTile) return null;
+    if (!selectedArmy || !armyField || !hoverTile) return null;
     if (hoverTile.col === selectedArmy.at.col && hoverTile.row === selectedArmy.at.row) return null;
-    return armyPreviewPathTiles(state, selectedArmy, hoverTile);
-  }, [state, selectedArmy, hoverTile]);
+    return armyPreviewPathTiles(state, selectedArmy, hoverTile, armyField);
+  }, [state, selectedArmy, armyField, hoverTile]);
 
   /**
    * 势力版图烘焙结果。
@@ -1439,41 +1593,6 @@ export function MapCanvas({
     }
     lapPaint('entities');
 
-    // 出征路线
-    for (const route of attackRoutes) {
-      const start = byId.get(marchFrom ?? selectedCityId);
-      if (!start) continue;
-      const points = [start, ...route.path.map(tileScreen)];
-      if (points.length < 2) continue;
-      const stroke = marchFrom ? 'rgba(246,214,122,0.9)' : 'rgba(150,54,40,0.7)';
-      for (const [lw, color] of [
-        [2.6, 'rgba(246,236,214,0.45)'],
-        [1.5, stroke],
-      ] as const) {
-        ctx.beginPath();
-        ctx.setLineDash([4, 4]);
-        ctx.lineWidth = lw;
-        ctx.strokeStyle = color;
-        points.forEach((p, i) => {
-          if (i === 0) ctx.moveTo(p.x, p.y);
-          else ctx.lineTo(p.x, p.y);
-        });
-        ctx.stroke();
-      }
-      ctx.setLineDash([]);
-      const last = points[points.length - 1]!;
-      const prev = points[points.length - 2]!;
-      const angle = Math.atan2(last.y - prev.y, last.x - prev.x);
-      const tipX = last.x - Math.cos(angle) * 12;
-      const tipY = last.y - Math.sin(angle) * 12;
-      ctx.beginPath();
-      ctx.moveTo(tipX, tipY);
-      ctx.lineTo(tipX - Math.cos(angle - 0.4) * 6, tipY - Math.sin(angle - 0.4) * 6);
-      ctx.lineTo(tipX - Math.cos(angle + 0.4) * 6, tipY - Math.sin(angle + 0.4) * 6);
-      ctx.closePath();
-      ctx.fillStyle = marchFrom ? 'rgba(246,214,122,0.95)' : 'rgba(150,54,40,0.8)';
-      ctx.fill();
-    }
     lapPaint('interaction');
 
     // 关隘 / 港口（L2）：先画通行线，再画关防图标
@@ -1641,7 +1760,7 @@ export function MapCanvas({
     }
 
     // 悬停格高亮
-    if (selectedArmy && hoverTile) {
+    if ((selectedArmy || dispatch) && hoverTile) {
       const r = tileRect(hoverTile.col, hoverTile.row);
       ctx.beginPath();
       ctx.roundRect(r.x, r.y, r.w, r.h, 2);
@@ -1663,8 +1782,6 @@ export function MapCanvas({
         {
           selected: c.id === selectedCityId,
           hovered: c.id === hover,
-          target: Boolean(marchFrom) && attackSet.has(c.id),
-          marchFrom: Boolean(marchFrom),
           gates: gatesOf(state, c.id),
           detail: cell >= 8,
         },
@@ -1719,6 +1836,147 @@ export function MapCanvas({
     }
     lapPaint('interaction');
 
+    // ── 派遣模式：两档可达 + 路线预览 + 目的地标记 ──
+    if (dispatch) {
+      const cell = tileRect(0, 0).w;
+      const paintTiles = (
+        set: Set<string>,
+        fill: string | null,
+        dash: number[],
+        halo: string,
+        edge: string,
+        haloW: number,
+        edgeW: number,
+      ): void => {
+        if (set.size === 0) return;
+        if (fill) {
+          ctx.fillStyle = fill;
+          for (const key of set) {
+            const [c, r] = key.split(',').map(Number) as [number, number];
+            const box = tileRect(c, r);
+            ctx.fillRect(box.x, box.y, box.w, box.h);
+          }
+        }
+        const has = (c: number, r: number): boolean => set.has(`${c},${r}`);
+        ctx.beginPath();
+        for (const key of set) {
+          const [c, r] = key.split(',').map(Number) as [number, number];
+          const box = tileRect(c, r);
+          if (!has(c, r - 1)) {
+            ctx.moveTo(box.x, box.y);
+            ctx.lineTo(box.x + box.w, box.y);
+          }
+          if (!has(c, r + 1)) {
+            ctx.moveTo(box.x, box.y + box.h);
+            ctx.lineTo(box.x + box.w, box.y + box.h);
+          }
+          if (!has(c - 1, r)) {
+            ctx.moveTo(box.x, box.y);
+            ctx.lineTo(box.x, box.y + box.h);
+          }
+          if (!has(c + 1, r)) {
+            ctx.moveTo(box.x + box.w, box.y);
+            ctx.lineTo(box.x + box.w, box.y + box.h);
+          }
+        }
+        ctx.lineJoin = 'round';
+        ctx.setLineDash(dash);
+        ctx.strokeStyle = halo;
+        ctx.lineWidth = haloW;
+        ctx.stroke();
+        ctx.strokeStyle = edge;
+        ctx.lineWidth = edgeW;
+        ctx.stroke();
+        ctx.setLineDash([]);
+      };
+
+      // 远圈先画（只有虚线边界），近圈后画（填充 + 实线边界）。
+      // 地形底色是浅羊皮纸，所以描边必须走「浅晕 + 深琥珀」双线才读得出来。
+      paintTiles(
+        dispatch.beyond,
+        null,
+        [4, 4],
+        'rgba(255,250,236,0.55)',
+        'rgba(140,92,18,0.55)',
+        2.6,
+        1.2,
+      );
+      paintTiles(
+        dispatch.within,
+        'rgba(242,196,104,0.17)',
+        [],
+        'rgba(255,250,236,0.9)',
+        'rgba(138,90,16,0.95)',
+        3.4,
+        1.7,
+      );
+
+      const plan = dispatch.plan;
+      if (plan) {
+        const pts = [plan.exit, ...plan.path].map(tileScreen);
+        for (const [lw, color] of [
+          [3.4, 'rgba(255,250,236,0.75)'],
+          [1.9, 'rgba(214,158,44,1)'],
+        ] as const) {
+          ctx.beginPath();
+          ctx.setLineDash([5, 4]);
+          ctx.lineWidth = lw;
+          ctx.strokeStyle = color;
+          pts.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+          ctx.stroke();
+        }
+        ctx.setLineDash([]);
+
+        if (pts.length >= 2) {
+          const last = pts[pts.length - 1]!;
+          const prev = pts[pts.length - 2]!;
+          const angle = Math.atan2(last.y - prev.y, last.x - prev.x);
+          ctx.beginPath();
+          ctx.moveTo(last.x, last.y);
+          ctx.lineTo(last.x - Math.cos(angle - 0.42) * 8, last.y - Math.sin(angle - 0.42) * 8);
+          ctx.lineTo(last.x - Math.cos(angle + 0.42) * 8, last.y - Math.sin(angle + 0.42) * 8);
+          ctx.closePath();
+          ctx.fillStyle = 'rgba(214,158,44,1)';
+          ctx.fill();
+        }
+
+        // 本旬终点：走到这里用完移动力，下旬续行
+        const legEnd = firstLegEndOf(plan, dispatch.mp);
+        if (legEnd) {
+          const p = tileScreen(legEnd);
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, Math.max(4, cell * 0.34), 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(28,24,16,0.55)';
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(246,232,196,0.9)';
+          ctx.lineWidth = 1.2;
+          ctx.stroke();
+          ctx.fillStyle = '#f0e4c8';
+          ctx.font = '700 8px "PingFang SC", "Noto Sans SC", sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('旬', p.x, p.y + 0.5);
+        }
+
+        // 目的地：方括号准星，围城目标转为赤色
+        const d = tileScreen(plan.dest);
+        const rad = Math.max(5, cell * 0.62);
+        const enemy = Boolean(plan.siegeCityId);
+        ctx.beginPath();
+        ctx.arc(d.x, d.y, rad, 0, Math.PI * 2);
+        ctx.setLineDash([3, 3]);
+        ctx.strokeStyle = enemy ? 'rgba(176,64,44,0.95)' : 'rgba(214,158,44,1)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.arc(d.x, d.y, Math.max(1.8, rad * 0.22), 0, Math.PI * 2);
+        ctx.fillStyle = enemy ? 'rgba(180,84,58,0.95)' : 'rgba(232,196,110,0.98)';
+        ctx.fill();
+      }
+    }
+    lapPaint('interaction');
+
     // ── 部队 ──
     const armyHits: Array<{ id: string; x: number; y: number; r: number }> = [];
     for (const army of state.armies ?? []) {
@@ -1744,6 +2002,9 @@ export function MapCanvas({
       const gens = army.generalIds
         .map((id) => state.generals[id]?.name)
         .filter((n): n is string => Boolean(n));
+      // 主将兵种决定棋子徽记：编队后取 squads 的第一位主将，未编队时取首位武将
+      const commanderId = (army.squads ? Object.keys(army.squads)[0] : undefined) ?? army.generalIds[0];
+      const unitClass = (commanderId ? state.generals[commanderId]?.unitClass : undefined) ?? 'infantry';
       drawArmyToken(ctx, cur.x, cur.y, {
         color,
         selected: army.id === selectedArmyId,
@@ -1754,6 +2015,7 @@ export function MapCanvas({
         name: gens.slice(0, 2).join('·'),
         mp: armyMp(army),
         maxMp: armyMaxMp(army),
+        unitClass,
       });
       armyHits.push({ id: army.id, x: cur.x, y: cur.y, r: r * 1.35 });
 
@@ -2060,14 +2322,12 @@ export function MapCanvas({
   }, [
     state,
     selectedCityId,
-    attackRoutes,
     hover,
     hoverArmy,
     hoverTile,
     size,
     view,
-    marchFrom,
-    attackSet,
+    dispatch,
     selectedArmy,
     reach,
     previewPath,
@@ -2144,7 +2404,7 @@ export function MapCanvas({
         style={{
           cursor: dragging
             ? 'grabbing'
-            : selectedArmyId
+            : dispatch || selectedArmyId
               ? 'crosshair'
               : view.zoom > MIN_ZOOM + 0.01
                 ? 'grab'
@@ -2270,6 +2530,19 @@ export function MapCanvas({
           const box = e.currentTarget.getBoundingClientRect();
           const sx = e.clientX - box.left;
           const sy = e.clientY - box.top;
+
+          // 派遣模式：指针只负责报告目的地格，不参与选中/悬停单位
+          if (dispatch) {
+            const tile = tileAtScreen(e.clientX, e.clientY);
+            dispatch.onHover(tile);
+            setHoverTile(tile);
+            // 进入派遣模式前可能悬停过某支部队 / 关防，这里顺手清掉
+            if (hoverArmy) setHoverArmy(null);
+            if (hoverGate) setHoverGate(null);
+            if (hover) setHover(null);
+            return;
+          }
+
           const armyId = hitArmy(sx, sy);
           setHoverArmy(armyId);
           const gateId = armyId ? null : hitGate(sx, sy);
@@ -2297,6 +2570,13 @@ export function MapCanvas({
           const rect = e.currentTarget.getBoundingClientRect();
           const sx = e.clientX - rect.left;
           const sy = e.clientY - rect.top;
+
+          // ⓪ 派遣模式：点格子即锁定目的地（敌城 3×3 会被吸附到城下）
+          if (dispatch) {
+            const tile = tileAtScreen(e.clientX, e.clientY);
+            if (tile) dispatch.onPick(tile);
+            return;
+          }
 
           // ① 点部队 → 选中调度
           const armyId = hitArmy(sx, sy);
@@ -2337,8 +2617,7 @@ export function MapCanvas({
           // ④ 点城池
           const id = hitCity(sx, sy);
           if (id) {
-            if (marchFrom && onMarchTarget && attackSet.has(id)) onMarchTarget(id);
-            else onSelect(id);
+            onSelect(id);
           } else {
             if (onSelectArmy) onSelectArmy(null);
             onSelectGate?.(null);

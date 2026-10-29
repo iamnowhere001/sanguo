@@ -22,6 +22,19 @@ export const TILE_MARCH_DAYS: Record<TileKind, number> = {
   river: Infinity,
 };
 
+/** 地形中文名：确认条与 tooltip 用，和行军代价表一一对应 */
+export const TILE_KIND_LABEL: Record<TileKind, string> = {
+  plain: '平原',
+  forest: '林地',
+  hill: '丘陵',
+  mountain: '山岭',
+  marsh: '沼泽',
+  desert: '荒漠',
+  sea: '海面',
+  lake: '湖面',
+  river: '江河',
+};
+
 /** 进入某格所需天数；Infinity 表示不可通行 */
 export function marchDaysOfTile(col: number, row: number): number {
   return TILE_MARCH_DAYS[tileKindAt(col, row)] ?? Infinity;

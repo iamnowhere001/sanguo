@@ -454,6 +454,8 @@ export function planDispatch(
   factionId: string,
   fromCityId: string,
   target: DispatchTarget,
+  /** 复用 `dispatchField` 算好的场，省掉 hover 时的重复全图 Dijkstra */
+  cached?: MarchField,
 ): DispatchPlan | null {
   if (s.cities[fromCityId]?.ownerId !== factionId) return null;
   const fromBlock = blockOf(fromCityId);
@@ -478,13 +480,15 @@ export function planDispatch(
   }
   if (goals.length === 0) return null;
 
-  const field = marchField(
-    s,
-    factionId,
-    { col: fromBlock.col, row: fromBlock.row },
-    blockedExitKeys(s, fromCityId),
-    goals,
-  );
+  const field =
+    cached ??
+    marchField(
+      s,
+      factionId,
+      { col: fromBlock.col, row: fromBlock.row },
+      blockedExitKeys(s, fromCityId),
+      goals,
+    );
 
   let best: { goal: GridPoint; days: number } | null = null;
   for (const goal of goals) {
@@ -737,6 +741,9 @@ export function moveArmyTo(s: GameState, armyId: string, to: GridPoint): MoveOut
   }
 
   army.path = path;
+  army.dest = { col: to.col, row: to.row };
+  // 改令后目的地可能离开敌城，派生字段同步失效
+  army.targetCityId = siegeAt(s, army.factionId, to) ?? undefined;
   army.legDays = 0;
   const budget = armyMp(army);
   const used = advanceAlongPath(s, army, budget);
@@ -780,6 +787,16 @@ export function moveArmyTo(s: GameState, armyId: string, to: GridPoint): MoveOut
     remaining,
     arrived,
   };
+}
+
+/**
+ * 部队当前格的行军场。
+ *
+ * 可达范围与悬停预览共用这一份：否则每次 pointermove 都要跑一遍全图 Dijkstra
+ * （576×432 = 24.8 万格），近景拖动会明显掉帧。
+ */
+export function armyFieldOf(s: GameState, army: Army): MarchField {
+  return marchField(s, army.factionId, army.at);
 }
 
 /** 部队本旬还能走到的格子（移动力高亮用） */
@@ -896,47 +913,110 @@ export function dispatchReachOf(
   return { within, beyond };
 }
 
-/** 到某一格的预览路径（含城心 → 门外格那一段，画出来就是「出哪座门」） */
-export function dispatchPreviewOf(df: DispatchField, dest: GridPoint): GridPoint[] {
-  return tracePath(df.field, dest) ?? [];
+/** 到某一格的预览路径：从门外格开始，画出来就是「出哪座门」 */
+export function dispatchPreviewOf(plan: DispatchPlan): GridPoint[] {
+  return [plan.exit, ...plan.path];
 }
 
 /** 本旬走完时停在哪一格；整条路都在本旬内则返回 null（当旬即达） */
-export function firstLegEndOf(df: DispatchField, path: GridPoint[]): GridPoint | null {
+export function firstLegEndOf(plan: DispatchPlan, mp: number): GridPoint | null {
+  let used = 0;
   let last: GridPoint | null = null;
-  for (const p of path) {
-    const d = df.field.dist[p.row * MAP.cols + p.col]!;
-    if (!Number.isFinite(d) || d > df.mp) break;
+  for (const p of plan.path) {
+    const cost = marchDaysForArmy(p.col, p.row);
+    if (!Number.isFinite(cost) || used + cost > mp) break;
+    used += cost;
     last = p;
+  }
+  if (last && plan.path.length > 0) {
+    const tail = plan.path[plan.path.length - 1]!;
+    if (last.col === tail.col && last.row === tail.row) return null;
   }
   return last;
 }
 
 // ── 出征 ──────────────────────────────────────────────────
-/** 从城池直接出征：不选将也成立，默认按兵力挑最强的几位 */
+/** 方位词：把 dx/dy 压成「东南」这类两字组合（横向在前，符合汉语习惯） */
+function bearingOf(dx: number, dy: number): string {
+  const ns = dy < 0 ? '北' : dy > 0 ? '南' : '';
+  const ew = dx < 0 ? '西' : dx > 0 ? '东' : '';
+  if (ns && ew) return `${ew}${ns}`;
+  return ns || ew;
+}
+
+/**
+ * 野地目的地的读法：**最近的城 + 方位 + 格数**。
+ *
+ * 直接把 `(347,243)` 摆给玩家等于报调试坐标；「江夏东 8 格」才是人话，
+ * 而且和「襄阳城下」共用同一套地理直觉。
+ */
+export function plainDestLabel(s: GameState, dest: GridPoint): string {
+  let best: { name: string; dx: number; dy: number; d: number } | null = null;
+  for (const [id, block] of Object.entries(cityBlocks())) {
+    const city = s.cities[id];
+    if (!city) continue;
+    const dx = dest.col - block.col;
+    const dy = dest.row - block.row;
+    const d = Math.max(Math.abs(dx), Math.abs(dy));
+    if (!best || d < best.d) best = { name: city.name, dx, dy, d };
+  }
+  if (!best) return '野地';
+  if (best.d <= 3) return `${best.name} 近郊`;
+  return `${best.name}${bearingOf(best.dx, best.dy)} ${best.d} 格`;
+}
+
+/**
+ * 目的地文案：贴城 → 城名；空地 → 「近城 + 方位」。
+ * 日志、确认条与「在途部队」列表共用，避免三处各写一套。
+ */
+export function destLabelOf(s: GameState, plan: DispatchPlan): string {
+  if (plan.siegeCityId) return `${s.cities[plan.siegeCityId]?.name ?? plan.siegeCityId} 城下`;
+  if (plan.homeCityId) return `${s.cities[plan.homeCityId]?.name ?? plan.homeCityId} 城下`;
+  return plainDestLabel(s, plan.dest);
+}
+
+/**
+ * 从城池出征：目的地是**格**，不选将也成立（默认按兵力挑最强的几位）。
+ *
+ * `target` 两种形态：
+ * - `string` → 旧语义「打到这座城」，内部走 `{ kind: 'city' }`（AI 与旧测试在用）；
+ * - `GridPoint` → 新语义「派到这一格」，城郭会被 `resolveDispatchDest` 吸附。
+ *
+ * 抵达不自动开战：站在敌城门外只是围城，攻城要另下 `ASSAULT`。
+ */
 export function sortieArmy(
   s: GameState,
   fromCityId: string,
-  targetCityId: string,
+  target: string | GridPoint,
   generalIds?: string[],
   factionId: string = s.playerFactionId,
   squads?: SquadConfig,
 ): OpResult {
   const from = s.cities[fromCityId];
-  const target = s.cities[targetCityId];
   if (!from) return fail('出发城池不存在');
-  if (!target) return fail('目标城池不存在');
   if (from.ownerId !== factionId) return fail('只能从己方城池出征');
-  if (target.ownerId === factionId) return fail('目标已是己方城池');
-  if (!canAttackFactions(s, factionId, target.ownerId)) {
-    return fail('处于停战 / 同盟期，需先宣战');
+
+  let dispatchTarget: DispatchTarget;
+  if (typeof target === 'string') {
+    const city = s.cities[target];
+    if (!city) return fail('目标城池不存在');
+    if (city.ownerId === factionId) return fail('目标已是己方城池，改用「回防」');
+    if (!canAttackFactions(s, factionId, city.ownerId)) {
+      return fail('处于停战 / 同盟期，需先宣战');
+    }
+    if (target === fromCityId) return fail('目的地就是出发城');
+    dispatchTarget = { kind: 'city', cityId: target };
+  } else {
+    const resolved = resolveDispatchDest(s, factionId, target);
+    if (!resolved.ok || !resolved.target) return fail(resolved.reason ?? '目的地不可到达');
+    dispatchTarget = resolved.target;
   }
 
   // ① 城门：四门全被堵死就出不了城
   if (sortieBlocked(s, fromCityId)) return fail(sortieBlockedReason(s, fromCityId));
 
-  const route = routeForArmy(s, factionId, fromCityId, targetCityId);
-  if (!route) return fail('没有可用的行军路线（山岭与水域不可通行）');
+  const plan = planDispatch(s, factionId, fromCityId, dispatchTarget);
+  if (!plan) return fail('没有可用的行军路线（山岭与水域不可通行）');
 
   const ids = generalIds?.length
     ? generalIds
@@ -968,18 +1048,19 @@ export function sortieArmy(
     factionId,
     originCityId: fromCityId,
     fromCityId,
-    targetCityId,
+    dest: { col: plan.dest.col, row: plan.dest.row },
+    targetCityId: plan.siegeCityId ?? undefined,
     generalIds: [...ids],
     // 出征即编队：主将 + 最多 2 名副将（未显式配置时按统率自动成队）
     squads: squads ?? defaultSquads(s, ids),
     // 出生在门外：城内不摆部队，城墙只画守军旗
-    at: { col: route.exit.col, row: route.exit.row },
-    path: route.path,
+    at: { col: plan.exit.col, row: plan.exit.row },
+    path: plan.path,
     legDays: 0,
     mp: Math.round(MARCH_DAYS_PER_XUN * speed),
     speed,
-    fortificationBonus: route.fortificationBonus,
-    waterCrossing: route.waterCrossing,
+    fortificationBonus: plan.fortificationBonus,
+    waterCrossing: plan.waterCrossing,
     troops: gens.reduce((n, g) => n + g.troops, 0),
     createdTurn: s.turn,
   };
@@ -989,20 +1070,23 @@ export function sortieArmy(
   }
   (s.armies ??= []).push(army);
 
-  const gateHint = route.waterCrossing
+  const gateHint = plan.waterCrossing
     ? '（须渡水口，接战为水战）'
-    : route.fortificationBonus > 0
-      ? `（途经敌关，敌城城防 +${route.fortificationBonus}）`
+    : plan.fortificationBonus > 0
+      ? `（途经敌关，敌城城防 +${plan.fortificationBonus}）`
       : '';
   const speedHint = speed > 1 ? `，烽燧提速 ${Math.round((speed - 1) * 100)}%` : '';
-  const gateName = route.gate ? `自${gatesOf(s, fromCityId).find((g) => g.side === route.gate)?.label ?? ''}出城，` : '';
+  const gateName = plan.gate
+    ? `自${gatesOf(s, fromCityId).find((g) => g.side === plan.gate)?.label ?? ''}出城，`
+    : '';
+  const destName = destLabelOf(s, plan);
   log(
     s,
     'info',
-    `${from.name} ${gateName}出征：${gens.map((g) => g.name).join('、')} 率 ${army.troops} 兵，目标 ${target.name}，行程 ${Math.ceil(route.days / speed)} 日${speedHint}${gateHint}`,
+    `${from.name} ${gateName}出征：${gens.map((g) => g.name).join('、')} 率 ${army.troops} 兵，目的地 ${destName}，行程 ${Math.ceil(plan.days / speed)} 日${speedHint}${gateHint}`,
   );
   return done(
-    `已出征：${from.name} → ${target.name}，约 ${Math.ceil(route.days / (MARCH_DAYS_PER_XUN * speed))} 旬`,
+    `已出征：${from.name} → ${destName}，约 ${Math.ceil(plan.days / (MARCH_DAYS_PER_XUN * speed))} 旬`,
   );
 }
 

@@ -50,7 +50,6 @@ function BenchApp() {
     <MapCanvas
       state={state}
       selectedCityId={cityId}
-      attackRoutes={[]}
       selectedArmyId={null}
       selectedGateId={null}
       onSelect={() => {}}

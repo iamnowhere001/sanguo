@@ -1446,7 +1446,6 @@ export function CityPanel({
           <button
             className="btn hero"
             disabled={
-              enemyTargets.length === 0 ||
               gateLocked ||
               (gens.filter((g) => g.troops > 0).length === 0 && pool <= 0)
             }
@@ -1454,16 +1453,12 @@ export function CityPanel({
               gateLocked
                 ? gateLockReason
                 : enemyTargets.length > 0
-                  ? `出征：在地图上点选目标（可达 ${enemyTargets.length} 城）`
-                  : '暂无可行军路线：山岭与水域不可通行'
+                  ? `出征：在地图上选目的地（${enemyTargets.length} 座敌城可达，也可派往任意格）`
+                  : '出征：在地图上选任意可到达的格'
             }
             onClick={() => onMarch(city.id)}
           >
-            {gateLocked
-              ? '城门被堵 · 无法出城'
-              : enemyTargets.length > 0
-                ? `出征 · 选择目标（${enemyTargets.length}）`
-                : '暂无出征路线'}
+            {gateLocked ? '城门被堵 · 无法出城' : '出征 · 选目的地'}
           </button>
           <button
             className="btn"

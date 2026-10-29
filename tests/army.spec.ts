@@ -13,14 +13,20 @@ import {
   MARCH_DAYS_PER_XUN,
   armyMaxMp,
   armyReach,
+  dispatchField,
+  dispatchPreviewOf,
+  dispatchReachOf,
+  firstLegEndOf,
   marchDaysOfTile,
   moveArmyTo,
+  planDispatch,
   reachableTargets,
+  resolveDispatchDest,
   routeForArmy,
   sortieArmy,
 } from '../src/systems/army';
 import { gatesOf, siegeTargetOf, sortieBlocked } from '../src/systems/cityGrid';
-import type { Army, GameState } from '../src/core/state';
+import type { Army, GameState, GridPoint } from '../src/core/state';
 
 function fresh(): GameState {
   return createGame({ scenarioId: 'sanguo', playerFactionId: 'liubei', aiEnabled: false });
@@ -319,3 +325,182 @@ describe('L 档 · 逐格手动行军', () => {
   });
 });
 
+
+describe('出征派遣 · 目的地是格', () => {
+  /** 在出发城的行军场里找一格满足条件的空地 */
+  function findTile(
+    s: GameState,
+    from: string,
+    pick: (col: number, row: number, days: number) => boolean,
+  ): GridPoint | null {
+    const df = dispatchField(s, s.playerFactionId, from);
+    if (!df) return null;
+    for (let row = 0; row < MAP.rows; row++) {
+      for (let col = 0; col < MAP.cols; col++) {
+        const d = df.field.dist[row * MAP.cols + col]!;
+        if (!Number.isFinite(d) || d <= 0) continue;
+        if (pick(col, row, d)) return { col, row };
+      }
+    }
+    return null;
+  }
+
+  /** 既不是城墙也不是门外格的普通空地 */
+  const isOpenField = (col: number, row: number): boolean =>
+    !wallTileAt(col, row) && !approachTileAt(col, row);
+
+  it('可以派往任意空地，且不产生「攻击目标」', () => {
+    const s = fresh();
+    const from = myCity(s);
+    const tile = findTile(s, from, (c, r, d) => d <= 10 && isOpenField(c, r))!;
+    expect(tile).toBeTruthy();
+
+    const r = sortieArmy(s, from, tile);
+    expect(r.ok).toBe(true);
+
+    const army = s.armies!.at(-1)!;
+    expect(army.dest).toEqual(tile);
+    expect(army.targetCityId).toBeUndefined();
+    expect(army.path.at(-1)).toEqual(tile);
+    // 出生在自家门外
+    expect(approachTileAt(army.at.col, army.at.row)?.cityId).toBe(from);
+  });
+
+  it('点城郭吸附到门外格，并标记为围城目标（不自动开战）', () => {
+    const s = fresh();
+    const from = myCity(s);
+    const target = reachableTargets(s, s.playerFactionId, from)[0]!;
+    const block = cityBlocks()[target.cityId]!;
+
+    const resolved = resolveDispatchDest(s, s.playerFactionId, {
+      col: block.col,
+      row: block.row,
+    });
+    expect(resolved.ok).toBe(true);
+    expect(resolved.target).toEqual({ kind: 'city', cityId: target.cityId });
+
+    const plan = planDispatch(s, s.playerFactionId, from, resolved.target!)!;
+    expect(plan.siegeCityId).toBe(target.cityId);
+    expect(approachTileAt(plan.dest.col, plan.dest.row)?.cityId).toBe(target.cityId);
+
+    const r = sortieArmy(s, from, { col: block.col, row: block.row });
+    expect(r.ok).toBe(true);
+    expect(s.phase).toBe('map');
+    const army = s.armies!.at(-1)!;
+    expect(army.targetCityId).toBe(target.cityId);
+    expect(siegeTargetOf(s, army)).toBeNull(); // 还在路上，没到城下
+  });
+
+  it('山岭水域、敌军占位都不能作为目的地', () => {
+    const s = fresh();
+    const pid = s.playerFactionId;
+
+    let blocked: GridPoint | null = null;
+    for (let row = 0; row < MAP.rows && !blocked; row++) {
+      for (let col = 0; col < MAP.cols; col++) {
+        if (!Number.isFinite(marchDaysOfTile(col, row))) {
+          blocked = { col, row };
+          break;
+        }
+      }
+    }
+    expect(blocked).toBeTruthy();
+    const terrain = resolveDispatchDest(s, pid, blocked!);
+    expect(terrain.ok).toBe(false);
+    expect(terrain.reason).toContain('不可通行');
+
+    const from = myCity(s);
+    const tile = findTile(s, from, (c, r, d) => d <= 6 && isOpenField(c, r))!;
+    enemyAt(s, tile, 'foe-block');
+    const occupied = resolveDispatchDest(s, pid, tile);
+    expect(occupied.ok).toBe(false);
+    expect(occupied.reason).toContain('敌军');
+  });
+
+  it('超出本旬移动力的目的地会留下行军令，下旬续走', () => {
+    const s = fresh();
+    const from = myCity(s);
+    const far = findTile(s, from, (c, r, d) => d > 12 && isOpenField(c, r))!;
+    expect(far).toBeTruthy();
+
+    expect(sortieArmy(s, from, far).ok).toBe(true);
+    const army = s.armies!.at(-1)!;
+    // 建队当旬移动力满额，路线已铺到最后
+    expect(army.mp).toBe(armyMaxMp(army));
+    expect(army.path.at(-1)).toEqual(far);
+    const legs = army.path.length;
+    expect(legs).toBeGreaterThan(0);
+
+    // 旬推进后会走掉至少一格；没走完就带着剩余路线继续存在
+    const { state: after } = reduce(s, { t: 'END_TURN' });
+    const moved = after.armies?.find((a) => a.id === army.id);
+    expect(moved).toBeTruthy();
+    expect(moved!.path.length).toBeLessThan(legs);
+  });
+
+  it('中途改令：目的地与派生字段一起换掉', () => {
+    const s = fresh();
+    const from = myCity(s);
+    const first = findTile(s, from, (c, r, d) => d <= 4 && isOpenField(c, r))!;
+    expect(sortieArmy(s, from, first).ok).toBe(true);
+    const army = s.armies!.at(-1)!;
+
+    const second = findTile(s, from, (c, r, d) => d > 5 && d <= 9 && isOpenField(c, r))!;
+    const r = moveArmyTo(s, army.id, second);
+    expect(r.ok).toBe(true);
+    expect(army.dest).toEqual(second);
+    expect(army.targetCityId).toBeUndefined();
+  });
+
+  it('停在野地不会入城、不算围城，旬推进后仍在场上', () => {
+    const s = fresh();
+    const from = myCity(s);
+    const tile = findTile(s, from, (c, r, d) => d <= 8 && isOpenField(c, r))!;
+    expect(sortieArmy(s, from, tile).ok).toBe(true);
+    const army = s.armies!.at(-1)!;
+
+    // 等价于走完全程后在野地待命
+    army.at = { ...tile };
+    army.path = [];
+    army.legDays = 0;
+    expect(siegeTargetOf(s, army)).toBeNull();
+
+    const { state: after } = reduce(s, { t: 'END_TURN' });
+    expect(after.armies?.some((a) => a.id === army.id)).toBe(true);
+  });
+
+  it('可达范围分两档：本旬 / 后续，且后续只铺 3 旬', () => {
+    const s = fresh();
+    const from = myCity(s);
+    const df = dispatchField(s, s.playerFactionId, from)!;
+    const reach = dispatchReachOf(s, df, from, s.playerFactionId);
+
+    expect(reach.within.size).toBeGreaterThan(0);
+    for (const key of reach.within) {
+      const [c, r] = key.split(',').map(Number) as [number, number];
+      expect(df.field.dist[r * MAP.cols + c]!).toBeLessThanOrEqual(df.mp);
+    }
+    for (const key of reach.beyond) {
+      const [c, r] = key.split(',').map(Number) as [number, number];
+      const d = df.field.dist[r * MAP.cols + c]!;
+      expect(d).toBeGreaterThan(df.mp);
+      expect(d).toBeLessThanOrEqual(df.mp * 3);
+    }
+  });
+
+  it('预览路径从门外格开始，首段走完的格落在移动力之内', () => {
+    const s = fresh();
+    const from = myCity(s);
+    const near = findTile(s, from, (c, r, d) => d <= 8 && isOpenField(c, r))!;
+    const resolved = resolveDispatchDest(s, s.playerFactionId, near)!;
+    const df = dispatchField(s, s.playerFactionId, from)!;
+    const plan = planDispatch(s, s.playerFactionId, from, resolved.target!, df.field)!;
+
+    const preview = dispatchPreviewOf(plan);
+    expect(preview[0]).toEqual(plan.exit);
+    expect(preview.at(-1)).toEqual(plan.dest);
+    // 本旬走得完 → 没有「旬」中途停靠点
+    expect(firstLegEndOf(plan, df.mp)).toBeNull();
+    expect(plan.days).toBeLessThanOrEqual(df.mp);
+  });
+});
