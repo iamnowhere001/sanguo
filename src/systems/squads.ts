@@ -119,10 +119,3 @@ export function splitSquadTroops(
   return out;
 }
 
-/** 一名武将当前是否在某个队伍里（主将或副将） */
-export function squadOf(
-  squads: SquadSpec[] | undefined,
-  generalId: string,
-): SquadSpec | undefined {
-  return squads?.find((squad) => squadMembers(squad).includes(generalId));
-}

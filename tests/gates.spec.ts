@@ -169,7 +169,7 @@ describe('关防 · 归属与通行', () => {
     const site = gateSiteById(gate.id)!;
     s.gates![gate.id] = { ownerId: null, troops: gate.garrison };
     const army = armyAt(s, site.approaches[0] ?? site.center, 'liubei');
-    expect(armyAtGate(s, army, gate.id)).toBe(true);
+    expect(armyAtGate(army, gate.id)).toBe(true);
 
     const r = assaultGate(s, army.id, gate.id);
     expect(r.ok).toBe(true);

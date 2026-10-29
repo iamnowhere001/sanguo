@@ -58,7 +58,6 @@ import {
   factionColor,
   factionName,
   fmt,
-  useEscape,
 } from './common';
 
 const DOMESTIC_ORDER: DomesticCmd[] = ['reclaim', 'commerce', 'patrol', 'govern', 'drill'];

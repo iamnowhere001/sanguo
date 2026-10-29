@@ -1,5 +1,5 @@
 import type { BattleTerrain, BattlefieldFeature } from '../../core/state';
-import { cityAnchors, isWaterKind, tileKindAt } from '../../render/terrainGrid';
+import { cityAnchors, tileKindAt } from '../../render/terrainGrid';
 import { BATTLE_H, BATTLE_W, KIND_TO_TERRAIN } from './grid';
 
 /**
@@ -226,19 +226,5 @@ function carveCrossing(grid: BattleTerrain[][]): Set<string> {
   return carved;
 }
 
-/** 该战场是否以水域为主（供水战规则与渲染层使用） */
-export function waterShareOf(grid: BattleTerrain[][]): number {
-  let water = 0;
-  for (const row of grid) {
-    for (const t of row) if (t === 'water') water += 1;
-  }
-  return water / (BATTLE_W * BATTLE_H);
-}
-
 /** 从地图裁切出战场时，水域占比高于该值时标记为水战 */
 export const WATER_BATTLE_SHARE = 0.22;
-
-/** 仅供测试与调试：判断某格在大地图上是否水域 */
-export function mapTileIsWater(col: number, row: number): boolean {
-  return isWaterKind(tileKindAt(col, row));
-}

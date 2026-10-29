@@ -5,10 +5,10 @@ import {
   citiesOf,
   defendersOf,
   factionTroops,
-  garrisonTroopsOf,
   isAdjacentEnemy,
   neighborsOf,
 } from '../core/state';
+import { cityTroops } from '../core/selectors';
 import { garrisonCapOf } from './formulas';
 import { projectedTroops } from './troops';
 import { canAttackFactions, isHostile } from './factionDiplomacy';
@@ -44,11 +44,6 @@ export interface StrategicMove {
   toId: string;
   generalId: string;
   troops: number;
-}
-
-/** 城池驻军（含未分配兵力池） */
-export function cityTroops(state: GameState, cityId: string): number {
-  return garrisonTroopsOf(state, cityId);
 }
 
 /** 边境城至少留下的驻军；内陆城为 0，可以放心抽调 */

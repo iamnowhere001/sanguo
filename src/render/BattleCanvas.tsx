@@ -1027,7 +1027,6 @@ function drawRuins(
   px: number,
   py: number,
   cell: number,
-  palette: BattlefieldPalette,
 ): void {
   // 断墙
   ctx.fillStyle = rgba('#7b6c53', 0.9);
@@ -1103,7 +1102,7 @@ function drawLandmark(
       drawTemple(ctx, px, py, cell, palette);
       break;
     case 'ruins':
-      drawRuins(ctx, px, py, cell, palette);
+      drawRuins(ctx, px, py, cell);
       break;
     case 'banner':
       drawBanner(ctx, px, py, cell, palette);

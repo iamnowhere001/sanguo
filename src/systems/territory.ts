@@ -1,6 +1,5 @@
 import type { GameState } from '../core/state';
 import { MAP } from '../data/tables/geography';
-import { TILE_MARCH_DAYS } from '../data/tables/marchCost';
 import { gateSiteAt, isGateLane } from '../render/gateGrid';
 import { cityBlocks, isWaterKind, tileKindAt } from '../render/terrainGrid';
 import type { TileKind } from '../render/terrainGrid';
@@ -74,11 +73,6 @@ export function territoryEntryCost(col: number, row: number): number {
   }
   const days = TERRITORY_DAYS[tileKindAt(col, row)];
   return Number.isFinite(days) ? days * DAY_SCALE : Number.POSITIVE_INFINITY;
-}
-
-/** 部队行军天数（供测试比对同源性） */
-export function marchDaysOf(kind: TileKind): number {
-  return TILE_MARCH_DAYS[kind];
 }
 
 /**

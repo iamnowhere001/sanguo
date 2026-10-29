@@ -56,6 +56,3 @@ export const EXPLORE_DIRECTIONS: Record<ExploreDirection, ExploreDirectionDef> =
 
 export const EXPLORE_ORDER: ExploreDirection[] = ['talent', 'treasure', 'intel', 'loyalty'];
 
-export function exploreDirectionLabel(direction: ExploreDirection): string {
-  return EXPLORE_DIRECTIONS[direction]?.label ?? direction;
-}

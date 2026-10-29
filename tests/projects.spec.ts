@@ -175,7 +175,7 @@ describe('现代重制：项目制内政', () => {
         effectLabel: '农业 +40',
       }),
     ]);
-    const report = buildMonthReport(s, before, 0, [], facts);
+    const report = buildMonthReport(s, before, 0, facts);
     expect(report.lines.some((l) => l.label === '营造')).toBe(true);
     expect(
       report.lines.find((l) => l.label === '营造')?.reason,

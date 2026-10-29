@@ -8,11 +8,11 @@ import {
   generalsOf,
   neighborsOf,
 } from '../core/state';
+import { cityTroops } from '../core/selectors';
 import { garrisonCapOf, monthlyFoodUpkeep, recruitCap } from './formulas';
 import { doDomestic, doRecruit, troopCapOf } from './domestic';
 import { autoResolveBattle, createBattle } from './battle';
 import {
-  cityTroops,
   planAttackCandidates,
   planMassingMove,
   planReinforcement,
@@ -369,7 +369,6 @@ export function continueAiPhase(state: GameState): void {
       state,
       state.pendingMonth.before,
       state.pendingMonth.logStart,
-      state.pendingMonth.warnings,
       state.pendingMonth.facts,
     );
     state.pendingMonth = undefined;

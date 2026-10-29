@@ -6,7 +6,6 @@ import type {
   BattleState,
   BattleTerrain,
   BattleUnit,
-  Terrain,
   UnitClass,
 } from '../../core/state';
 import { tileKindAt, wallTileAt, type TileKind } from '../../render/terrainGrid';
@@ -46,57 +45,6 @@ export function inBattleBounds(b: BattleState, x: number, y: number): boolean {
   return x >= bounds.x0 && y >= bounds.y0 && x <= bounds.x1 && y <= bounds.y1;
 }
 
-export const TEMPLATES: Record<Terrain, string[]> = {
-  plain: [
-    'PPPPPPFPPPPP',
-    'PPPPPPPPPPPP',
-    'PFFPPPPPPPPP',
-    'PPPPPPPCCPPP',
-    'PPPPPPPCCPPP',
-    'PPPPPPPFFPPP',
-    'PPPPPPPPPPPP',
-    'PPPFFPPPPPPP',
-  ],
-  mountain: [
-    'PPPPPPMPPPPP',
-    'PMMPPPPPPPPP',
-    'PPPPPPPMMPPP',
-    'PPPPPPPCCPPP',
-    'PPPPPPPCCPPP',
-    'PMMPPPPPPPPP',
-    'PPPPPMMPPPPP',
-    'PPPMMPPPPPPP',
-  ],
-  forest: [
-    'PFFFFPPPPPPP',
-    'PFPPPPPPFPPP',
-    'PPPPPPPFFPPP',
-    'PPPPPPPCCPPP',
-    'PPPPPPPCCPPP',
-    'PFFPPPPPFPPP',
-    'PPPPFFFFPPPP',
-    'PPPFFPPPPPPP',
-  ],
-  water: [
-    'PPPPWWPPPPPP',
-    'PPPPWWPPPPPP',
-    'PPPPWWFPPPPP',
-    'PPPPWWPCCPPP',
-    'PPPPWWPCCPPP',
-    'PPPPWWFPPPPP',
-    'PPPPWWPPPPPP',
-    'PPPPWWPPPPPP',
-  ],
-};
-
-const CHAR_TERRAIN: Record<string, BattleTerrain> = {
-  P: 'plain',
-  F: 'forest',
-  M: 'mountain',
-  W: 'water',
-  C: 'city',
-};
-
 /**
  * 出生点：攻方贴左缘、守方贴右缘/城内。
  * 数量按 BALANCE.BATTLE_MAX_ATTACKERS / MAX_DEFENDERS 的上限留足独立格，
@@ -111,19 +59,6 @@ export const SPAWN_ATTACKER: Array<[number, number]> = [
   [1, 2],
   [0, 5],
   [1, 5],
-];
-
-export const SPAWN_DEFENDER: Array<[number, number]> = [
-  [7, 3],
-  [8, 4],
-  [8, 3],
-  [7, 4],
-  [7, 2],
-  [9, 3],
-  [9, 4],
-  [6, 3],
-  [6, 4],
-  [7, 5],
 ];
 
 export function otherSide(side: BattleSide): BattleSide {
@@ -143,11 +78,6 @@ export function battleTerrainAt(b: BattleState, x: number, y: number): BattleTer
   }
   const row = b.grid?.[y];
   return row?.[x] ?? 'plain';
-}
-
-export function baseTerrainAt(b: BattleState, x: number, y: number): Terrain {
-  const t = battleTerrainAt(b, x, y);
-  return t === 'city' ? 'plain' : t;
 }
 
 export function isOccupied(b: BattleState, x: number, y: number, exceptUnitId?: string): boolean {
@@ -182,11 +112,6 @@ export function inAttackRange(
   const r = attackRangeOf(unitClass);
   const d = distanceBetween(from, to);
   return d >= r.min && d <= r.max;
-}
-
-export function emptyGrid(terrain: Terrain): BattleTerrain[][] {
-  const rows = TEMPLATES[terrain];
-  return rows.map((row) => Array.from(row).map((ch) => CHAR_TERRAIN[ch] ?? 'plain'));
 }
 
 /**

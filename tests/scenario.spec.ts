@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SCENARIOS, createGame } from '../src/data/tables/scenarios';
+import { createGame } from '../src/data/tables/scenarios';
 
 const IDS = ['dongzhuo', 'guandu', 'chibi', 'sanguo'];
 

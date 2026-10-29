@@ -2,7 +2,7 @@ import { BALANCE } from '../data/tables/balance';
 import { MAP } from '../data/tables/geography';
 import { marchDaysForArmy, marchDaysOfTile, TILE_MARCH_DAYS } from '../data/tables/marchCost';
 import type { Army, GameState, General, GridPoint } from '../core/state';
-import { defendersOf, garrisonTroopsOf } from '../core/state';
+import { defendersOf } from '../core/state';
 import { done, fail, type OpResult } from '../core/result';
 import { canAttackFactions } from './factionDiplomacy';
 import { createBattle } from './battle/setup';
@@ -64,11 +64,6 @@ export function isMarchable(col: number, row: number): boolean {
 }
 
 const keyOf = (col: number, row: number) => `${col},${row}`;
-
-/** 城心格 → 城池 id（保留旧名字，语义已从「1 格」改成「3×3 的城心」） */
-export function cityAtTile(col: number, row: number): string | null {
-  return cityAtCenter(col, row);
-}
 
 // ── 移动力 ─────────────────────────────────────────────────
 /** 部队本旬移动力上限 */
@@ -929,36 +924,6 @@ export function playArmyTurn(s: GameState): { battleStarted: boolean } {
   // 下一旬的移动力
   for (const army of s.armies) army.mp = armyMaxMp(army);
   return { battleStarted };
-}
-
-/** 城内在途 / 闲置武将判定，供 UI 与其他系统复用 */
-export function isMarching(g: General): boolean {
-  return Boolean(g.armyId);
-}
-
-/** 城内可用兵力（不含在途）——语义与 garrisonTroopsOf 一致，仅作显式导出 */
-export function cityGarrison(s: GameState, cityId: string): number {
-  return garrisonTroopsOf(s, cityId);
-}
-
-/** 城内可出战武将（不含在途） */
-export function cityDefenders(s: GameState, cityId: string): General[] {
-  return defendersOf(s, cityId);
-}
-
-/** 部队所属势力名，供 UI 文案 */
-export function armyFactionName(s: GameState, army: Army): string {
-  return s.factions[army.factionId]?.name ?? army.factionId;
-}
-
-/** 该城此刻可用的出城门（供面板展示「四门」状态） */
-export function cityGateStatus(s: GameState, cityId: string): ReturnType<typeof gatesOf> {
-  return gatesOf(s, cityId);
-}
-
-/** 该城是否有门被堵（围城提示） */
-export function cityUnderSiege(s: GameState, cityId: string): boolean {
-  return gatesOf(s, cityId).some((g) => g.blockedBy !== null);
 }
 
 /** 空出城门的数量（0 = 被围死） */

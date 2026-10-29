@@ -183,7 +183,6 @@ export function planDelegatedAttack(
   if (reason) return emptyPreview(state, fromCityId, targetCityId, generalIds, reason);
 
   const clone = structuredClone(state);
-  const originalOwner = clone.cities[targetCityId]?.ownerId ?? null;
   const outcome = autoResolveBattle(
     clone,
     fromCityId,

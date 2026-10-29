@@ -29,11 +29,3 @@ export * from './siege';
 export * from './resolve';
 export * from './auto';
 export * from './delegate';
-
-import type { OpResult } from '../../core/result';
-
-/** 兼容旧导出名：战斗类操作的结果与通用 OpResult 同构。 */
-export type BattleOpResult = OpResult;
-
-/** 兼容旧导入路径：`syncFactionCities` 已迁移到 core/state。 */
-export { syncFactionCities } from '../../core/state';

@@ -4,14 +4,9 @@ import { chance, draw, randInt } from '../core/rng';
 import { done, fail, type OpResult } from '../core/result';
 import type { City, GameState } from '../core/state';
 import { citiesOf, effIntellect } from '../core/state';
+import { cityTroops } from '../core/selectors';
 import { garrisonCapOf } from './formulas';
 import { log } from './economy';
-
-function cityTroops(state: GameState, cityId: string): number {
-  return Object.values(state.generals)
-    .filter((g) => g.status === 'active' && g.locationId === cityId && !g.armyId)
-    .reduce((sum, g) => sum + g.troops, 0);
-}
 
 function addTroops(state: GameState, city: City, rate: number): number {
   const room = Math.max(0, garrisonCapOf(city.size) - cityTroops(state, city.id));

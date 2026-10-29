@@ -5,7 +5,7 @@ import { done, fail, type OpResult } from '../core/result';
 import { cityMaxDurability, garrisonCapOf } from './formulas';
 import { edictLeftOf } from './domestic';
 import { log } from './economy';
-import { distributeToGenerals, garrisonTotal, poolOf, withdrawTroops } from './troops';
+import { distributeToGenerals, poolOf, withdrawTroops } from './troops';
 
 /**
  * 后勤层：城际运输 + 城池耐久。
@@ -99,7 +99,7 @@ export function canTransport(s: GameState, order: TransportOrder): TransportChec
       edictCost,
     };
   }
-  if (troops > garrisonTotal(s, from.id)) {
+  if (troops > garrisonTroopsOf(s, from.id)) {
     return { ok: false, reason: '城中兵力不足', edictCost };
   }
   const room = garrisonCapOf(to.size) - garrisonTroopsOf(s, to.id);

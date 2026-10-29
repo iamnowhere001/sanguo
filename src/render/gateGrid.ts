@@ -654,23 +654,5 @@ export function isGateLane(col: number, row: number): boolean {
   return gateSiteAt(col, row) !== null;
 }
 
-/** 供调试脚本输出的关港落位摘要 */
-export function gateSiteSummary(): Array<{
-  id: string;
-  name: string;
-  kind: GateFeature['kind'];
-  center: GridPoint;
-  lane: number;
-  water: boolean;
-}> {
-  return Object.values(gateSites()).map((s) => ({
-    id: s.gate.id,
-    name: s.gate.name,
-    kind: s.gate.kind,
-    center: s.center,
-    lane: s.lane.length,
-    water: s.water,
-  }));
-}
 
 export { lonLatToTile };

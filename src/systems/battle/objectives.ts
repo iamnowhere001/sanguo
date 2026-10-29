@@ -10,6 +10,7 @@ import type {
 } from '../../core/state';
 import { MAP } from '../../data/tables/geography';
 import { cityBlocks, isWaterKind, tileKindAt, wallTileAt } from '../../render/terrainGrid';
+import { clamp } from '../formulas';
 import { activeUnits, distanceBetween } from './grid';
 
 /**
@@ -112,10 +113,6 @@ const SUPPLY_REWARD = {
   food: BALANCE.MODERN.OBJECTIVE.SUPPLY_FOOD,
   exp: BALANCE.MODERN.OBJECTIVE.SUPPLY_EXP,
 };
-
-function clamp(v: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, v));
-}
 
 function hashString(text: string): number {
   let h = 2166136261;

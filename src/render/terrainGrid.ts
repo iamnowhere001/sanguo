@@ -12,7 +12,6 @@ import {
   RIDGES,
   RIVERS,
   lonLatToTile,
-  projectLonLat,
   riverHalfWidth,
   type Pt,
 } from '../data/tables/geography';
@@ -58,31 +57,6 @@ export const TILE_KINDS: TileKind[] = [
 const KIND_INDEX = Object.fromEntries(
   TILE_KINDS.map((k, i) => [k, i]),
 ) as Record<TileKind, number>;
-
-export const TILE_KIND_LABEL: Record<TileKind, string> = {
-  sea: '海域',
-  lake: '湖泊',
-  river: '河流',
-  marsh: '沼泽',
-  plain: '平原',
-  forest: '林地',
-  hill: '丘陵',
-  mountain: '山地',
-  desert: '荒漠',
-};
-
-/** 渲染用基色：暖灰底 + 低饱和，保证城池节点与势力色仍是视觉主角 */
-export const TILE_KIND_COLOR: Record<TileKind, string> = {
-  sea: '#141a1c',
-  lake: '#1b2b2e',
-  river: '#22383c',
-  marsh: '#2b3327',
-  plain: '#2a2620',
-  forest: '#232c22',
-  hill: '#302a20',
-  mountain: '#39301f',
-  desert: '#332c1e',
-};
 
 /** 水域：不可通行，也不允许落城 */
 export function isWaterKind(kind: TileKind): boolean {
@@ -590,7 +564,3 @@ export function worldToLonLat(x: number, y: number): { lon: number; lat: number 
   };
 }
 
-/** 经纬度 → 世界坐标的薄封装，便于渲染层统一入口 */
-export function lonLatWorld(lon: number, lat: number): { x: number; y: number } {
-  return projectLonLat(lon, lat);
-}

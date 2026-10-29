@@ -74,8 +74,7 @@ afterEach(() => {
 
 describe('战斗托管 UI', () => {
   it('开关可切换，托管后我方部队会自己行动', () => {
-    const s = mountBattle();
-    const b = s.battle!;
+    mountBattle();
 
     const toggle = button('AI 托管');
     expect(toggle).toBeTruthy();

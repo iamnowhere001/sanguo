@@ -2,7 +2,7 @@ import { BALANCE } from '../../data/tables/balance';
 import { randRange } from '../../core/rng';
 import { done, fail, type OpResult } from '../../core/result';
 import type { BattleState, BattleUnit, GameState, General } from '../../core/state';
-import { clamp, expToNext } from '../formulas';
+import { expToNext } from '../formulas';
 import { computeDamageValue } from './damage';
 import {
   activeUnits,

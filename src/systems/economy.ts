@@ -11,7 +11,6 @@ import {
   taxIncome,
 } from './formulas';
 import {
-  applyPolicyMonthly,
   policyDisasterMult,
   policyFoodMult,
   policyTaxMult,

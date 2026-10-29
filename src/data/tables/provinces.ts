@@ -121,6 +121,3 @@ export function provinceOf(cityId?: string | null): ProvinceDef | undefined {
   return provinceId ? PROVINCE_BY_ID[provinceId] : undefined;
 }
 
-export function provinceNameOf(cityId?: string | null): string {
-  return provinceOf(cityId)?.name ?? '未知州';
-}

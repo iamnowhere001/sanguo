@@ -11,7 +11,7 @@ import type {
   GameState,
   ReportLine,
 } from '../../core/state';
-import { defendersOf, factionTroops, garrisonTroopsOf, neighborsOf, syncFactionCities } from '../../core/state';
+import { factionTroops, garrisonTroopsOf, neighborsOf, syncFactionCities } from '../../core/state';
 import { log } from '../economy';
 import { changeRelationScore } from '../factionDiplomacy';
 import { clamp, garrisonCapOf } from '../formulas';

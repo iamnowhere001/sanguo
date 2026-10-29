@@ -28,6 +28,7 @@ import {
 } from '../data/tables/geography';
 import { isLand } from './terrainGrid';
 import { gateSites } from './gateGrid';
+import { clamp } from './camera';
 
 export interface Bounds {
   x: number;
@@ -111,8 +112,6 @@ function smoothNoise(t: number, seed: number): number {
     Math.sin(t * 13.3 + seed * 2.3 + 2.1) * 0.2
   );
 }
-
-const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 
 // ── 投影缓存 ────────────────────────────────────────────────
 
@@ -399,7 +398,6 @@ function paintShallows(ctx: CanvasRenderingContext2D): void {
 
 /** 海岸泡沫 + 浪花符号 */
 function paintCoast(ctx: CanvasRenderingContext2D, b: Bounds): void {
-  const path = coastPath();
   ctx.save();
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';

@@ -1,6 +1,6 @@
 import { GATES, GATE_KIND_LABEL, gateById, isTrail, type GateFeature } from '../data/tables/gates';
 import type { Army, GameState, General, GridPoint } from '../core/state';
-import { done, fail, type OpResult } from '../core/result';
+import { fail, type OpResult } from '../core/result';
 import { draw, nextFloat } from '../core/rng';
 import { gateSiteById, type GateSite } from '../render/gateGrid';
 import { cityAnchors } from '../render/terrainGrid';
@@ -73,9 +73,6 @@ export function gateBlockedFor(s: GameState, gateId: string, factionId: string):
   return gateAccessFor(s, gateId, factionId) === 'blocked';
 }
 
-export function gateSiteOf(gateId: string): GateSite | null {
-  return gateSiteById(gateId);
-}
 
 export function gateProductionOf(gateId: string): GateProduction {
   const gate = gateById(gateId);
@@ -157,7 +154,7 @@ export function gateDistanceTo(site: GateSite, at: GridPoint): number {
 }
 
 /** 兵临关下：站在通行线相邻格（含线内）即可攻关 / 接管 */
-export function armyAtGate(s: GameState, army: Army, gateId: string): boolean {
+export function armyAtGate(army: Army, gateId: string): boolean {
   const site = gateSiteById(gateId);
   if (!site) return false;
   return gateDistanceTo(site, army.at) <= 1;
@@ -339,7 +336,7 @@ export function assaultGate(
   const site = gateSiteById(gateId);
   if (!gate || !site) return fail('关防不存在');
   if (isTrail(gate)) return fail(`${gate.name}是山间小路，无法驻守封锁`);
-  if (!armyAtGate(s, army, gateId)) {
+  if (!armyAtGate(army, gateId)) {
     return fail(`部队须抵近${GATE_KIND_LABEL[gate.kind]}前才能行动`);
   }
 

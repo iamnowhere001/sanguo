@@ -163,10 +163,6 @@ export function territoryPaint(
   return paint;
 }
 
-/** 仅供测试 */
-export function resetTerritoryPaintCache(): void {
-  cached = null;
-}
 
 /**
  * 染色强度随缩放变化。

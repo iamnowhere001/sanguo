@@ -7,6 +7,7 @@ import {
 } from '../../data/tables/tactics';
 import type { BattleSide, BattleState, BattleUnit, GameState } from '../../core/state';
 import { moveUnit, performAttack, performCharge } from './combat';
+import { clamp } from '../formulas';
 import {
   advanceTile,
   bestAttackOption,
@@ -81,10 +82,6 @@ function riskWeight(
   return weight;
 }
 
-function clamp(v: number, min: number, max: number): number {
-  return v < min ? min : v > max ? max : v;
-}
-
 /**
  * 计策的期望收益：命中率 × 效果 − 机会成本（少打的那一下普攻）。
  * 不再按表顺序取第一个能放的计策。
@@ -152,7 +149,7 @@ function bestTactic(
  * 极兵突击：只在「普攻打不死、但突击能打死」或目标高价值时交。
  * 普攻已经能解决的目标，把这次一次性技能留给更硬的骨头。
  */
-function shouldCharge(unit: BattleUnit, attack: AttackOption): boolean {
+function shouldCharge(attack: AttackOption): boolean {
   const target = attack.target;
   if (attack.damage >= target.troops) return false;
 
@@ -203,7 +200,7 @@ export function planSideAction(
 
   // 2) 能打：突击 / 直接出手 / 先走到攻击位
   if (attack) {
-    if (unit.unitClass === 'elite' && !unit.chargeUsed && shouldCharge(unit, attack)) {
+    if (unit.unitClass === 'elite' && !unit.chargeUsed && shouldCharge(attack)) {
       return { kind: 'charge', unitId: unit.id, targetId: attack.target.id };
     }
     if (attack.now) {

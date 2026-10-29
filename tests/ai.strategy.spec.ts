@@ -3,10 +3,10 @@ import { createGame } from '../src/data/tables/scenarios';
 import { difficultyOf } from '../src/data/tables/difficulty';
 import type { GameState } from '../src/core/state';
 import { neighborsOf } from '../src/core/state';
+import { cityTroops } from '../src/core/selectors';
 import { runAiFaction } from '../src/systems/ai';
 import {
   adjacentThreat,
-  cityTroops,
   planAttackCandidates,
   planMassingMove,
   planReinforcement,

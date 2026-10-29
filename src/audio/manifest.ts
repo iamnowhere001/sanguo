@@ -389,9 +389,3 @@ export const SOUNDS: Record<SoundId, SoundDef> = {
     duck: true,
   },
 };
-
-export function soundDef(id: SoundId): SoundDef {
-  const def = SOUNDS[id];
-  if (!def) throw new Error(`未知音效 id：${id}`);
-  return def;
-}

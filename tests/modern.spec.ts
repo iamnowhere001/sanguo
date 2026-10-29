@@ -5,7 +5,6 @@ import type { GameState } from '../src/core/state';
 import { createBattle, computeDamage, advanceBattleDay, flankMultiplier, performAttack, markRouted } from '../src/systems/battle';
 import {
   activePolicy,
-  choosePolicy,
   drawPolicyOffer,
   policyFoodMult,
 } from '../src/systems/policy';

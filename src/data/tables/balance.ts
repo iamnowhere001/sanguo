@@ -483,4 +483,3 @@ export const BALANCE = {
   },
 } as const;
 
-export type DomesticKey = keyof typeof BALANCE.DOMESTIC;

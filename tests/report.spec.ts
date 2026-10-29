@@ -35,8 +35,8 @@ describe('月报 2.0', () => {
     const logStart = s.log.length;
     const facts = emptyMonthFacts();
 
-    const warnings = runMonthlyPipeline(s, facts);
-    const report = buildMonthReport(s, before, logStart, warnings, facts);
+    runMonthlyPipeline(s, facts);
+    const report = buildMonthReport(s, before, logStart, facts);
 
     expect(facts.outputs.length).toBeGreaterThan(0);
     expect(facts.taxes.length).toBeGreaterThanOrEqual(0);
@@ -55,7 +55,7 @@ describe('月报 2.0', () => {
     runDisaster(s, facts);
 
     expect(facts.disasters).toHaveLength(1);
-    const report = buildMonthReport(s, playerSnapshot(s), s.log.length, [], facts);
+    const report = buildMonthReport(s, playerSnapshot(s), s.log.length, facts);
     const disaster = report.lines.find((l) => l.label === '灾害');
     expect(disaster).toBeDefined();
     expect(disaster!.text).toContain('受灾');
@@ -66,7 +66,7 @@ describe('月报 2.0', () => {
   it('低忠诚武将会单独提示，并给出宴请/调离建议', () => {
     const s = fresh();
     s.generals.guanyu!.loyalty = 30;
-    const report = buildMonthReport(s, playerSnapshot(s), s.log.length, [], emptyMonthFacts());
+    const report = buildMonthReport(s, playerSnapshot(s), s.log.length, emptyMonthFacts());
 
     const loyalty = report.lines.find((l) => l.label === '忠诚');
     expect(loyalty).toBeDefined();
@@ -80,7 +80,7 @@ describe('月报 2.0', () => {
       { turn: s.turn, kind: 'warn', text: '曹操自许昌出兵新野', source: 'ai' },
       { turn: s.turn, kind: 'info', text: '袁绍在邺城征兵 300', source: 'ai' },
     );
-    const report = buildMonthReport(s, playerSnapshot(s), 0, [], emptyMonthFacts());
+    const report = buildMonthReport(s, playerSnapshot(s), 0, emptyMonthFacts());
 
     const ai = report.lines.find((l) => l.label === '境外');
     expect(ai).toBeDefined();
@@ -98,7 +98,7 @@ describe('月报 2.0', () => {
         { cityName: '江夏', need: 800, paid: 400, desertionRate: 0.1 },
       ],
     };
-    const report = buildMonthReport(s, playerSnapshot(s), s.log.length, [], facts);
+    const report = buildMonthReport(s, playerSnapshot(s), s.log.length, facts);
 
     const army = report.lines.find((l) => l.label === '军备');
     expect(army!.reason).toContain('断粮逃亡');

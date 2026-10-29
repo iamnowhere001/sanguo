@@ -205,7 +205,7 @@ describe('探索派遣', () => {
 
     const facts = emptyMonthFacts();
     runExplorations(s, facts);
-    const report = buildMonthReport(s, playerSnapshot(s), s.log.length, [], facts);
+    const report = buildMonthReport(s, playerSnapshot(s), s.log.length, facts);
     const line = report.lines.find((l) => l.label === '探索');
     expect(line).toBeDefined();
     expect(line!.reason).toContain('民心');

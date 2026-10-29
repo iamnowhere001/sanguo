@@ -4,8 +4,6 @@ import {
   ACT_IDENTITIES,
   actDef,
   INTERACT_CHOICE_LIST,
-  type ActDef,
-  type ActIdentityDef,
   type InterActChoiceDef,
 } from '../data/tables/acts';
 import type {
@@ -174,10 +172,6 @@ export function actExitMet(state: GameState): boolean {
 /** 兼容旧调用：章节目标达成 = 当前幕退出条件达成。 */
 export function chapterAllDone(state: GameState): boolean {
   return actExitMet(state);
-}
-
-export function currentAct(state: GameState): ActDef {
-  return actDef(state.chapter?.stage ?? 0);
 }
 
 /**
@@ -716,10 +710,6 @@ export function resolveActCouncil(
 
 export function actChoiceById(id: InterActChoiceId): InterActChoiceDef {
   return INTERACT_CHOICE_LIST.find((c) => c.id === id) ?? INTERACT_CHOICE_LIST[0]!;
-}
-
-export function identityById(id: ActIdentityId): ActIdentityDef {
-  return ACT_IDENTITIES[id];
 }
 
 // ── 第三幕：快进与结局 ────────────────────────────────────

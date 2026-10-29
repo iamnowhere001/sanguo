@@ -1,5 +1,4 @@
 import { BALANCE } from '../data/tables/balance';
-import { MOVE_RANGE } from '../data/tables/unitClasses';
 import { chance, draw, pickWeighted, randInt } from '../core/rng';
 import { done, fail, type OpResult } from '../core/result';
 import type { City, DomesticCmd, GameState, General, SearchEntry } from '../core/state';
@@ -561,11 +560,6 @@ export function doClassChange(s: GameState, generalId: string, tallyItemId: stri
 
 /** 武将当前带兵上限（含装备加成）；真值源在 systems/troops.ts，此处保留再导出 */
 export { troopCapOf };
-
-/** 武将移动力（含坐骑加成） */
-export function moveOf(s: GameState, g: General): number {
-  return MOVE_RANGE[g.unitClass] + (g.items.reduce((sum, id) => sum + (s.items[id]?.moveBonus ?? 0), 0));
-}
 
 /**
  * 调将：在相邻的己方城池之间移动武将。

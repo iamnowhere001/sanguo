@@ -38,7 +38,6 @@ export function buildMonthReport(
   state: GameState,
   before: MonthSnapshot,
   logStart: number,
-  warnings: string[],
   facts: MonthFacts = emptyMonthFacts(),
 ): Report {
   const after = playerSnapshot(state);

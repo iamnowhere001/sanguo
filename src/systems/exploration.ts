@@ -347,7 +347,7 @@ export function explorationClueProgress(
   return city.exploreClues?.[direction] ?? 0;
 }
 
-function addGold(s: GameState, city: City, value: number): void {
+function addGold(city: City, value: number): void {
   city.gold = Math.min(BALANCE.GOLD_CAP, city.gold + value);
 }
 
@@ -355,7 +355,7 @@ function fallbackGold(s: GameState, city: City, reason: string): ExploreOutcome 
   const value = draw(s, 'search', (rng) =>
     randInt(rng, BALANCE.EXPLORE.genericGold[0], BALANCE.EXPLORE.genericGold[1]),
   );
-  addGold(s, city, value);
+  addGold(city, value);
   return { text: `${reason}：${value} 金`, tone: 'info' };
 }
 
@@ -469,7 +469,7 @@ function resolveRumor(
 ): ExploreOutcome {
   if (!rumor.isTrue) {
     const outcome = verifyRumor(s, rumor);
-    addGold(s, city, BALANCE.EXPLORE.falseLeadGold);
+    addGold(city, BALANCE.EXPLORE.falseLeadGold);
     return {
       text: `${outcome.text}；补偿 ${BALANCE.EXPLORE.falseLeadGold} 金`,
       tone: 'warn',
@@ -518,7 +518,7 @@ function resolveRumor(
     const value = draw(s, 'search', (rng) =>
       randInt(rng, BALANCE.EXPLORE.genericGold[0], BALANCE.EXPLORE.genericGold[1]),
     );
-    addGold(s, city, value);
+    addGold(city, value);
     return { text: `传闻证实：截获走私商队 ${value} 金`, tone: 'good' };
   }
 
@@ -599,7 +599,7 @@ export function runExplorations(s: GameState, facts: MonthFacts): void {
         : { text: '本月未发现新的传闻线索', tone: 'info' };
 
       if (ex.monthsLeft <= 0 && BALANCE.EXPLORE.intelGold > 0) {
-        addGold(s, city, BALANCE.EXPLORE.intelGold);
+        addGold(city, BALANCE.EXPLORE.intelGold);
         outcome = {
           text: `${outcome.text}；另带回情报赏金 ${BALANCE.EXPLORE.intelGold} 金`,
           tone: outcome.tone === 'warn' ? 'warn' : outcome.tone,

@@ -1,6 +1,5 @@
-import { BALANCE } from '../data/tables/balance';
 import type { City, GameState, General } from '../core/state';
-import { effForce, effIntellect, garrisonTroopsOf } from '../core/state';
+import { effForce, effIntellect } from '../core/state';
 import { troopCap } from './formulas';
 
 /**
@@ -27,11 +26,6 @@ export function troopCapOf(s: GameState, g: General): number {
 /** 城内未分配兵力池 */
 export function poolOf(city: City | undefined): number {
   return Math.max(0, city?.troops ?? 0);
-}
-
-/** 城内驻军总数（池 + 已分配） */
-export function garrisonTotal(s: GameState, cityId: string): number {
-  return garrisonTroopsOf(s, cityId);
 }
 
 /**
@@ -159,11 +153,6 @@ export function withdrawTroops(s: GameState, cityId: string, amount: number): nu
     }
   }
   return taken;
-}
-
-/** 补位将领入城时的初始兵力（受带兵上限约束） */
-export function reserveTroopsFor(s: GameState, g: General): number {
-  return Math.min(BALANCE.GARRISON.reserveTroops, troopCapOf(s, g));
 }
 
 /**

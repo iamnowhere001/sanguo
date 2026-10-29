@@ -15,7 +15,6 @@ import { SaveDialog } from './SaveDialog';
 import { ChapterBar } from './ChapterBar';
 import { CouncilModal } from './CouncilModal';
 import { ActCouncilModal } from './ActCouncilModal';
-import { Bar } from './atoms';
 import { ConfirmDialog, cityTroops, factionColor, factionName, fmt } from './common';
 import { activePolicy } from '../systems/policy';
 import { buildCouncilBrief } from '../systems/council';

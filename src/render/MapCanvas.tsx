@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Army, City, CitySize, GameState, GridPoint } from '../core/state';
+import type { City, CitySize, GameState, GridPoint } from '../core/state';
 import { cityTroops } from '../core/selectors';
-import { BALANCE } from '../data/tables/balance';
 import { CITY_SIZE_LABEL, fortificationLabel } from '../data/tables/cities';
-import { CITY_COORDS, MAP } from '../data/tables/geography';
+import { MAP } from '../data/tables/geography';
 import { GATE_KIND_LABEL } from '../data/tables/gates';
 import {
   armyMaxMp,
@@ -33,7 +32,7 @@ import {
   type GateSide,
 } from './terrainGrid';
 import { gateAtCenter, gateSiteById, gateSites, gateWorldPos } from './gateGrid';
-import { drawFactionPattern, factionPattern, PATTERN_LABEL } from './factionPattern';
+import { factionPattern, PATTERN_LABEL } from './factionPattern';
 import { PALETTE, paintTerrain } from './terrainPaint';
 import {
   DEFAULT_ZOOM,
@@ -579,7 +578,6 @@ function drawTower(
 function drawCityBlock(
   ctx: CanvasRenderingContext2D,
   rect: { x: number; y: number; w: number; h: number },
-  city: City,
   color: string,
   opts: {
     selected: boolean;
@@ -1601,7 +1599,6 @@ export function MapCanvas({
       drawCityBlock(
         ctx,
         { x: p.bx, y: p.by, w: p.bw, h: p.bh },
-        c,
         color,
         {
           selected: c.id === selectedCityId,

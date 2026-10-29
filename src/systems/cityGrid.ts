@@ -1,4 +1,3 @@
-import { MAP } from '../data/tables/geography';
 import { marchDaysOfTile } from '../data/tables/marchCost';
 import type { Army, GameState, GridPoint } from '../core/state';
 import { isWaterKind } from '../render/terrainGrid';
@@ -8,7 +7,6 @@ import {
   approachTileAt,
   cityBlocks,
   tileKindAt,
-  wallTileAt,
   type CityBlock,
   type GateSide,
   type WallRole,
@@ -100,11 +98,6 @@ export function sortieBlocked(s: GameState, cityId: string): boolean {
   return freeGatesOf(s, cityId).length === 0;
 }
 
-/** 正在被围城的门（有敌军站在门外） */
-export function besiegedGates(s: GameState, cityId: string): GateInfo[] {
-  return gatesOf(s, cityId).filter((g) => g.blockedBy !== null);
-}
-
 /**
  * 城门被堵死时的原因文案：区分「水门 / 封死」与「被敌军堵住」，
  * 让玩家知道该打谁、还是该换方向。
@@ -136,22 +129,8 @@ export function wallPassableFor(
 }
 
 /**
- * 某势力的部队能否踏上这一格。
- * 顺序：地形 → 城墙归属 → 部队占位。
+ * 站在城门外的敌军对应的城（围城判定）
  */
-export function tilePassableFor(
-  s: GameState,
-  col: number,
-  row: number,
-  factionId: string,
-): boolean {
-  if (col < 0 || row < 0 || col >= MAP.cols || row >= MAP.rows) return false;
-  const wall = wallTileAt(col, row);
-  if (wall) return wallPassableFor(s, wall, factionId);
-  return true;
-}
-
-/** 站在城门外的敌军对应的城（围城判定） */
 export function siegeTargetOf(s: GameState, army: Army): string | null {
   const hit = approachTileAt(army.at.col, army.at.row);
   if (!hit) return null;
@@ -159,11 +138,6 @@ export function siegeTargetOf(s: GameState, army: Army): string | null {
   if (!city) return null;
   if (city.ownerId === army.factionId) return null;
   return city.id;
-}
-
-/** 该部队此刻是否正在围城 */
-export function isBesieging(s: GameState, army: Army): boolean {
-  return siegeTargetOf(s, army) !== null;
 }
 
 export { keyOf as tileKey };

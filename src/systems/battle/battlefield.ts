@@ -706,7 +706,7 @@ function genForest(draft: BattlefieldDraft, rng: FieldRng, variant: number): voi
   addLandmark(draft, 6, roadY <= 3 ? 3 : 4, 'banner', '林间旗', '挂在树梢上的军旗。');
 }
 
-function genWatertown(draft: BattlefieldDraft, rng: FieldRng, variant: number): void {
+function genWatertown(draft: BattlefieldDraft, rng: FieldRng, _variant: number): void {
   // 一条纵向水道 + 几片池塘，形成“堤桥相连”的水乡
   for (let y = 0; y < H; y++) setTile(draft, 3, y, 'water');
 

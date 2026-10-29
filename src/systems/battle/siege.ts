@@ -56,9 +56,3 @@ export function assaultWalls(b: BattleState): number {
   return total;
 }
 
-/** 耐久百分比 0–1（HUD 用） */
-export function wallRatio(b: BattleState): number {
-  const max = b.cityDurabilityMax ?? 0;
-  if (max <= 0 || typeof b.cityDurability !== 'number') return 0;
-  return Math.max(0, Math.min(1, b.cityDurability / max));
-}
