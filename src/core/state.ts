@@ -64,6 +64,16 @@ export interface General {
   locationId: string;
   isRuler?: boolean;
   isEasterEgg?: boolean;
+  /**
+   * 补位将领的归属势力（配表字段）。
+   * 建局时按势力把未登场的补位将领摊到缺将的城，运行期不再使用。
+   */
+  reserveFor?: string;
+  /**
+   * 最近一次行军 / 出征的回合号。
+   * 每名武将每月只能调动一次，避免「一城接一城」在单回合内把部队送到地图另一端。
+   */
+  marchTurn?: number;
 }
 
 export interface SearchEntry {
@@ -169,6 +179,18 @@ export interface City {
   size: CitySize;
   /** 城防 0–100：攻城战中守方受击减伤，越高越易守难攻 */
   fortification: number;
+  /**
+   * 城池耐久 0–max：攻城战中攻方站上城池格会逐日磨损城墙，
+   * 归零即城破（与「驻守兵力为 0」并列的第二个陷城条件）。月结自动修复。
+   * 旧档缺失时按 `cityMaxDurability` 补齐。
+   */
+  durability?: number;
+  /**
+   * 未分配的驻军兵力池。
+   * 兵力不再必须挂在将领身上：征兵先补将、溢出进池，池兵可跨城运输、
+   * 也可随时分配给城内将领（受带兵上限约束）。
+   */
+  troops?: number;
   /** 历史背景：城池面板展示 */
   history?: string;
   /** 专属技能：数据驱动的城池被动 */
@@ -477,6 +499,10 @@ export interface BattleState {
   playerInvolved: boolean;
   /** 目标城池城防，参与守城减伤；旧存档缺省按 0 处理 */
   fortification?: number;
+  /** 本场战斗开始时的城墙耐久上限 */
+  cityDurabilityMax?: number;
+  /** 城墙耐久：归零即城破，攻方胜 */
+  cityDurability?: number;
   /** [y][x] */
   grid: BattleTerrain[][];
   /** 本场战场的主题、专名与地标；旧存档可缺省 */
@@ -708,8 +734,25 @@ export function defendersOf(state: GameState, cityId: string): General[] {
   );
 }
 
+/**
+ * 城内驻军总数 = 未分配兵力池 + 各将统领兵力。
+ * 一切「驻军上限 / 守军强度」判断都走这里，避免池兵被漏算。
+ */
+export function garrisonTroopsOf(state: GameState, cityId: string): number {
+  const city = state.cities[cityId];
+  if (!city) return 0;
+  let total = city.troops ?? 0;
+  for (const g of Object.values(state.generals)) {
+    if (g.status === 'active' && g.locationId === cityId) total += g.troops;
+  }
+  return total;
+}
+
 export function factionTroops(state: GameState, factionId: string): number {
-  return generalsOf(state, factionId).reduce((sum, g) => sum + g.troops, 0);
+  const assigned = generalsOf(state, factionId).reduce((sum, g) => sum + g.troops, 0);
+  // 未分配的池兵也是实力，统一计入势力总兵力
+  const pooled = citiesOf(state, factionId).reduce((sum, c) => sum + (c.troops ?? 0), 0);
+  return assigned + pooled;
 }
 
 export function factionGold(state: GameState, factionId: string): number {

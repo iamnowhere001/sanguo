@@ -22,7 +22,9 @@ import {
   tradeLimit,
   trainingMultiplier,
 } from '../systems/formulas';
-import { edictCapOf, edictLeftOf, troopCapOf } from '../systems/domestic';
+import { edictCapOf, edictLeftOf, canMarchThisTurn, troopCapOf } from '../systems/domestic';
+import { canTransport, durabilityMaxOf, transportRoom } from '../systems/logistics';
+import { projectedTroops } from '../systems/troops';
 import { PROJECTS, PROJECT_ORDER } from '../data/tables/projects';
 import { projectStartReason } from '../systems/projects';
 import { persuadePlan } from '../systems/diplomacy';
@@ -141,6 +143,10 @@ export function CityPanel({
   const [recruitAmount, setRecruitAmount] = useState(200);
   const [tradeMode, setTradeMode] = useState<'buy' | 'sell'>('buy');
   const [tradeAmount, setTradeAmount] = useState(100);
+  const [transportTargetId, setTransportTargetId] = useState('');
+  const [transportGold, setTransportGold] = useState(0);
+  const [transportFood, setTransportFood] = useState(0);
+  const [transportTroops, setTransportTroops] = useState(0);
   const [dipOpen, setDipOpen] = useState(false);
   const [abandonOpen, setAbandonOpen] = useState(false);
   const [executeId, setExecuteId] = useState<string | null>(null);
@@ -154,6 +160,7 @@ export function CityPanel({
   const recruitRef = useRef<HTMLElement>(null);
   const tradeRef = useRef<HTMLElement>(null);
   const banquetRef = useRef<HTMLElement>(null);
+  const transportRef = useRef<HTMLElement>(null);
 
   /** 告警直达：切到对应分区并把目标小节滚进视野 */
   useEffect(() => {
@@ -225,6 +232,22 @@ export function CityPanel({
   const skill = city.skill;
 
   const troops = cityTroops(state, city.id);
+  /** 未分配的驻军兵力池：征兵溢出、运输到达、战败残兵都会落在这里 */
+  const pool = city.troops ?? 0;
+  const durabilityMax = durabilityMaxOf(city);
+  const durability = Math.min(durabilityMax, city.durability ?? Math.round(durabilityMax * 0.8));
+  const durabilityPct = durabilityMax > 0 ? (durability / durabilityMax) * 100 : 0;
+  const transportTarget = transportTargetId ? state.cities[transportTargetId] : undefined;
+  const transportCheck = transportTarget
+    ? canTransport(state, {
+        fromCityId: city.id,
+        toCityId: transportTarget.id,
+        gold: transportGold,
+        food: transportFood,
+        troops: transportTroops,
+      })
+    : null;
+  const transportCap = transportTarget ? transportRoom(state, transportTarget.id) : 0;
   const foodRate = Math.floor(
     foodOutput(city.agriculture, city.loyalty) *
       (skill?.foodMult ?? 1) *
@@ -552,6 +575,27 @@ export function CityPanel({
             <span>训练</span>
             <b>{training}</b>
           </div>
+          <div
+            className="cp-attr"
+            title={`城池耐久 ${durability}/${durabilityMax}：攻城战中攻方部队站上城池格会逐日磨损，归零即城破；月结自动修复 ${Math.round(
+              BALANCE.DURABILITY.repairPerMonth * 100,
+            )}%`}
+          >
+            <span>耐久</span>
+            <b>{fmt(durability)}</b>
+          </div>
+        </div>
+
+        <div className="cp-durability" title={`城池耐久 ${durability} / ${durabilityMax}`}>
+          <span>城墙耐久</span>
+          <Bar
+            value={durability}
+            max={Math.max(1, durabilityMax)}
+            color={durabilityPct < 30 ? 'var(--red)' : durabilityPct < 60 ? 'var(--gold)' : 'var(--teal)'}
+          />
+          <b>
+            {durabilityPct.toFixed(0)}%
+          </b>
         </div>
 
         {isMine ? (
@@ -784,6 +828,23 @@ export function CityPanel({
                   {Math.round(Math.min(recruitAmount, maxRecruit) * goldPerTroop)} 金 · 每兵{' '}
                   {Math.round(foodPerTroop * 100) / 100} 粮 {Math.round(goldPerTroop * 100) / 100} 钱
                 </div>
+                <div className="pool-row">
+                  <span title="兵力属于城池：超出守将带兵上限的征兵会留在这里，可随时分配或运往邻城">
+                    待分配兵力 <b>{fmt(pool)}</b>
+                  </span>
+                  <button
+                    type="button"
+                    className="link-btn"
+                    disabled={pool <= 0 || gens.length === 0}
+                    onClick={() => {
+                      const r = gameStore.dispatch({ t: 'ASSIGN_TROOPS_ALL', cityId });
+                      gameStore.notify(r.message, r.ok ? 'good' : 'warn');
+                    }}
+                    title="把待分配兵力按带兵上限分给全城守将"
+                  >
+                    分给守将
+                  </button>
+                </div>
               </section>
 
               <section className="panel-section" ref={tradeRef}>
@@ -850,6 +911,110 @@ export function CityPanel({
                   · 单价 买 {buyRate} / 卖 {sellRate} 钱
                   {tradeLeft <= 0 ? ' · 本月额度已用尽，下月重置' : ''}
                 </div>
+              </section>
+
+              <section className="panel-section" ref={transportRef}>
+                <div className="section-title">
+                  <span>运输</span>
+                  <span className="muted small">
+                    {state.settings.ruleset === 'classic'
+                      ? '相邻己方城池'
+                      : `相邻己方城池 · 每次 ${BALANCE.GARRISON.transportEdictCost} 政令`}
+                  </span>
+                </div>
+                {adjacentMine.length === 0 ? (
+                  <p className="muted small">没有相邻的己方城池可运输。</p>
+                ) : (
+                  <>
+                    <div className="inline-form">
+                      <select
+                        className="mini-select"
+                        value={transportTargetId}
+                        aria-label="运输目标城池"
+                        onChange={(e) => {
+                          setTransportTargetId(e.target.value);
+                          setTransportGold(0);
+                          setTransportFood(0);
+                          setTransportTroops(0);
+                        }}
+                      >
+                        <option value="">运往…</option>
+                        {adjacentMine.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="inline-form transport-inputs">
+                      <label>
+                        金
+                        <input
+                          type="number"
+                          min={0}
+                          max={city.gold}
+                          value={transportGold}
+                          aria-label="运输金钱"
+                          onChange={(e) => setTransportGold(Math.max(0, Number(e.target.value)))}
+                        />
+                      </label>
+                      <label>
+                        粮
+                        <input
+                          type="number"
+                          min={0}
+                          max={city.food}
+                          value={transportFood}
+                          aria-label="运输粮草"
+                          onChange={(e) => setTransportFood(Math.max(0, Number(e.target.value)))}
+                        />
+                      </label>
+                      <label>
+                        兵
+                        <input
+                          type="number"
+                          min={0}
+                          max={Math.min(BALANCE.GARRISON.transportMaxTroops, transportCap)}
+                          value={transportTroops}
+                          aria-label="运输兵力"
+                          onChange={(e) =>
+                            setTransportTroops(Math.max(0, Number(e.target.value)))
+                          }
+                        />
+                      </label>
+                    </div>
+                    <button
+                      className="btn accent wide sm"
+                      disabled={!transportTarget || !transportCheck?.ok}
+                      onClick={() => {
+                        if (!transportTarget) return;
+                        const r = gameStore.dispatch({
+                          t: 'TRANSPORT',
+                          fromCityId: city.id,
+                          toCityId: transportTarget.id,
+                          gold: transportGold,
+                          food: transportFood,
+                          troops: transportTroops,
+                        });
+                        gameStore.notify(r.message, r.ok ? 'good' : 'warn');
+                        if (r.ok) {
+                          setTransportGold(0);
+                          setTransportFood(0);
+                          setTransportTroops(0);
+                        }
+                      }}
+                    >
+                      运输
+                    </button>
+                    <div className="form-hint">
+                      {transportTarget
+                        ? transportCheck?.ok
+                          ? `${city.name} → ${transportTarget.name}：金 ${transportGold} · 粮 ${transportFood} · 兵 ${transportTroops}（目标可接收 ${transportCap} 兵）`
+                          : (transportCheck?.reason ?? '请选择目标城池')
+                        : '兵力先从待分配池扣除，不足部分由守将分兵；到达后自动分给守将'}
+                    </div>
+                  </>
+                )}
               </section>
             </div>
 
@@ -921,7 +1086,7 @@ export function CityPanel({
                             color={g.troops >= cap * 0.9 ? 'var(--gold)' : 'var(--teal)'}
                           />
                         </div>
-                        {g.items.length > 0 || adjacentMine.length > 0 ? (
+                        {g.items.length > 0 || adjacentMine.length > 0 || pool > 0 || g.troops > 0 ? (
                           <div className="g-ops">
                             {g.items.map((itemId) => {
                               const item = state.items[itemId];
@@ -951,27 +1116,69 @@ export function CityPanel({
                                 </button>
                               );
                             })}
+                            {pool > 0 || g.troops > 0 ? (
+                              <div className="g-troop-ops">
+                                <button
+                                  type="button"
+                                  className="link-btn"
+                                  disabled={pool <= 0 || g.troops >= cap}
+                                  title={`从待分配兵力中领满（可领 ${Math.min(pool, Math.max(0, cap - g.troops))}）`}
+                                  onClick={() =>
+                                    gameStore.dispatch({
+                                      t: 'ASSIGN_TROOPS',
+                                      cityId,
+                                      generalId: g.id,
+                                      amount: Math.max(1, Math.min(pool, cap - g.troops)),
+                                    })
+                                  }
+                                >
+                                  领兵
+                                </button>
+                                <button
+                                  type="button"
+                                  className="link-btn"
+                                  disabled={g.troops <= 0}
+                                  title="把该将统领的兵力交回城池，等待重新分配或运输"
+                                  onClick={() =>
+                                    gameStore.dispatch({
+                                      t: 'ASSIGN_TROOPS',
+                                      cityId,
+                                      generalId: g.id,
+                                      amount: -g.troops,
+                                    })
+                                  }
+                                >
+                                  交回
+                                </button>
+                              </div>
+                            ) : null}
                             {adjacentMine.length > 0 ? (
                               <div className="g-move">
-                                <select
-                                  value=""
-                                  aria-label={`把 ${g.name} 调往相邻城池`}
-                                  onChange={(e) => {
-                                    if (!e.target.value) return;
-                                    gameStore.dispatch({
-                                      t: 'MOVE_GENERAL',
-                                      generalId: g.id,
-                                      toCityId: e.target.value,
-                                    });
-                                  }}
-                                >
-                                  <option value="">调往…</option>
-                                  {adjacentMine.map((c) => (
-                                    <option key={c.id} value={c.id}>
-                                      {c.name}
-                                    </option>
-                                  ))}
-                                </select>
+                                {canMarchThisTurn(state, g) ? (
+                                  <select
+                                    value=""
+                                    aria-label={`把 ${g.name} 调往相邻城池`}
+                                    onChange={(e) => {
+                                      if (!e.target.value) return;
+                                      gameStore.dispatch({
+                                        t: 'MOVE_GENERAL',
+                                        generalId: g.id,
+                                        toCityId: e.target.value,
+                                      });
+                                    }}
+                                  >
+                                    <option value="">调往…</option>
+                                    {adjacentMine.map((c) => (
+                                      <option key={c.id} value={c.id}>
+                                        {c.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <span className="muted small" title="每名武将每月只能行军一次">
+                                    本月已行军
+                                  </span>
+                                )}
                               </div>
                             ) : null}
                           </div>
@@ -1145,7 +1352,10 @@ export function CityPanel({
         <footer className="panel-foot">
           <button
             className="btn hero"
-            disabled={enemyTargets.length === 0 || gens.filter((g) => g.troops > 0).length === 0}
+            disabled={
+              enemyTargets.length === 0 ||
+              (gens.filter((g) => g.troops > 0).length === 0 && pool <= 0)
+            }
             title={
               enemyTargets.length > 0
                 ? `出征 ${enemyTargets.map((c) => c.name).join('、')}`
@@ -1260,10 +1470,16 @@ export function DeployDialog({
   useEscape(onClose);
   const target = state.cities[targetId];
   const maxAttackers = BALANCE.BATTLE_MAX_ATTACKERS;
-  // 【适配】武将多了以后按兵力排序，默认带最强的两人，避免误选文官
-  const candidates = [...cityGenerals(state, fromCityId).filter((g) => g.troops > 0)].sort(
-    (a, b) => b.troops - a.troops,
+  // 【兵力池】预览按「出征时从城池兵力池补满」之后的兵力算，和实战一致
+  const attackerProjected = useMemo(
+    () => projectedTroops(state, fromCityId),
+    [state, fromCityId],
   );
+  // 【适配】武将多了以后按兵力排序，默认带最强的两人，避免误选文官
+  const candidates = [...cityGenerals(state, fromCityId)]
+    .map((g) => ({ ...g, troops: attackerProjected.get(g.id) ?? g.troops }))
+    .filter((g) => g.troops > 0)
+    .sort((a, b) => b.troops - a.troops);
   const [selected, setSelected] = useState<string[]>(
     candidates.slice(0, 2).map((g) => g.id),
   );
@@ -1271,10 +1487,15 @@ export function DeployDialog({
   const attackerTroops = candidates
     .filter((g) => selected.includes(g.id))
     .reduce((sum, g) => sum + g.troops, 0);
+  const defenderProjected = useMemo(
+    () => (target ? projectedTroops(state, target.id) : new Map<string, number>()),
+    [state, target],
+  );
   const allDefenders = target
-    ? [...cityGenerals(state, target.id).filter((g) => g.troops > 0)].sort(
-        (a, b) => b.troops - a.troops,
-      )
+    ? cityGenerals(state, target.id)
+        .map((g) => ({ ...g, troops: defenderProjected.get(g.id) ?? g.troops }))
+        .filter((g) => g.troops > 0)
+        .sort((a, b) => b.troops - a.troops)
     : [];
   // 只有前 N 名会上场，其余是预备队：兵力比按实际上场者计算才准
   const defenders = allDefenders.slice(0, BALANCE.BATTLE_MAX_DEFENDERS);
@@ -1301,7 +1522,7 @@ export function DeployDialog({
       return null;
     }
     const attackers = selected
-      .map((id) => state.generals[id])
+      .map((id) => candidates.find((g) => g.id === id))
       .filter((g): g is General => Boolean(g));
     if (attackers.length === 0) return null;
     return planBattleObjectives(

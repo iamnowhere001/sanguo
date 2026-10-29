@@ -3,9 +3,13 @@ import { MOVE_RANGE } from '../data/tables/unitClasses';
 import { chance, draw, pickWeighted, randInt } from '../core/rng';
 import { done, fail, type OpResult } from '../core/result';
 import type { City, DomesticCmd, GameState, General, SearchEntry } from '../core/state';
-import { effForce, effIntellect, neighborsOf } from '../core/state';
+import { effForce, effIntellect, garrisonTroopsOf, neighborsOf } from '../core/state';
 import { log } from './economy';
-import { garrisonCapOf, recruitCap, statGain, tradeLimit, troopCap } from './formulas';
+import { garrisonCapOf, recruitCap, statGain, tradeLimit } from './formulas';
+import {
+  poolOf,
+  troopCapOf,
+} from './troops';
 import {
   policyCommerceMult,
   policyRecruitCostMult,
@@ -18,9 +22,7 @@ export type { OpResult };
 
 /** 城内现有驻军总数：征兵与调将都受城池规模的驻军上限约束 */
 function cityTroopTotal(s: GameState, cityId: string): number {
-  return Object.values(s.generals)
-    .filter((g) => g.status === 'active' && g.locationId === cityId)
-    .reduce((sum, g) => sum + g.troops, 0);
+  return garrisonTroopsOf(s, cityId);
 }
 
 /**
@@ -141,7 +143,12 @@ function fieldLabel(field: string): string {
   return map[field] ?? field;
 }
 
-/** 征兵：每兵 1 粮 + 2 钱，单次上限 floor(民忠×6)，且不超带兵上限 */
+/**
+ * 征兵：每兵 1 粮 + 1 钱，单次上限 floor(民忠×8)。
+ *
+ * 兵力先补给指定的执行武将，超出其带兵上限的部分进入**城池兵力池**：
+ * 城池可以集中屯兵，再由玩家分给任何在城武将，或运往邻城。
+ */
 export function doRecruit(
   s: GameState,
   cityId: string,
@@ -164,11 +171,11 @@ export function doRecruit(
   const capByGold = Math.floor(city.gold / goldPerTroop);
   const capByFood = Math.floor(city.food / foodPerTroop);
   const capByGarrison = Math.max(0, garrisonCapOf(city.size) - cityTroopTotal(s, cityId));
-  const max = Math.min(amount, capByLoyalty, capByGeneral, capByGold, capByFood, capByGarrison);
+  const max = Math.min(amount, capByLoyalty, capByGold, capByFood, capByGarrison);
 
   if (max <= 0) {
     return fail(
-      `无法征兵（民忠上限 ${capByLoyalty}／带兵余量 ${capByGeneral}／驻军余量 ${capByGarrison}／钱 ${capByGold}／粮 ${capByFood}）`,
+      `无法征兵（民忠上限 ${capByLoyalty}／驻军余量 ${capByGarrison}／钱 ${capByGold}／粮 ${capByFood}）`,
     );
   }
 
@@ -176,15 +183,25 @@ export function doRecruit(
   const foodCost = Math.round(max * foodPerTroop);
   city.gold -= goldCost;
   city.food -= foodCost;
-  g.troops += max;
 
-  log(s, 'info', `${g.name} 在 ${city.name} 征兵 ${max}（−${foodCost} 粮，−${goldCost} 金）`);
-  return done(`征兵 ${max} 人`);
+  const toGeneral = Math.min(max, capByGeneral);
+  g.troops += toGeneral;
+  const toPool = max - toGeneral;
+  if (toPool > 0) city.troops = poolOf(city) + toPool;
+
+  log(
+    s,
+    'info',
+    `${g.name} 在 ${city.name} 征兵 ${max}（−${foodCost} 粮，−${goldCost} 金）${
+      toPool > 0 ? `，其中 ${toPool} 入城待分配` : ''
+    }`,
+  );
+  return done(`征兵 ${max} 人${toPool > 0 ? `（${toPool} 待分配）` : ''}`);
 }
 
 /**
- * 【优化】§5.3 批量征兵：按带兵余量从大到小分配，一次点击填满全城。
- * 每名武将仍受单次上限 recruitCap(民忠) 与城市钱粮约束。
+ * 【优化】§5.3 批量征兵：按带兵缺口从大到小分配，一次填满全城。
+ * 填不满的余量留在城池兵力池里，可再分配或运走。
  */
 export function doRecruitAll(s: GameState, cityId: string): OpResult {
   const bad = guard(s, cityId);
@@ -192,52 +209,46 @@ export function doRecruitAll(s: GameState, cityId: string): OpResult {
 
   const city = s.cities[cityId]!;
   const gens = Object.values(s.generals)
-    .filter(
-      (g) =>
-        g.status === 'active' &&
-        g.locationId === cityId &&
-        troopCapOf(s, g) > g.troops,
-    )
-    .sort(
-      (a, b) => troopCapOf(s, b) - b.troops - (troopCapOf(s, a) - a.troops),
-    );
+    .filter((g) => g.status === 'active' && g.locationId === cityId)
+    .sort((a, b) => troopCapOf(s, b) - b.troops - (troopCapOf(s, a) - a.troops));
 
-  let total = 0;
-  let spentGold = 0;
-  let spentFood = 0;
   const skill = city.skill;
   const capByLoyalty = Math.floor(recruitCap(city.loyalty) * (skill?.recruitCapMult ?? 1));
   const recruitCost =
     city.ownerId === s.playerFactionId ? policyRecruitCostMult(s) : 1;
   const goldPerTroop = BALANCE.RECRUIT.goldPerTroop * (skill?.recruitCostMult ?? 1) * recruitCost;
   const foodPerTroop = BALANCE.RECRUIT.foodPerTroop * (skill?.recruitCostMult ?? 1) * recruitCost;
-  let garrisonRoom = Math.max(0, garrisonCapOf(city.size) - cityTroopTotal(s, cityId));
+  const garrisonRoom = Math.max(0, garrisonCapOf(city.size) - cityTroopTotal(s, cityId));
+
+  let budget = Math.min(
+    garrisonRoom,
+    Math.floor(city.gold / goldPerTroop),
+    Math.floor(city.food / foodPerTroop),
+  );
+  let total = 0;
   for (const g of gens) {
-    const gap = troopCapOf(s, g) - g.troops;
-    const amount = Math.min(
-      gap,
-      capByLoyalty,
-      Math.floor(city.gold / goldPerTroop),
-      Math.floor(city.food / foodPerTroop),
-      garrisonRoom,
-    );
-    if (amount <= 0) break;
-    const goldCost = Math.round(amount * goldPerTroop);
-    const foodCost = Math.round(amount * foodPerTroop);
-    city.gold -= goldCost;
-    city.food -= foodCost;
-    g.troops += amount;
-    total += amount;
-    garrisonRoom -= amount;
-    spentGold += goldCost;
-    spentFood += foodCost;
+    if (budget <= 0) break;
+    const gap = Math.min(Math.max(0, troopCapOf(s, g) - g.troops), capByLoyalty);
+    const give = Math.min(gap, budget);
+    if (give <= 0) continue;
+    g.troops += give;
+    budget -= give;
+    total += give;
+  }
+  if (budget > 0) {
+    city.troops = poolOf(city) + budget;
+    total += budget;
   }
 
   if (total <= 0) return fail('没有可分配的兵力余量，或钱粮 / 驻军上限不足');
+  const goldCost = Math.round(total * goldPerTroop);
+  const foodCost = Math.round(total * foodPerTroop);
+  city.gold = Math.max(0, city.gold - goldCost);
+  city.food = Math.max(0, city.food - foodCost);
   log(
     s,
     'info',
-    `${city.name} 按上限分配兵力 ${total}（−${spentFood} 粮，−${spentGold} 金）`,
+    `${city.name} 按上限分配兵力 ${total}（−${foodCost} 粮，−${goldCost} 金）`,
   );
   return done(`分配兵力 ${total}`);
 }
@@ -548,17 +559,21 @@ export function doClassChange(s: GameState, generalId: string, tallyItemId: stri
   return fail('该兵符不可用于转职');
 }
 
-/** 武将当前带兵上限（含装备加成） */
-export function troopCapOf(s: GameState, g: General): number {
-  return troopCap({ force: effForce(s, g), intellect: effIntellect(s, g), level: g.level });
-}
+/** 武将当前带兵上限（含装备加成）；真值源在 systems/troops.ts，此处保留再导出 */
+export { troopCapOf };
 
 /** 武将移动力（含坐骑加成） */
 export function moveOf(s: GameState, g: General): number {
   return MOVE_RANGE[g.unitClass] + (g.items.reduce((sum, id) => sum + (s.items[id]?.moveBonus ?? 0), 0));
 }
 
-/** 调将：在相邻的己方城池之间移动武将 */
+/**
+ * 调将：在相邻的己方城池之间移动武将。
+ *
+ * 【修复】每名武将每月只能行军一次。
+ * 之前只校验「相邻」，玩家可以 A→B→C→D 在同一回合内连续调将，
+ * 等于把部队瞬间投送到地图另一端，绕过整条补给线。
+ */
 export function doMoveGeneral(
   s: GameState,
   generalId: string,
@@ -568,6 +583,9 @@ export function doMoveGeneral(
   if (!g) return fail('武将不存在');
   if (g.status !== 'active') return fail('该武将不在可用状态');
   if (g.locationId === toCityId) return fail('目标就是当前城池');
+  if ((g.marchTurn ?? -1) >= s.turn) {
+    return fail(`${g.name} 本月已行军，下月才能再调动`);
+  }
 
   const from = s.cities[g.locationId];
   const to = s.cities[toCityId];
@@ -584,6 +602,12 @@ export function doMoveGeneral(
   }
 
   g.locationId = toCityId;
+  g.marchTurn = s.turn;
   log(s, 'info', `${g.name} 自 ${from.name} 调往 ${to.name}`);
-  return done(`${g.name} 已调往 ${to.name}`);
+  return done(`${g.name} 已调往 ${to.name}（本月不再行军）`);
+}
+
+/** 该武将本月是否还能行军（UI 与 AI 共用同一判定） */
+export function canMarchThisTurn(s: GameState, g: General): boolean {
+  return (g.marchTurn ?? -1) < s.turn;
 }

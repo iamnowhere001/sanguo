@@ -2,6 +2,7 @@ import type { GameState } from '../core/state';
 import { emptyMonthFacts } from '../core/state';
 import { createStreams, RANDOM_STREAMS, streamFor, type RngState } from '../core/rng';
 import { createChapter, ensureChapterShape } from '../systems/chapter';
+import { cityMaxDurability } from '../systems/formulas';
 import { describeLegacyBattlefield } from '../systems/battle/battlefield';
 import { attachBattleObjectives } from '../systems/battle/objectives';
 import { ensureDiplomacy } from '../systems/factionDiplomacy';
@@ -88,6 +89,11 @@ export function migrateSave(state: GameState): GameState {
             : 'small';
     c.fortification ??=
       c.terrain === 'mountain' ? 70 : c.terrain === 'forest' ? 50 : c.isWaterCity ? 55 : 45;
+    // 【新增】兵力池与城墙耐久：旧档按当前上限的 80% 起算
+    c.troops ??= 0;
+    c.durability ??= Math.round(
+      cityMaxDurability(c.size, c.fortification, (c.landmarks ?? []).includes('wall')) * 0.8,
+    );
   }
 
   if (state.battle) {
@@ -99,6 +105,17 @@ export function migrateSave(state: GameState): GameState {
     );
     state.battle.fortification ??=
       state.cities[state.battle.targetCityId]?.fortification ?? 0;
+    // 旧战斗存档没有城墙耐久：按目标城当前耐久补齐
+    const wallCity = state.cities[state.battle.targetCityId];
+    if (wallCity) {
+      const max = cityMaxDurability(
+        wallCity.size,
+        wallCity.fortification,
+        (wallCity.landmarks ?? []).includes('wall'),
+      );
+      state.battle.cityDurabilityMax ??= max;
+      state.battle.cityDurability ??= wallCity.durability ?? Math.round(max * 0.8);
+    }
     state.battle.tacticUses ??= {};
     state.battle.tacticBonus ??= 0;
     if (!state.battle.battlefield) {

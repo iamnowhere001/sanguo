@@ -77,9 +77,18 @@ export function runUpkeep(s: GameState, facts: MonthFacts): void {
     groups.set(fid, arr);
   }
 
-  for (const [fid, list] of groups) {
+  // 城池兵力池同样吃粮：未分配的兵不是免费的
+  const poolByFaction = new Map<string, number>();
+  for (const c of Object.values(s.cities)) {
+    if (!c.ownerId || !c.troops) continue;
+    poolByFaction.set(c.ownerId, (poolByFaction.get(c.ownerId) ?? 0) + c.troops);
+  }
+
+  for (const fid of new Set([...groups.keys(), ...poolByFaction.keys()])) {
+    const list = groups.get(fid) ?? [];
     const faction = s.factions[fid];
-    const troops = list.reduce((sum, g) => sum + g.troops, 0);
+    const troops =
+      list.reduce((sum, g) => sum + g.troops, 0) + (poolByFaction.get(fid) ?? 0);
     // 【优化】E07 极兵每 100 兵每月额外 1 粮
     const eliteTroops = list
       .filter((g) => g.unitClass === 'elite')
@@ -109,6 +118,10 @@ export function runUpkeep(s: GameState, facts: MonthFacts): void {
       const gapRatio = (need - paid) / need;
       const rate = desertionRate(gapRatio);
       for (const g of list) g.troops = Math.max(0, Math.floor(g.troops * (1 - rate)));
+      // 池兵同样逃亡，避免「把钱粮换成池兵」绕过后勤
+      for (const c of cities) {
+        if (c.troops) c.troops = Math.max(0, Math.floor(c.troops * (1 - rate)));
+      }
       for (const c of cities) c.loyalty = Math.max(0, c.loyalty - BALANCE.STARVATION.loyaltyPenalty);
       // 【优化】E09 断粮改为事件化忠诚损失
       for (const g of list) {

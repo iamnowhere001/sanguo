@@ -105,12 +105,42 @@ describe('大地图 AI：多城协同', () => {
     );
   });
 
+  it('威胁未到 1.3 倍时，也主动补齐边境基本驻军', () => {
+    const s = fresh();
+    zeroFactionTroops(s, 'caocao');
+    zeroFactionTroops(s, 'sunquan');
+    setCityTroops(s, 'guangling', 400);
+    setCityTroops(s, 'xiapi', 1500);
+    setCityTroops(s, 'jianye', 450);
+    // 只保留广陵（受威胁边境）与下邳（后方 donor），避免其他边境城抢走本次调动
+    for (const c of Object.values(s.cities)) {
+      if (c.ownerId === 'caocao' && c.id !== 'guangling' && c.id !== 'xiapi') {
+        c.ownerId = null;
+      }
+    }
+
+    // 旧逻辑要求 threat > defense × 1.3 才增援；这里刻意低于该阈值
+    expect(adjacentThreat(s, 'guangling', 'caocao')).toBeLessThanOrEqual(
+      cityTroops(s, 'guangling') * 1.3,
+    );
+
+    const move = planReinforcement(s, 'caocao', difficultyOf('normal'));
+    expect(move).not.toBeNull();
+    expect(move!.toId).toBe('guangling');
+    expect(move!.fromId).toBe('xiapi');
+  });
+
   it('差一点就能打时，从相邻城调兵凑够兵力', () => {
     const s = fresh();
     zeroFactionTroops(s, 'caocao');
     setCityTroops(s, 'wan', 900);
     setCityTroops(s, 'xiangyang', 700);
     setCityTroops(s, 'xuchang', 2000);
+    // 许昌留一名副将守家，避免把最后一名守将调走
+    const xuGenerals = Object.values(s.generals).filter(
+      (g) => g.status === 'active' && g.locationId === 'xuchang' && g.troops === 0,
+    );
+    if (xuGenerals[0]) xuGenerals[0].troops = 300;
 
     const move = planMassingMove(s, 'caocao', difficultyOf('normal'));
     expect(move).not.toBeNull();

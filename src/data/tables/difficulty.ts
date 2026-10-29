@@ -22,6 +22,8 @@ export interface DifficultyConfig {
   windowBonus: number;
   /** 是否执行增援、换防、协同集结 */
   coordinate: boolean;
+  /** 每月最多执行几次战略调动（增援 / 换防 / 集结） */
+  strategicMoves: number;
   note: string;
 }
 
@@ -37,6 +39,7 @@ export const DIFFICULTY_CONFIG: Record<Difficulty, DifficultyConfig> = {
     reserveRatio: 0.5,
     windowBonus: 0,
     coordinate: false,
+    strategicMoves: 0,
     note: 'AI 补员慢、只出一路兵、边境留半数守军，不抓多线窗口',
   },
   normal: {
@@ -50,6 +53,7 @@ export const DIFFICULTY_CONFIG: Record<Difficulty, DifficultyConfig> = {
     reserveRatio: 0.35,
     windowBonus: 0.1,
     coordinate: true,
+    strategicMoves: 2,
     note: '标准强度：两路出兵、会抓空虚窗口、边境增援换防',
   },
   hard: {
@@ -63,6 +67,7 @@ export const DIFFICULTY_CONFIG: Record<Difficulty, DifficultyConfig> = {
     reserveRatio: 0.2,
     windowBonus: 0.2,
     coordinate: true,
+    strategicMoves: 4,
     note: 'AI 资源更足、三路协同、低留守、强抓窗口，战棋优先集火主将',
   },
 };

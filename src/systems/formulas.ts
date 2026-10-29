@@ -33,11 +33,11 @@ export function statGain(field: StatField, value: number): number {
 }
 
 /**
- * 带兵上限 = 武力×10 + 智力×5 + 等级×50
+ * 带兵上限 = 武力×15 + 智力×8 + 等级×80
  * 注意：传入的 force / intellect 应是**含装备加成**的有效值（GDD §5.2 注）。
  */
 export function troopCap(g: { force: number; intellect: number; level: number }): number {
-  return g.force * 10 + g.intellect * 5 + g.level * 50;
+  return g.force * 15 + g.intellect * 8 + g.level * 80;
 }
 
 /** 每月粮产 = floor(农业 × 民忠 / 100 × 灾害系数) */
@@ -63,9 +63,33 @@ export function trainingMultiplier(training: number): number {
   return 1 + (clamp(training, 0, 100) / 100) * BALANCE.TRAINING_DAMAGE_BONUS;
 }
 
-/** 单城驻军上限：都城 9000 / 大城 6000 / 中城 4200 / 小城 2600 */
+/** 单城驻军上限：都城 14000 / 大城 9500 / 中城 6800 / 小城 4200 */
 export function garrisonCapOf(size: CitySize): number {
   return BALANCE.CITY_SIZE[size].garrison;
+}
+
+/**
+ * 城池耐久上限 = 规模基础 + 城防 × 系数 + 城墙工程加成。
+ * 纯函数：只吃数字，方便单测与 UI 预览共用。
+ */
+export function cityMaxDurability(
+  size: CitySize,
+  fortification: number,
+  hasWallLandmark = false,
+): number {
+  const D = BALANCE.DURABILITY;
+  return Math.round(
+    D.base[size] +
+      clamp(fortification, 0, 100) * D.perFortification +
+      (hasWallLandmark ? D.wallLandmarkBonus : 0),
+  );
+}
+
+/** 攻城磨损：每支部队每日对城墙造成的耐久伤害 */
+export function assaultDurabilityDamage(troops: number, force: number): number {
+  const D = BALANCE.DURABILITY;
+  if (troops <= 0) return 0;
+  return Math.round(troops * D.assaultPerTroop * (1 + force / D.forceDivisor));
 }
 
 /**
@@ -129,7 +153,7 @@ export function disasterChance(defense: number): number {
   return clamp((BALANCE.DISASTER.defenseSafe - defense) / 100, 0, BALANCE.DISASTER.maxChance);
 }
 
-/** 单次征兵上限 = floor(民忠 × 6) */
+/** 单次征兵上限 = floor(民忠 × 8) */
 export function recruitCap(loyalty: number): number {
   return Math.floor(loyalty * BALANCE.RECRUIT.capPerLoyalty);
 }

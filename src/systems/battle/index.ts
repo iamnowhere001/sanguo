@@ -9,6 +9,7 @@
  * - autopilot 战斗中托管（随时可接管）
  * - setup     开战与无守军占领
  * - turn      回合开始与天数推进
+ * - siege     攻城：城墙耐久磨损与城破
  * - resolve   胜负判定与战后结算
  * - auto      AI 对 AI 自动战斗
  */
@@ -23,6 +24,7 @@ export * from './autopilot';
 export * from './setup';
 export * from './objectives';
 export * from './turn';
+export * from './siege';
 export * from './resolve';
 export * from './auto';
 export * from './delegate';

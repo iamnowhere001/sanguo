@@ -64,6 +64,8 @@ import { doPrisoner, type PrisonerAction } from '../systems/prisoners';
 import { playerSnapshot } from '../systems/report';
 import { applyPolicyMonthly, choosePolicy } from '../systems/policy';
 import { resolveEvent, maybeScheduleEvent } from '../systems/events';
+import { doTransport, runCityRepair } from '../systems/logistics';
+import { assignTroops, distributeToGenerals } from '../systems/troops';
 import {
   canPartition,
   checkActProgress,
@@ -88,6 +90,9 @@ export type Action =
   | { t: 'TRANSFER_ITEM'; fromGeneralId: string; toGeneralId: string; itemId: string }
   | { t: 'CLASS_CHANGE'; generalId: string; tallyItemId: string }
   | { t: 'MOVE_GENERAL'; generalId: string; toCityId: string }
+  | { t: 'TRANSPORT'; fromCityId: string; toCityId: string; gold: number; food: number; troops: number }
+  | { t: 'ASSIGN_TROOPS'; cityId: string; generalId: string; amount: number }
+  | { t: 'ASSIGN_TROOPS_ALL'; cityId: string }
   | { t: 'DIPLOMACY'; kind: DiplomacyKind; agentId: string; targetGeneralId?: string; targetCityId?: string }
   | { t: 'FACTION_DIPLOMACY'; kind: FactionDiplomacyKind; targetFactionId: string }
   | { t: 'RESPOND_DIPLOMACY'; accept: boolean }
@@ -141,6 +146,8 @@ export function runMonthlyPipeline(s: GameState, facts = emptyMonthFacts()): str
   applyPolicyMonthly(s);
   runProjects(s, facts);
   runExplorations(s, facts);
+  // 城墙修缮：有主城池按月回补耐久（城墙工程完工后上限提高，这里一起结算）
+  runCityRepair(s);
   checkGameOver(s);
   return clampResources(s);
 }
@@ -275,6 +282,60 @@ export function reduce(
     case 'MOVE_GENERAL': {
       const r = doMoveGeneral(s, action.generalId, action.toCityId);
       return { state: r.ok ? s : state, result: r };
+    }
+    case 'TRANSPORT': {
+      const r = doTransport(s, {
+        fromCityId: action.fromCityId,
+        toCityId: action.toCityId,
+        gold: action.gold,
+        food: action.food,
+        troops: action.troops,
+      });
+      return { state: r.ok ? s : state, result: r };
+    }
+    case 'ASSIGN_TROOPS': {
+      const { moved, reason } = assignTroops(s, action.cityId, action.generalId, action.amount);
+      if (moved === 0) {
+        return { state, result: { ok: false, message: reason ?? '没有可分配的兵力' } };
+      }
+      return {
+        state: s,
+        result: {
+          ok: true,
+          message:
+            moved > 0 ? `已分配 ${moved} 兵` : `已收回 ${-moved} 兵入城`,
+        },
+      };
+    }
+    case 'ASSIGN_TROOPS_ALL': {
+      const city = s.cities[action.cityId];
+      if (!city) return { state, result: { ok: false, message: '城池不存在' } };
+      const pool = city.troops ?? 0;
+      if (pool <= 0) {
+        return { state, result: { ok: false, message: '城中没有待分配的兵力' } };
+      }
+      const gens = Object.values(s.generals).filter(
+        (g) => g.status === 'active' && g.locationId === city.id,
+      );
+      if (gens.length === 0) {
+        return { state, result: { ok: false, message: '此城没有可领兵的武将' } };
+      }
+      const leftover = distributeToGenerals(s, gens, pool);
+      city.troops = leftover;
+      const assigned = pool - leftover;
+      if (assigned <= 0) {
+        return { state, result: { ok: false, message: '守将带兵已满，无法再分配' } };
+      }
+      return {
+        state: s,
+        result: {
+          ok: true,
+          message:
+            leftover > 0
+              ? `已分配 ${assigned} 兵，剩 ${leftover} 待分配`
+              : `已分配 ${assigned} 兵`,
+        },
+      };
     }
     case 'DIPLOMACY': {
       const oldOwner =
@@ -467,6 +528,19 @@ export function reduce(
                 ? '30 天已尽，进攻方撤退'
                 : '30 天已尽，进攻失败',
             warnings: ['超时'],
+          },
+        };
+      }
+      // 攻城磨损可能直接把城墙打到 0：此时城破，立即结算
+      const afterSiege = battleOutcome(s.battle);
+      if (afterSiege) {
+        resolveBattle(s, s.battle, afterSiege);
+        return {
+          state: s,
+          result: {
+            ok: true,
+            message: '战斗结束',
+            warnings: [`城墙崩塌：${afterSiege === 'victory' ? '城破' : '守军退却'}`],
           },
         };
       }

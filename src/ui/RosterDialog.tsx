@@ -36,7 +36,7 @@ export function RosterDialog({
             (a, b) =>
               Number(Boolean(b.isRuler)) - Number(Boolean(a.isRuler)) || b.troops - a.troops,
           );
-        return { city, gens, troops: troopsOf(gens) };
+        return { city, gens, troops: troopsOf(gens) + (city.troops ?? 0) };
       })
       .sort(
         (a, b) => b.troops - a.troops || a.city.name.localeCompare(b.city.name, 'zh'),

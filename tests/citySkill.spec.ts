@@ -81,7 +81,7 @@ describe('新增城池的历史背景与专属技能', () => {
     const r = doRecruit(s, city.id, 'caocao', 100);
     expect(r.ok).toBe(true);
     expect(s.generals.caocao!.troops).toBe(100);
-    expect(city.gold).toBe(1000 - 170);
+    expect(city.gold).toBe(1000 - 85);
     expect(city.food).toBe(1000 - 85);
   });
 

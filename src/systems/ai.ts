@@ -1,6 +1,6 @@
 import { BALANCE } from '../data/tables/balance';
-import { difficultyOf } from '../data/tables/difficulty';
-import type { GameState } from '../core/state';
+import { difficultyOf, type DifficultyConfig } from '../data/tables/difficulty';
+import type { City, GameState } from '../core/state';
 import {
   citiesOf,
   factionFood,
@@ -49,11 +49,83 @@ function applyStrategicMove(
   if (g.status !== 'active' || g.locationId !== from.id) return false;
   if (from.ownerId !== factionId || to.ownerId !== factionId) return false;
   if (!neighborsOf(state, from.id).includes(to.id)) return false;
+  // 每名武将每月只能行军一次：AI 也必须受同一条约束
+  if ((g.marchTurn ?? -1) >= state.turn) return false;
   if (cityTroops(state, to.id) + g.troops > garrisonCapOf(to.size)) return false;
 
   g.locationId = to.id;
+  g.marchTurn = state.turn;
   log(state, 'info', `${g.name} 自 ${from.name} 调往 ${to.name}`, 'ai');
   return true;
+}
+
+/**
+ * AI 单城征兵：保留内政金后，把预算分给带兵缺口最大的几名武将。
+ * 每名武将仍受单次征兵上限、带兵上限与全城驻军上限约束。
+ */
+function aiRecruitCity(
+  state: GameState,
+  city: City,
+  difficulty: DifficultyConfig,
+): void {
+  const gens = Object.values(state.generals).filter(
+    (g) => g.status === 'active' && g.locationId === city.id,
+  );
+  if (gens.length === 0) return;
+
+  const targets = gens
+    .map((g) => ({ g, gap: troopCapOf(state, g) - g.troops }))
+    .filter((x) => x.gap > 0)
+    .sort((a, b) => b.gap - a.gap)
+    .slice(0, BALANCE.AI.recruitTargetsPerCity);
+  if (targets.length === 0) return;
+
+  const goldPerTroop = BALANCE.RECRUIT.goldPerTroop;
+  const foodPerTroop = BALANCE.RECRUIT.foodPerTroop;
+  let goldLeft = Math.max(
+    0,
+    Math.floor(
+      Math.max(0, city.gold - BALANCE.AI.developGoldReserve) *
+        BALANCE.AI.recruitGoldShare *
+        difficulty.resourceMult,
+    ),
+  );
+  let foodLeft = Math.floor(
+    city.food * BALANCE.AI.recruitFoodShare * difficulty.resourceMult,
+  );
+  let garrisonRoom = Math.max(
+    0,
+    garrisonCapOf(city.size) - cityTroops(state, city.id),
+  );
+
+  for (const target of targets) {
+    if (goldLeft < goldPerTroop || foodLeft < foodPerTroop || garrisonRoom <= 0) break;
+    const amount = Math.floor(
+      Math.min(
+        target.gap,
+        recruitCap(city.loyalty),
+        goldLeft / goldPerTroop,
+        foodLeft / foodPerTroop,
+        BALANCE.AI.recruitPerAction,
+        garrisonRoom,
+      ),
+    );
+    if (amount < 40) continue;
+
+    const beforeGold = city.gold;
+    const beforeFood = city.food;
+    const start = state.log.length;
+    const result = doRecruit(state, city.id, target.g.id, amount);
+    if (!result.ok) continue;
+    tagAiLogs(state, start);
+    goldLeft -= beforeGold - city.gold;
+    foodLeft -= beforeFood - city.food;
+    // 征兵可能溢出到城池兵力池，按全城驻军重算余量
+    garrisonRoom = Math.max(
+      0,
+      garrisonCapOf(city.size) - cityTroops(state, city.id),
+    );
+  }
 }
 
 /**
@@ -67,41 +139,8 @@ export function runAiFaction(state: GameState, factionId: string): 'battle' | 'd
   if (cities.length === 0) return 'done';
   const difficulty = difficultyOf(state.settings.difficulty);
 
-  // ① 征兵：每城挑带兵缺口最大的武将，花掉约 40% 金钱
-  for (const city of cities) {
-    const gens = Object.values(state.generals).filter(
-      (g) => g.status === 'active' && g.locationId === city.id,
-    );
-    if (gens.length === 0) continue;
-    const withGap = gens
-      .map((g) => ({ g, gap: troopCapOf(state, g) - g.troops }))
-      .filter((x) => x.gap > 0)
-      .sort((a, b) => b.gap - a.gap);
-    if (withGap.length === 0) continue;
-
-    const target = withGap[0]!;
-    const goldBudget = city.gold * 0.4 * difficulty.resourceMult;
-    const foodBudget = city.food * 0.5 * difficulty.resourceMult;
-    const garrisonRoom = Math.max(
-      0,
-      garrisonCapOf(city.size) - gens.reduce((sum, g) => sum + g.troops, 0),
-    );
-    const amount = Math.floor(
-      Math.min(
-        target.gap,
-        recruitCap(city.loyalty),
-        goldBudget / BALANCE.RECRUIT.goldPerTroop,
-        foodBudget,
-        BALANCE.AI.recruitPerAction,
-        garrisonRoom,
-      ),
-    );
-    if (amount >= 40) {
-      const start = state.log.length;
-      doRecruit(state, city.id, target.g.id, amount);
-      tagAiLogs(state, start);
-    }
-  }
+  // ① 征兵：每城优先补带兵缺口最大的几名武将，保留内政金
+  for (const city of cities) aiRecruitCity(state, city, difficulty);
 
   // ② 内政：每城一次，留出 reserve
   for (const city of cities) {
@@ -154,8 +193,7 @@ export function runAiFaction(state: GameState, factionId: string): 'battle' | 'd
   if (factionFood(state, factionId) <= foodReserve) return 'done';
 
   if (difficulty.coordinate) {
-    const maxMoves = difficulty.id === 'hard' ? 2 : 1;
-    for (let i = 0; i < maxMoves; i++) {
+    for (let i = 0; i < difficulty.strategicMoves; i++) {
       const reinforce = planReinforcement(state, factionId, difficulty);
       if (reinforce && applyStrategicMove(state, factionId, reinforce)) continue;
       const massing = planMassingMove(state, factionId, difficulty);

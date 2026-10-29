@@ -88,6 +88,41 @@ describe('AI 出兵', () => {
   });
 });
 
+describe('AI 征兵', () => {
+  it('一城一月会给多名武将补兵', () => {
+    const s = fresh();
+    s.turn = 1;
+    for (const c of Object.values(s.cities)) {
+      if (c.ownerId !== 'caocao' || c.id === 'xuchang') continue;
+      c.gold = 0;
+      c.food = 0;
+    }
+    for (const g of Object.values(s.generals)) {
+      if (g.status !== 'active') continue;
+      if (s.cities[g.locationId]?.ownerId !== 'caocao') continue;
+      g.troops = g.locationId === 'xuchang' ? 100 : 0;
+    }
+    s.cities.xuchang!.gold = 1500;
+    s.cities.xuchang!.food = 3000;
+
+    const xuchangGens = Object.values(s.generals).filter(
+      (g) => g.status === 'active' && g.locationId === 'xuchang',
+    );
+    const before = xuchangGens.reduce((sum, g) => sum + g.troops, 0);
+
+    expect(runAiFaction(s, 'caocao')).toBe('done');
+
+    const after = xuchangGens.reduce(
+      (sum, g) => sum + s.generals[g.id]!.troops,
+      0,
+    );
+    expect(after - before).toBeGreaterThanOrEqual(800);
+    expect(
+      xuchangGens.filter((g) => s.generals[g.id]!.troops > 100).length,
+    ).toBeGreaterThanOrEqual(2);
+  });
+});
+
 describe('AI 月度队列', () => {
   it('队列跑完后出月报，AI 行动写入日志', () => {
     const s = fresh(9);

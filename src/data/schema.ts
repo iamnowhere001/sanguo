@@ -38,6 +38,9 @@ const GeneralSchema = z.object({
   locationId: z.string().min(1),
   isRuler: z.boolean().optional(),
   isEasterEgg: z.boolean().optional(),
+  /** 补位将领的归属势力（建局铺城用） */
+  reserveFor: z.string().optional(),
+  marchTurn: z.number().int().min(0).optional(),
 });
 
 const SearchEntrySchema = z.object({
@@ -70,6 +73,8 @@ const CitySchema = z.object({
   isWaterCity: z.boolean().optional(),
   size: z.enum(CITY_SIZE),
   fortification: z.number().int().min(0).max(100),
+  durability: z.number().int().min(0).optional(),
+  troops: z.number().int().min(0).optional(),
   history: z.string().min(1).optional(),
   skill: CitySkillSchema.optional(),
   ownerId: z.string().nullable(),

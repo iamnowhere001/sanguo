@@ -1,4 +1,5 @@
 import type { General } from '../../core/state';
+import { EXTRA_GENERALS } from './generalsExtra';
 
 /**
  * 武将表：赤壁 208 的默认布防 + 各年代专属将领，共 160 人
@@ -13,7 +14,7 @@ import type { General } from '../../core/state';
  * 便于四个剧本共用同一份人物表；如需严格史实排期，另开一轮年代校准。
  * 属性为 GDD 初值与推导值，正式数值仍需按原版校准。
  */
-export const GENERAL_TABLE: Record<string, General> = {
+const CORE_GENERALS: Record<string, General> = {
   // ── 刘备（208：江夏 / 新野）──────────────────────────────
   liubei: {
     id: 'liubei', name: '刘备', force: 73, intellect: 74, loyalty: 100, stamina: 100,
@@ -919,4 +920,20 @@ export const GENERAL_TABLE: Record<string, General> = {
     stamina: 100, level: 20, exp: 0, unitClass: 'elite', troops: 0, items: [],
     status: 'wild', locationId: 'jinyang', isEasterEgg: true,
   },
+};
+
+/**
+ * 对外唯一的武将表：名将主表 + 按势力分组的补位将领。
+ * 补位将领默认 `inactive`，由 `createGame` 的铺城逻辑按需激活，
+ * 因此扩充人物表只影响新开局（旧存档沿用自己那份）。
+ */
+const RESERVE_CLASH = Object.keys(EXTRA_GENERALS).filter((id) => id in CORE_GENERALS);
+if (RESERVE_CLASH.length > 0) {
+  // 同名 id 会被对象展开静默覆盖（主表条目直接消失），必须在建表时就炸出来
+  throw new Error(`补位武将 id 与主表冲突：${RESERVE_CLASH.join('、')}`);
+}
+
+export const GENERAL_TABLE: Record<string, General> = {
+  ...CORE_GENERALS,
+  ...EXTRA_GENERALS,
 };

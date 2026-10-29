@@ -25,6 +25,8 @@ import { buildBattlefield } from './battlefield';
 import { moveRangeOf, SPAWN_ATTACKER, SPAWN_DEFENDER } from './grid';
 import { planBattleObjectives } from './objectives';
 import { checkGameOver, retreatCityFor } from './resolve';
+import { durabilityMaxOf } from '../logistics';
+import { topUpFromPool } from '../troops';
 
 /** 从指定战斗流掷天气；返回新流状态，避免偷用其它系统的随机数 */
 function rollWeather(rng: RngState): { weather: Weather; rng: RngState } {
@@ -109,6 +111,8 @@ function captureUndefended(
   }
 
   city.ownerId = attackerFactionId;
+  // 无将统领的池兵随城溃散，避免「有兵无将」的城变成刷兵容器
+  city.troops = 0;
   for (const g of generals) g.locationId = targetCityId;
   syncFactionCities(state, oldOwner);
   syncFactionCities(state, attackerFactionId);
@@ -169,10 +173,22 @@ export function createBattle(
     const g = state.generals[id];
     if (!g || g.status !== 'active') return { result: fail('武将不可用') };
     if (g.locationId !== fromCityId) return { result: fail(`${g.name} 不在此城`) };
-    if (g.troops <= 0) return { result: fail(`${g.name} 无兵可战`) };
     attackers.push(g);
   }
 
+  // 【兵力池】出征部队先从城池未分配兵力里补满，再判「无兵可战」
+  topUpFromPool(state, fromCityId, attackers);
+  const empty = attackers.find((g) => g.troops <= 0);
+  if (empty) return { result: fail(`${empty.name} 无兵可战`) };
+
+  // 【兵力池】守军同理：城里屯着的兵会由守将带上城墙
+  topUpFromPool(
+    state,
+    targetCityId,
+    Object.values(state.generals).filter(
+      (g) => g.status === 'active' && g.locationId === targetCityId,
+    ),
+  );
   const defenders = defendersOf(state, targetCityId);
   if (defenders.length === 0) {
     syncFactionCities(state, target.ownerId ?? null);
@@ -250,6 +266,11 @@ export function createBattle(
       100,
       target.fortification + (target.skill?.fortificationBonus ?? 0),
     ),
+    cityDurabilityMax: durabilityMaxOf(target),
+    cityDurability:
+      typeof target.durability === 'number'
+        ? Math.min(target.durability, durabilityMaxOf(target))
+        : Math.round(durabilityMaxOf(target) * 0.8),
     grid,
     battlefield: battlefield.battlefield,
     units,
@@ -285,6 +306,8 @@ export function createBattle(
 
   state.battle = battle;
   state.phase = 'battle';
+  // 出征同样算一次行军：本月不能再把同一名武将调去别处
+  for (const g of attackers) g.marchTurn = state.turn;
   if (attackerFactionId === state.playerFactionId) {
     log(state, 'info', `自 ${from.name} 出征 ${target.name}`);
   }

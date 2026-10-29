@@ -145,6 +145,8 @@ export function abandonCity(
 
   city.gold = Math.floor(city.gold * (1 - BALANCE.ABANDON_SCORCH_RATE));
   city.food = Math.floor(city.food * (1 - BALANCE.ABANDON_SCORCH_RATE));
+  // 带不走的池兵随城溃散，避免弃城等于给敌军白送一支守军
+  city.troops = 0;
 
   const oldOwner = city.ownerId;
   city.ownerId = check.toFactionId ?? null;

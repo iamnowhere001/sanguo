@@ -49,14 +49,14 @@ function damageSample(
 }
 
 describe('核心公式样例（GDD + 报告 v2）', () => {
-  it('带兵上限：1 级吕布（武100/智26）= 1180，20 级 = 2130', () => {
-    expect(troopCap({ force: 100, intellect: 26, level: 1 })).toBe(1180);
-    expect(troopCap({ force: 100, intellect: 26, level: 20 })).toBe(2130);
+  it('带兵上限：1 级吕布（武100/智26）= 1788，20 级 = 3308', () => {
+    expect(troopCap({ force: 100, intellect: 26, level: 1 })).toBe(1788);
+    expect(troopCap({ force: 100, intellect: 26, level: 20 })).toBe(3308);
   });
 
-  it('带兵上限：1 级诸葛亮（武38/智100）= 930，20 级 = 1880', () => {
-    expect(troopCap({ force: 38, intellect: 100, level: 1 })).toBe(930);
-    expect(troopCap({ force: 38, intellect: 100, level: 20 })).toBe(1880);
+  it('带兵上限：1 级诸葛亮（武38/智100）= 1450，20 级 = 2970', () => {
+    expect(troopCap({ force: 38, intellect: 100, level: 1 })).toBe(1450);
+    expect(troopCap({ force: 38, intellect: 100, level: 20 })).toBe(2970);
   });
 
   it('月产粮：农业 250、民忠 80 → 200', () => {
@@ -187,8 +187,8 @@ describe('边界与裁决值', () => {
     expect(disasterChance(30)).toBeCloseTo(0.3, 5);
   });
 
-  it('征兵上限：民忠 80 → 480（【优化】E01 单次上限 ×6）', () => {
-    expect(recruitCap(80)).toBe(480);
+  it('征兵上限：民忠 80 → 640（【优化】E01 单次上限 ×8）', () => {
+    expect(recruitCap(80)).toBe(640);
   });
 
   it('内政边际递减：农业 250→+10、600→+7、999→+4', () => {
@@ -225,10 +225,10 @@ describe('边界与裁决值', () => {
   });
 
   it('驻军上限：都城 > 大城 > 中城 > 小城', () => {
-    expect(garrisonCapOf('capital')).toBe(9000);
-    expect(garrisonCapOf('large')).toBe(6000);
-    expect(garrisonCapOf('medium')).toBe(4200);
-    expect(garrisonCapOf('small')).toBe(2600);
+    expect(garrisonCapOf('capital')).toBe(14000);
+    expect(garrisonCapOf('large')).toBe(9500);
+    expect(garrisonCapOf('medium')).toBe(6800);
+    expect(garrisonCapOf('small')).toBe(4200);
   });
 
   it('安全溢出：上限 65536、当前 70000 → 63304（不清零）', () => {

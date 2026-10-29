@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createGame } from '../src/data/tables/scenarios';
+import { difficultyOf } from '../src/data/tables/difficulty';
 import { runAiFaction } from '../src/systems/ai';
 import type { Difficulty } from '../src/core/state';
 
@@ -50,5 +51,11 @@ describe('AI 难度', () => {
   it('难度写入开局设置', () => {
     expect(createGame({ difficulty: 'hard' }).settings.difficulty).toBe('hard');
     expect(createGame({}).settings.difficulty).toBe('normal');
+  });
+
+  it('战略调动次数随难度提升', () => {
+    expect(difficultyOf('easy').strategicMoves).toBe(0);
+    expect(difficultyOf('normal').strategicMoves).toBe(2);
+    expect(difficultyOf('hard').strategicMoves).toBe(4);
   });
 });

@@ -687,6 +687,14 @@ export function BattleScreen() {
   const budgetTone =
     breakDays == null || breakDays > remainingDays ? 'warn-text' : 'muted';
 
+  /** 攻城提示：攻方站上城池格才会磨损城墙，耐久归零即城破 */
+  const wallHint =
+    typeof battle.cityDurability === 'number' && battle.cityDurability > 0
+      ? playerSide === 'attacker'
+        ? '站上城池格（城内）可逐日磨损城墙，耐久归零即破城'
+        : '城墙耐久归零即城破，别让敌军站住城内'
+      : null;
+
   return (
     <div className="battle-screen">
       <header className="topbar battle-top">
@@ -722,6 +730,22 @@ export function BattleScreen() {
             <b>{fmt(foeTroops)}</b>
             <Bar value={foeTroops} max={foeMax || 1} color="#c14a3a" />
           </div>
+          {typeof battle.cityDurability === 'number' ? (
+            <div
+              className="side-stat wall-stat"
+              title={`城墙耐久 ${battle.cityDurability} / ${battle.cityDurabilityMax ?? 0}：攻方部队站上城池格会逐日磨损，耐久归零即城破`}
+            >
+              <span>城墙 · {state.cities[battle.targetCityId]?.name ?? ''}</span>
+              <b>
+                {fmt(battle.cityDurability)} / {fmt(battle.cityDurabilityMax ?? 0)}
+              </b>
+              <Bar
+                value={battle.cityDurability}
+                max={battle.cityDurabilityMax || 1}
+                color="#b8892f"
+              />
+            </div>
+          ) : null}
         </div>
 
         <div className="tb-actions">
@@ -831,6 +855,7 @@ export function BattleScreen() {
           <div className={`battle-hint${pilot ? ' pilot' : pendingTactic || pendingCharge ? ' accent' : ''}`}>
             {hint}
           </div>
+          {wallHint ? <div className="battle-wall-hint">{wallHint}</div> : null}
 
           {pilot ? (
             <div className="pilot-badge" aria-live="polite">

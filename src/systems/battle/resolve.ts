@@ -11,7 +11,7 @@ import type {
   GameState,
   ReportLine,
 } from '../../core/state';
-import { defendersOf, factionTroops, neighborsOf, syncFactionCities } from '../../core/state';
+import { defendersOf, factionTroops, garrisonTroopsOf, neighborsOf, syncFactionCities } from '../../core/state';
 import { log } from '../economy';
 import { changeRelationScore } from '../factionDiplomacy';
 import { clamp, garrisonCapOf } from '../formulas';
@@ -24,6 +24,7 @@ import {
   recordCityLost,
 } from '../chapter';
 import { grantExp } from './combat';
+import { durabilityMaxOf } from '../logistics';
 import { activeUnits, otherSide } from './grid';
 import {
   objectiveFailureText,
@@ -35,6 +36,8 @@ import {
 export type BattleOutcome = 'victory' | 'defeat' | 'retreat';
 
 export function battleOutcome(b: BattleState): BattleOutcome | null {
+  // 城破：耐久归零，与「驻守兵力为 0」并列的两个陷城条件
+  if (typeof b.cityDurability === 'number' && b.cityDurability <= 0) return 'victory';
   const attackers = activeUnits(b, 'attacker');
   const defenders = activeUnits(b, 'defender');
   if (defenders.length === 0) return 'victory';
@@ -116,7 +119,7 @@ function grantObjectiveReward(
 }
 
 function troopsInCity(state: GameState, cityId: string): number {
-  return defendersOf(state, cityId).reduce((sum, g) => sum + g.troops, 0);
+  return garrisonTroopsOf(state, cityId);
 }
 
 /**
@@ -260,6 +263,11 @@ export function resolveBattle(
       changeRelationScore(state, b.attackerFactionId, oldOwner, -15);
     }
     target.ownerId = b.attackerFactionId;
+    // 城破：城墙被打残，未分配池兵随守军溃散
+    target.durability = Math.round(
+      durabilityMaxOf(target) * BALANCE.DURABILITY.capturedReset,
+    );
+    target.troops = 0;
     syncFactionCities(state, oldOwner);
     syncFactionCities(state, b.attackerFactionId);
     if (b.playerInvolved) {

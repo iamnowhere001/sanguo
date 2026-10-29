@@ -423,6 +423,8 @@ export function objectiveStatusAtEnd(
 }
 
 function currentWinner(b: BattleState): BattleSide | null {
+  // 城破（耐久归零）与驻守兵力归零都算攻方拿下，与 battleOutcome 保持一致
+  if (typeof b.cityDurability === 'number' && b.cityDurability <= 0) return 'attacker';
   const attackers = activeUnits(b, 'attacker');
   const defenders = activeUnits(b, 'defender');
   if (defenders.length === 0 || !defenders.some((u) => u.isCommander)) return 'attacker';

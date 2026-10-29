@@ -3,6 +3,7 @@ import { WEATHER_LABEL } from '../../data/tables/tactics';
 import { done, fail, type OpResult } from '../../core/result';
 import type { BattleCommand, BattleSide, BattleState } from '../../core/state';
 import { activeUnits } from './grid';
+import { assaultWalls } from './siege';
 import { rollWeather } from './setup';
 
 /** 一个 side 开始行动：混乱单位跳过本回合并消耗 1 天 */
@@ -75,12 +76,15 @@ export function useBattleCommand(
   return done('全军固守：本日受到伤害 −30%');
 }
 
-/** 推进一天：天气每 5 天重掷，混乱倒计时，行动重置 */
+/** 推进一天：攻城磨损 → 天气每 5 天重掷，混乱倒计时，行动重置 */
 export function advanceBattleDay(
   b: BattleState,
-): { timedOut: boolean } {
+): { timedOut: boolean; wallDamage: number } {
   b.day += 1;
-  if (b.day > BALANCE.BATTLE_MAX_DAYS) return { timedOut: true };
+  if (b.day > BALANCE.BATTLE_MAX_DAYS) return { timedOut: true, wallDamage: 0 };
+
+  // 【新增】攻城：攻方部队站在城池格上，逐日磨损城墙耐久
+  const wallDamage = assaultWalls(b);
 
   if (b.day % 5 === 0) {
     const rolled = rollWeather(b.rng);
@@ -109,5 +113,5 @@ export function advanceBattleDay(
   b.inspireSide = undefined;
   b.guardSide = undefined;
   b.side = b.playerSide;
-  return { timedOut: false };
+  return { timedOut: false, wallDamage };
 }

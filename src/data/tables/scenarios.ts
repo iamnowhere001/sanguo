@@ -2,8 +2,11 @@ import { createStreams } from '../../core/rng';
 import type { City, Difficulty, Faction, GameState, General, MapEdge, Ruleset } from '../../core/state';
 import { validateTables } from '../schema';
 import { createChapter } from '../../systems/chapter';
+import { cityMaxDurability, troopCap } from '../../systems/formulas';
+import { BALANCE } from './balance';
 import { CITY_TABLE } from './cities';
 import { GENERAL_TABLE } from './generals';
+import { FACTION_RESERVES } from './generalsExtra';
 import { ITEM_TABLE } from './items';
 import { applySpawnPools } from './spawn';
 import { createRumors } from '../../systems/exploration';
@@ -247,6 +250,62 @@ function spreadGarrison(
     if (!mover) continue;
     mover.locationId = city.id;
     if (mover.troops <= 0) mover.troops = 300;
+  }
+}
+
+/**
+ * 铺满守将：每座有主城池至少 `MIN_GENERALS_PER_CITY` 名武将。
+ *
+ * 名册只保证「人够用」，不保证「城城有人」——208 赤壁尤其明显：
+ * 曹操 20 多座城，名将集中在几个大城，边缘小城常年空置。
+ * 这里用各势力自己的补位将领（generalsExtra.ts）按缺将数从多到少填满，
+ * 保证新开局不会出现「城无将 → 内政 / 征兵 / 守城全部停摆」的死局。
+ */
+function fillGarrisons(
+  cities: Record<string, City>,
+  generals: Record<string, General>,
+): void {
+  const target = BALANCE.GARRISON.MIN_GENERALS_PER_CITY;
+
+  const byOwner = new Map<string, string[]>();
+  for (const city of Object.values(cities)) {
+    if (!city.ownerId) continue;
+    const list = byOwner.get(city.ownerId) ?? [];
+    list.push(city.id);
+    byOwner.set(city.ownerId, list);
+  }
+
+  for (const [fid, cityIds] of byOwner) {
+    const load = new Map(cityIds.map((id) => [id, 0]));
+    for (const g of Object.values(generals)) {
+      if (g.status !== 'active') continue;
+      if (load.has(g.locationId)) load.set(g.locationId, load.get(g.locationId)! + 1);
+    }
+
+    const reserves = (FACTION_RESERVES[fid] ?? []).filter(
+      (id) => generals[id] && generals[id]!.status === 'inactive',
+    );
+    if (reserves.length === 0) continue;
+
+    let cursor = 0;
+    const need = cityIds
+      .filter((id) => load.get(id)! < target)
+      .sort((a, b) => load.get(a)! - load.get(b)! || a.localeCompare(b));
+
+    for (const cityId of need) {
+      while (load.get(cityId)! < target && cursor < reserves.length) {
+        const g = generals[reserves[cursor++]!]!;
+        g.status = 'active';
+        g.locationId = cityId;
+        g.loyalty = Math.max(g.loyalty, 70);
+        g.troops = Math.min(
+          BALANCE.GARRISON.reserveTroops,
+          troopCap({ force: g.force, intellect: g.intellect, level: g.level }),
+        );
+        load.set(cityId, load.get(cityId)! + 1);
+      }
+      if (cursor >= reserves.length) break;
+    }
   }
 }
 
@@ -595,6 +654,8 @@ export function createGame(opts: CreateGameOptions = {}): GameState {
     c.projects ??= [];
     c.landmarks ??= [];
     c.exploreClues ??= {};
+    c.troops ??= 0;
+    c.durability ??= Math.round(cityMaxDurability(c.size, c.fortification) * 0.8);
   }
 
   // 【优化】E11 稀有物与在野武将候选池：按种子重排，经典模式保持原表
@@ -648,6 +709,9 @@ export function createGame(opts: CreateGameOptions = {}): GameState {
     // 208 赤壁：没有手写名册，把多余守将摊到新增空城
     spreadGarrison(cities, generals);
   }
+
+  // ③ 守将铺满：保证每座有主城池都有足够守将（补位将领按势力分配）
+  fillGarrisons(cities, generals);
 
   const playerFactionId =
     opts.playerFactionId && factions[opts.playerFactionId]

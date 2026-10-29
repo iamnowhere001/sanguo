@@ -5,10 +5,12 @@ import {
   citiesOf,
   defendersOf,
   factionTroops,
+  garrisonTroopsOf,
   isAdjacentEnemy,
   neighborsOf,
 } from '../core/state';
 import { garrisonCapOf } from './formulas';
+import { projectedTroops } from './troops';
 import { canAttackFactions, isHostile } from './factionDiplomacy';
 
 /**
@@ -44,8 +46,9 @@ export interface StrategicMove {
   troops: number;
 }
 
+/** 城池驻军（含未分配兵力池） */
 export function cityTroops(state: GameState, cityId: string): number {
-  return defendersOf(state, cityId).reduce((sum, g) => sum + g.troops, 0);
+  return garrisonTroopsOf(state, cityId);
 }
 
 /** 边境城至少留下的驻军；内陆城为 0，可以放心抽调 */
@@ -66,6 +69,8 @@ export function reserveFor(
  * 从一城挑选出征部队。
  * 优先保君主：能装进「可抽调额度」的将先走，君主排最后；
  * 若一个都装不下，只派最弱的一支，避免把边境守军一次抽空。
+ *
+ * 兵力按「池兵会先补给缺口最大的将」估算，与实际出征时的补兵顺序一致。
  */
 export function selectAttackers(
   state: GameState,
@@ -75,7 +80,10 @@ export function selectAttackers(
 ): AttackForce {
   const city = state.cities[cityId];
   if (!city) return { generals: [], troops: 0 };
-  const defenders = defendersOf(state, cityId);
+  const projected = projectedTroops(state, cityId);
+  const defenders = Object.values(state.generals).filter(
+    (g) => g.status === 'active' && g.locationId === cityId && (projected.get(g.id) ?? 0) > 0,
+  );
   if (defenders.length === 0) return { generals: [], troops: 0 };
 
   const available = Math.max(
@@ -84,12 +92,14 @@ export function selectAttackers(
   );
   if (available <= 0) return { generals: [], troops: 0 };
 
+  const troopsOf = (g: General): number => projected.get(g.id) ?? g.troops;
+
   const fitting = defenders
-    .filter((g) => g.troops <= available)
+    .filter((g) => troopsOf(g) <= available)
     .sort(
       (a, b) =>
         Number(Boolean(a.isRuler)) - Number(Boolean(b.isRuler)) ||
-        b.troops - a.troops,
+        troopsOf(b) - troopsOf(a),
     );
 
   const picked: General[] = [];
@@ -98,14 +108,14 @@ export function selectAttackers(
     fitting.length > 0
       ? fitting
       : [
-          [...defenders].sort((a, b) => a.troops - b.troops)[0]!,
+          [...defenders].sort((a, b) => troopsOf(a) - troopsOf(b))[0]!,
         ];
 
   for (const g of pool) {
     if (picked.length >= BALANCE.BATTLE_MAX_ATTACKERS) break;
-    if (committed + g.troops > available && picked.length > 0) continue;
+    if (committed + troopsOf(g) > available && picked.length > 0) continue;
     picked.push(g);
-    committed += g.troops;
+    committed += troopsOf(g);
   }
   return { generals: picked, troops: committed };
 }
@@ -118,12 +128,17 @@ export function selectAllIn(
 ): AttackForce {
   const city = state.cities[cityId];
   if (!city || city.ownerId !== factionId) return { generals: [], troops: 0 };
-  const generals = [...defendersOf(state, cityId)]
-    .sort((a, b) => b.troops - a.troops)
+  const projected = projectedTroops(state, cityId);
+  const troopsOf = (g: General): number => projected.get(g.id) ?? g.troops;
+  const generals = Object.values(state.generals)
+    .filter(
+      (g) => g.status === 'active' && g.locationId === cityId && troopsOf(g) > 0,
+    )
+    .sort((a, b) => troopsOf(b) - troopsOf(a))
     .slice(0, BALANCE.BATTLE_MAX_ATTACKERS);
   return {
     generals,
-    troops: generals.reduce((sum, g) => sum + g.troops, 0),
+    troops: generals.reduce((sum, g) => sum + troopsOf(g), 0),
   };
 }
 
@@ -144,11 +159,30 @@ function otherThreat(
   return max;
 }
 
-/** 实际能上场的守军：按兵力取前 N 名，预备队不参与战斗 */
+/** 实际能上场的守军：按兵力取前 N 名，预备队不参与战斗（兵力含池兵投影） */
 export function fieldedDefenders(state: GameState, cityId: string): General[] {
-  return [...defendersOf(state, cityId)]
-    .sort((a, b) => b.troops - a.troops)
+  const projected = projectedTroops(state, cityId);
+  return Object.values(state.generals)
+    .filter(
+      (g) =>
+        g.status === 'active' &&
+        g.locationId === cityId &&
+        (projected.get(g.id) ?? g.troops) > 0,
+    )
+    .sort(
+      (a, b) =>
+        (projected.get(b.id) ?? b.troops) - (projected.get(a.id) ?? a.troops),
+    )
     .slice(0, BALANCE.BATTLE_MAX_DEFENDERS);
+}
+
+/** 守军上场兵力（含池兵投影），供 AI 评估兵力比 */
+export function fieldedTroops(state: GameState, cityId: string): number {
+  const projected = projectedTroops(state, cityId);
+  return fieldedDefenders(state, cityId).reduce(
+    (sum, g) => sum + (projected.get(g.id) ?? g.troops),
+    0,
+  );
 }
 
 /**
@@ -242,8 +276,7 @@ export function planAttackCandidates(
         continue;
       }
 
-      const fielded = fieldedDefenders(state, targetId);
-      const defTroops = fielded.reduce((sum, g) => sum + g.troops, 0);
+      const defTroops = fieldedTroops(state, targetId);
       let chosen = force;
       let ratio = force.troops / (defTroops + 100);
       const bonus =
@@ -310,11 +343,24 @@ export function planAttackCandidates(
   );
 }
 
+/** 边境城期望驻军：至少站住基本盘，再按相邻威胁放大，且不超过城池上限的 70% */
+function frontierDesired(city: City, threat: number): number {
+  return Math.min(
+    Math.floor(garrisonCapOf(city.size) * BALANCE.AI.frontGarrisonShare),
+    Math.max(
+      BALANCE.AI.frontGarrisonMin,
+      Math.ceil(threat * BALANCE.AI.frontThreatRatio),
+    ),
+  );
+}
+
 /** 相邻友城里，能安全抽调一支部队的来源 */
 function donorFor(
   state: GameState,
   factionId: string,
   toCityId: string,
+  difficulty: DifficultyConfig,
+  protectFront = true,
 ): { city: City; general: General } | null {
   const toCity = state.cities[toCityId];
   if (!toCity) return null;
@@ -328,20 +374,41 @@ function donorFor(
     .map((c) => {
       const threat = adjacentThreat(state, c.id, factionId);
       const troops = cityTroops(state, c.id);
-      return { city: c, threat, troops };
+      // 防御性增援时，抽调后必须留下足够的驻军；进攻集结则允许押上守军赌一把
+      const reserve =
+        protectFront && threat > 0
+          ? Math.max(
+              frontierDesired(c, threat),
+              reserveFor(state, c, factionId, difficulty),
+            )
+          : 0;
+      return {
+        city: c,
+        threat,
+        troops,
+        reserve,
+        frontier: isAdjacentEnemy(state, c.id, factionId),
+      };
     })
     .filter(
       (x) =>
         x.troops > BALANCE.AI.minGarrison &&
-        x.troops > x.threat * 1.2,
+        x.troops > x.threat * 1.2 &&
+        (!protectFront || x.troops > x.reserve + 100),
     )
     .sort((a, b) => b.troops - a.troops || a.city.id.localeCompare(b.city.id));
 
   for (const donor of donors) {
+    const movable = protectFront
+      ? Math.min(room, donor.troops - donor.reserve)
+      : room;
     const general = defendersOf(state, donor.city.id)
-      .filter((g) => !g.isRuler && g.troops > 0 && g.troops <= room)
+      .filter((g) => !g.isRuler && g.troops > 0 && g.troops <= movable)
       .sort((a, b) => b.troops - a.troops)[0];
-    if (general) return { city: donor.city, general };
+    if (!general) continue;
+    // 边境城不能把最后一名守将调走，否则会白送一座空城
+    if (donor.frontier && donor.troops - general.troops <= 0) continue;
+    return { city: donor.city, general };
   }
   return null;
 }
@@ -363,7 +430,8 @@ export function adjacentThreat(
 }
 
 /**
- * 边境增援/换防：哪座边境城压力最大，就从相邻的安全城调一支过去。
+ * 边境增援/换防：主动把边境城补到与威胁匹配的目标驻军。
+ * 不再只在「威胁 > 守军×1.3」时才动，而是按缺口从大到小依次补强。
  * 君主留守，避免 AI 把君主调来调去。
  */
 export function planReinforcement(
@@ -373,23 +441,26 @@ export function planReinforcement(
 ): StrategicMove | null {
   if (!difficulty.coordinate) return null;
 
-  const threatened = citiesOf(state, factionId)
+  const frontier = citiesOf(state, factionId)
     .filter((c) => isAdjacentEnemy(state, c.id, factionId))
-    .map((c) => ({
-      city: c,
-      threat: adjacentThreat(state, c.id, factionId),
-      defense: cityTroops(state, c.id),
-    }))
-    .filter((x) => x.threat > x.defense * 1.3)
+    .map((c) => {
+      const threat = adjacentThreat(state, c.id, factionId);
+      const defense = cityTroops(state, c.id);
+      const desired = frontierDesired(c, threat);
+      return { city: c, threat, defense, desired, gap: desired - defense };
+    })
+    .filter((x) => x.gap > 0)
     .sort(
       (a, b) =>
-        b.threat / Math.max(1, b.defense) - a.threat / Math.max(1, a.defense),
+        b.gap - a.gap ||
+        b.threat - a.threat ||
+        a.city.id.localeCompare(b.city.id),
     );
 
-  for (const item of threatened) {
+  for (const item of frontier) {
     const room = garrisonCapOf(item.city.size) - item.defense;
     if (room <= 0) continue;
-    const donor = donorFor(state, factionId, item.city.id);
+    const donor = donorFor(state, factionId, item.city.id, difficulty);
     if (!donor) continue;
     return {
       fromId: donor.city.id,
@@ -426,10 +497,7 @@ export function planMassingMove(
       ) {
         continue;
       }
-      const defTroops = fieldedDefenders(state, targetId).reduce(
-        (sum, g) => sum + g.troops,
-        0,
-      );
+      const defTroops = fieldedTroops(state, targetId);
       const ratio = force.troops / (defTroops + 100);
       const bonus = windowBonusFor(state, target, factionId, defTroops, difficulty);
       const threshold = Math.max(1.05, difficulty.attackRatio - bonus);
@@ -438,7 +506,7 @@ export function planMassingMove(
 
       const room = garrisonCapOf(from.size) - cityTroops(state, from.id);
       if (room <= 0) continue;
-      const donor = donorFor(state, factionId, from.id);
+      const donor = donorFor(state, factionId, from.id, difficulty, false);
       if (!donor) continue;
       if (donor.general.troops > room) continue;
 

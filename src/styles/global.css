@@ -1681,6 +1681,67 @@ input[type='number'] {
   color: var(--teal);
   font-weight: 500;
 }
+/* 城墙耐久：单独一行进度条，破城前是最需要盯的数字 */
+.cp-durability {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 var(--sp-2);
+  font-size: 10px;
+  color: var(--muted);
+}
+.cp-durability .bar-track {
+  flex: 1;
+}
+.cp-durability b {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--gold);
+}
+/* 待分配兵力：城池兵力池 */
+.pool-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 10.5px;
+  color: var(--muted);
+}
+.pool-row b {
+  font-family: var(--font-mono);
+  color: var(--teal);
+  font-weight: 500;
+}
+/* 运输：金 / 粮 / 兵 三格并排 */
+.transport-inputs {
+  gap: 6px;
+}
+.transport-inputs label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  font-size: 10px;
+  color: var(--muted);
+}
+.transport-inputs input {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+}
+.city-panel .transport-inputs input {
+  flex: 1 1 auto;
+  width: 100%;
+  margin-right: 0;
+}
+/* 单将兵力领入 / 交回 */
+.g-troop-ops {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 /* 城名头部：标题与指标上下分层 */
 .cp-head {
   display: flex;
@@ -1881,7 +1942,7 @@ input[type='number'] {
 /* 基础属性：一行横条，只做参考不抢视线 */
 .cp-attrs {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(42px, 1fr));
   gap: 0;
   margin: 0 0 var(--sp-2);
   padding: 5px 0;
@@ -1937,6 +1998,13 @@ input[type='number'] {
   text-decoration: underline;
   text-underline-offset: 2px;
   text-decoration-color: rgba(200, 164, 94, 0.45);
+}
+/* 领兵 / 交回这类链接按钮：禁用时要肉眼可辨，不能只是点了没反应 */
+.link-btn:disabled {
+  color: var(--dim);
+  text-decoration: none;
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 .link-btn:hover:not(:disabled) {
   color: var(--paper);
@@ -3511,6 +3579,21 @@ input[type='number'] {
 .battle-hint.accent {
   color: var(--gold);
   border-color: rgba(200, 164, 94, 0.5);
+}
+/* 攻城提示：叠在操作提示上方，弱化一档 */
+.battle-wall-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 48px;
+  transform: translateX(-50%);
+  font-size: 10px;
+  color: var(--gold);
+  background: rgba(20, 18, 14, 0.7);
+  border-radius: 20px;
+  padding: 3px 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0.9;
 }
 /* 托管中：提示条改用青色，和「玩家指挥」的金色区分开 */
 .battle-hint.pilot {

@@ -25,10 +25,10 @@ export const BALANCE = {
    * 开局兵力均低于上限，上限主要约束中后期的长期囤兵。
    */
   CITY_SIZE: {
-    capital: { garrison: 9000 },
-    large: { garrison: 6000 },
-    medium: { garrison: 4200 },
-    small: { garrison: 2600 },
+    capital: { garrison: 14000 },
+    large: { garrison: 9500 },
+    medium: { garrison: 6800 },
+    small: { garrison: 4200 },
   },
   /**
    * 城防减伤：守方在城池格受击倍率 = 0.5 − 0.2 × 城防%。
@@ -36,6 +36,39 @@ export const BALANCE = {
    */
   FORTIFICATION_MAX_REDUCTION: 0.2,
   FORTIFICATION_MIN_MULT: 0.3,
+
+  // ── 城池耐久 【新增】破城的第二个条件 ─────────────────────
+  /**
+   * 耐久上限 = 规模基础 + 城防 × 系数 + 城墙工程加成。
+   * 攻城战中，攻方部队站在城池格上会逐日磨损耐久；耐久归零即城破，
+   * 与「城内驻守兵力为 0」并列。月结自动修复 `repairPerMonth`。
+   */
+  DURABILITY: {
+    base: { capital: 1200, large: 900, medium: 650, small: 450 },
+    perFortification: 6,
+    wallLandmarkBonus: 260,
+    /** 每月修复：上限 × 该比例 */
+    repairPerMonth: 0.12,
+    /** 攻城磨损：每兵每日 = assaultPerTroop × (1 + 武力 / forceDivisor) */
+    assaultPerTroop: 0.12,
+    forceDivisor: 200,
+    /** 城池易主后残留的耐久比例 */
+    capturedReset: 0.3,
+  },
+
+  // ── 驻军与行军 【新增】兵力池 / 每月行军次数 ──────────────
+  GARRISON: {
+    /** 每座有主城池希望保有的最低守将数（建局铺城目标） */
+    MIN_GENERALS_PER_CITY: 2,
+    /** 补位将领入城时的初始兵力 */
+    reserveTroops: 400,
+    /** 武将每月可调动次数（含出征） */
+    movesPerTurn: 1,
+    /** 单次城际运输的兵力上限 */
+    transportMaxTroops: 6000,
+    /** 现代模式下一次运输消耗的政令 */
+    transportEdictCost: 1,
+  },
 
   // ── 内政 【GDD】4.3 效果 / 【优化】E10 边际递减 ─────────────
   DOMESTIC: {
@@ -108,7 +141,11 @@ export const BALANCE = {
   },
 
   // ── 征兵 / 交易 【GDD】4.3 / 【优化】E01 切断套利 ──────────
-  RECRUIT: { goldPerTroop: 2, foodPerTroop: 1, capPerLoyalty: 6 },
+  /**
+   * 【平衡】征兵效率：每兵 1 金 + 1 粮，单次上限 floor(民忠 × 8)。
+   * 降低金钱成本后，中小城也能在税月之间维持补员，同时保留粮草约束。
+   */
+  RECRUIT: { goldPerTroop: 1, foodPerTroop: 1, capPerLoyalty: 8 },
   TRADE: {
     /** 卖粮 2 钱/粮、买粮 8 钱/粮：交易退回应急定位 */
     sellGoldPerFood: 2,
@@ -243,8 +280,14 @@ export const BALANCE = {
   AI: {
     /** 前 N 回合 AI 不主动进攻玩家，给开局留出经营窗口 */
     graceTurns: 2,
-    /** 单次 AI 征兵上限，避免一个月爆兵 */
-    recruitPerAction: 300,
+    /** 单次 AI 征兵上限；每城每月最多给多名武将各补一次 */
+    recruitPerAction: 800,
+    /** 每城每月最多补兵的武将数：优先补带兵缺口最大的几人 */
+    recruitTargetsPerCity: 3,
+    /** 征兵预算：保留内政金后，可动用金的比例 */
+    recruitGoldShare: 0.7,
+    /** 征兵预算：可动用粮的比例 */
+    recruitFoodShare: 0.5,
     /** 出兵前保留的军粮月数 */
     foodReserveMonths: 4,
     /** 单城内政保留金 */
@@ -253,6 +296,12 @@ export const BALANCE = {
     attacksPerMonth: 1,
     /** 边境城至少留下的驻军；与 reserveRatio 取较大值 */
     minGarrison: 300,
+    /** 边境目标驻军：城池上限的占比上限 */
+    frontGarrisonShare: 0.7,
+    /** 边境目标驻军：无论威胁多低，至少囤到这个数 */
+    frontGarrisonMin: 1000,
+    /** 边境目标驻军：按相邻敌军兵力放大的倍数 */
+    frontThreatRatio: 1.25,
   },
 
   // ── 现代重制：国策 / 政令 / 军令 / 事件 / 章节 ─────────────

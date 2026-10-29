@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
 import { CITY_TABLE } from '../data/tables/cities';
 import { DIFFICULTY_LIST, difficultyOf } from '../data/tables/difficulty';
-import { GENERAL_TABLE } from '../data/tables/generals';
 import { SCENARIOS, createGame } from '../data/tables/scenarios';
 import type { Difficulty, Ruleset } from '../core/state';
 import { gameStore } from '../store/gameStore';
@@ -30,33 +29,55 @@ export function ScenarioSelect() {
 
   const scenario = SCENARIOS[scenarioId]!;
 
+  /**
+   * 君主概览：直接跑一次 `createGame` 取真实开局数据。
+   * 手写预览会和建局逻辑分叉（补位将领、铺城、兵力池都只在 createGame 里生效），
+   * 玩家看到「25 城 28 将」、进游戏却是「25 城 51 将」，反而更像 bug。
+   */
   const rulers = useMemo(() => {
-    const owners = scenario.cityOwners ?? BASE_OWNERS;
+    const seedFaction =
+      [...scenario.factions]
+        .map((f) => ({
+          id: f.id,
+          cities: Object.values(scenario.cityOwners ?? BASE_OWNERS).filter(
+            (owner) => owner === f.id,
+          ).length,
+        }))
+        .sort((a, b) => b.cities - a.cities)[0]?.id ?? scenario.factions[0]!.id;
+
+    let state: ReturnType<typeof createGame>;
+    try {
+      state = createGame({
+        scenarioId,
+        playerFactionId: seedFaction,
+        aiEnabled: false,
+      });
+    } catch {
+      return [];
+    }
+
     return scenario.factions
       .map((f) => {
-        const cityIds = Object.entries(owners)
-          .filter(([, owner]) => owner === f.id)
-          .map(([id]) => id);
-        const roster = scenario.rosters?.[f.id];
-        const generalIds = roster
-          ? roster
-          : Object.values(GENERAL_TABLE)
-              .filter((g) => {
-                if (g.status !== 'active') return false;
-                if (g.isRuler && g.id === f.rulerId) return true;
-                return cityIds.includes(g.locationId);
-              })
-              .map((g) => g.id);
-        // 文官带兵本来可以是 0，不能再用 `|| 400` 兜底，否则开局兵力会虚高
-        const troops = generalIds.reduce((sum, id) => {
-          const g = GENERAL_TABLE[id];
-          return sum + (g ? g.troops : 400);
-        }, 0);
-        return { faction: f, cities: cityIds.length, generals: generalIds.length, troops };
+        const cityIds = new Set(
+          Object.values(state.cities)
+            .filter((c) => c.ownerId === f.id)
+            .map((c) => c.id),
+        );
+        const gens = Object.values(state.generals).filter(
+          (g) =>
+            g.status === 'active' &&
+            (cityIds.has(g.locationId) || (g.isRuler && g.id === f.rulerId)),
+        );
+        return {
+          faction: f,
+          cities: cityIds.size,
+          generals: gens.length,
+          troops: gens.reduce((sum, g) => sum + g.troops, 0),
+        };
       })
       .filter((r) => r.cities > 0)
       .sort((a, b) => b.cities - a.cities);
-  }, [scenario]);
+  }, [scenario, scenarioId]);
 
   const current = rulers.find((r) => r.faction.id === selected);
 

@@ -156,7 +156,7 @@ describe('内政与军备', () => {
 
   it('征兵受 民忠 / 带兵上限 / 钱 / 粮 四重限制', () => {
     const s = fresh();
-    // 江夏 300 金 → 最多 150 兵（2 金/兵）
+    // 江夏 300 金 / 1200 粮 → 200 兵（1 金 + 1 粮/兵）
     const { state, result } = reduce(s, {
       t: 'RECRUIT',
       cityId: 'jiangxia',
@@ -164,9 +164,9 @@ describe('内政与军备', () => {
       amount: 200,
     });
     expect(result.ok).toBe(true);
-    expect(state.generals.guanyu!.troops).toBe(1050);
-    expect(state.cities.jiangxia!.gold).toBe(0);
-    expect(state.cities.jiangxia!.food).toBe(1050);
+    expect(state.generals.guanyu!.troops).toBe(1100);
+    expect(state.cities.jiangxia!.gold).toBe(100);
+    expect(state.cities.jiangxia!.food).toBe(1000);
   });
 
   it('批量征兵：按带兵余量一次分配全城，且不超上限', () => {
