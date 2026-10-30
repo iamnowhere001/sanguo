@@ -1,7 +1,7 @@
 /**
- * 临时地图体检脚本：输出城池间距、关港落位、路网连通分量与 SVG 总览。
+ * 地图体检：输出城池间距、关港落位、路网连通分量，并把全图与分区 SVG 写到 `reports/map-audit/`。
  */
-import { writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { GATES } from '../src/data/tables/gates';
 import { MAP, CITY_COORDS } from '../src/data/tables/geography';
 import { CITY_TABLE } from '../src/data/tables/cities';
@@ -13,6 +13,9 @@ const anchors = cityAnchors();
 const blocks = cityBlocks();
 const sites = gateSites();
 const grid = terrainGrid();
+
+const SVG_DIR = 'reports/map-audit';
+mkdirSync(SVG_DIR, { recursive: true });
 
 // ── 城池间距 ─────────────────────────────────────────────
 const ids = Object.keys(anchors);
@@ -39,14 +42,23 @@ for (const id of ids) {
 }
 
 // ── 水域连通分量（陆军，不含渡口）────────────────────────
+/**
+ * `grid.cells` 存的是 TILE_KINDS 的下标，直接喂给 `isWaterKind` 会永远为假
+ * （旧版就是踩了这个坑，把整张水网当陆地报出「59 城一个连通分量」）。
+ * 这里统一走 `tileKindAt` 拿字符串；山岭按陆军不可通行处理。
+ */
+const landBlocked = (col: number, row: number): boolean => {
+  const kind = tileKindAt(col, row);
+  return isWaterKind(kind) || kind === 'mountain';
+};
+
 const comp = new Int32Array(cols * rows).fill(-1);
 let compCount = 0;
 const sizes: number[] = [];
 const q = new Int32Array(cols * rows);
 for (let i = 0; i < cols * rows; i++) {
   if (comp[i] !== -1) continue;
-  const k = grid.cells[i]!;
-  if (isWaterKind(k as never) || k === 7) continue;
+  if (landBlocked(i % cols, (i - (i % cols)) / cols)) continue;
   const id = compCount++;
   comp[i] = id;
   let head = 0, tail = 0;
@@ -60,8 +72,7 @@ for (let i = 0; i < cols * rows; i++) {
       if (nc < 0 || nr < 0 || nc >= cols || nr >= rows) continue;
       const ni = nr * cols + nc;
       if (comp[ni] !== -1) continue;
-      const kk = grid.cells[ni]!;
-      if (isWaterKind(kk as never) || kk === 7) continue;
+      if (landBlocked(nc, nr)) continue;
       comp[ni] = id;
       q[tail++] = ni;
     }
@@ -145,7 +156,7 @@ const writeSvg = (name: string, x: number, y: number, w: number, h: number): voi
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${w * 3}" height="${h * 3}" viewBox="${x} ${y} ${w} ${h}">` +
     `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#182f3a"/>${bodies}</svg>`;
-  writeFileSync(`/private/var/folders/01/1qlxz5m15h95dvkypq9nslzc0000gn/T/opencode/${name}.svg`, svg);
+  writeFileSync(`${SVG_DIR}/${name}.svg`, svg);
 };
 writeSvg('map-current', 0, 0, cols, rows);
 writeSvg('map-guanzhong', 180, 120, 150, 120);
@@ -153,4 +164,4 @@ writeSvg('map-jingzhou', 250, 180, 140, 120);
 writeSvg('map-jiangdong', 370, 180, 120, 110);
 writeSvg('map-hebei', 290, 40, 180, 110);
 writeSvg('map-yizhou', 80, 150, 190, 200);
-console.log('\nSVG 已写入 map-current.svg 及分区图');
+console.log(`\nSVG 已写入 ${SVG_DIR}/map-current.svg 及 5 张分区图`);

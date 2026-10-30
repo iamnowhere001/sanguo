@@ -13,7 +13,7 @@
  */
 export type PaintLayer = 'terrain' | 'territory' | 'entities' | 'interaction';
 
-export const PAINT_LAYERS: PaintLayer[] = ['terrain', 'territory', 'entities', 'interaction'];
+const PAINT_LAYERS: PaintLayer[] = ['terrain', 'territory', 'entities', 'interaction'];
 
 const LAYER_INDEX: Record<PaintLayer, number> = {
   terrain: 0,

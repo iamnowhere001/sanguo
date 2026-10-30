@@ -61,7 +61,7 @@ const PROFILE_BY_ID = Object.fromEntries(COUNCIL_PROFILES.map((p) => [p.id, p]))
   CouncilProfileDef
 >;
 
-export const FIELD_LABEL: Record<string, string> = {
+const FIELD_LABEL: Record<string, string> = {
   agriculture: '农业',
   commerce: '商业',
   loyalty: '民忠',
@@ -87,7 +87,7 @@ export interface CouncilOrder {
   reason: string;
 }
 
-export interface CouncilCard {
+interface CouncilCard {
   id: 'food' | 'arms' | 'talent';
   label: string;
   title: string;
@@ -97,7 +97,7 @@ export interface CouncilCard {
   action: string;
 }
 
-export interface CouncilRisk {
+interface CouncilRisk {
   id: string;
   text: string;
   tone: 'warn' | 'danger' | 'info';

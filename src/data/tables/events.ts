@@ -2,7 +2,7 @@ import type { LogKind } from '../../core/state';
 
 export type EventId = 'locust' | 'caravan' | 'refugees' | 'scholar';
 
-export interface EventOptionDef {
+interface EventOptionDef {
   id: string;
   label: string;
   hint: string;

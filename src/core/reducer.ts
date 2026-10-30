@@ -179,7 +179,7 @@ export function runMonthlyPipeline(s: GameState, facts = emptyMonthFacts()): str
  * 月度结算本体（不含时间推进）。
  * 旬回合下只有跨月的那一旬调用这里；其余两旬只推进部队。
  */
-export function runMonthStages(s: GameState, facts = emptyMonthFacts()): string[] {
+function runMonthStages(s: GameState, facts = emptyMonthFacts()): string[] {
   // 【优化】E09 忠诚改为事件驱动，不再全员每月 −1
   runStaminaRecovery(s);
   runUpkeep(s, facts);

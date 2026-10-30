@@ -44,7 +44,7 @@ export function facilitiesOf(s: GameState, cityId: string): Facility[] {
   return (s.facilities ?? []).filter((f) => f.cityId === cityId);
 }
 
-export function countFacilities(s: GameState, cityId: string, kind: FacilityKind): number {
+function countFacilities(s: GameState, cityId: string, kind: FacilityKind): number {
   return facilitiesOf(s, cityId).filter((f) => f.kind === kind).length;
 }
 

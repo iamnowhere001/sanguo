@@ -9,6 +9,8 @@ import {
   LON_RANGE,
   MAP,
   MARSHES,
+  inMap,
+  tileKey,
   RIDGES,
   RIVERS,
   lonLatToTile,
@@ -25,7 +27,7 @@ import {
  * 这一层目前只服务三件事：
  * 1. 渲染（地形底图、河流、山脉）；
  * 2. 城市落位校验（不落水、不重叠）；
- * 3. 为 M 档的通行性 / 寻路预留数据结构（`isPassable`）。
+ * 3. 为寻路与落位提供地形查询（`tileKindAt` / `nearestLandTile`）。
  *
  * **不参与规则**：`neighborsOf()` 仍查邻接表，S 档不改玩法。
  */
@@ -340,11 +342,6 @@ export function worldToTile(x: number, y: number): { col: number; row: number } 
   return { col: Math.floor(x / MAP.tile), row: Math.floor(y / MAP.tile) };
 }
 
-/** 该格是否可通行（M 档寻路预留；S 档仅用于落城校验） */
-export function isPassable(col: number, row: number): boolean {
-  return !isWaterKind(tileKindAt(col, row));
-}
-
 /** 螺旋搜索最近的可落城格 */
 export function nearestLandTile(col: number, row: number, maxRadius = 6): { col: number; row: number } {
   const ok = (c: number, r: number): boolean => {
@@ -417,7 +414,6 @@ export interface CityBlock extends CityAnchor {
 let blockCache: Record<string, CityBlock> | null = null;
 let anchorCache: Record<string, CityAnchor> | null = null;
 
-const keyOfTile = (col: number, row: number): string => `${col},${row}`;
 
 /** 城墙 9 格 */
 function wallOf(col: number, row: number): Array<{ col: number; row: number }> {
@@ -436,8 +432,6 @@ function approachesOf(col: number, row: number): Array<{ col: number; row: numbe
   });
 }
 
-const inBounds = (t: { col: number; row: number }): boolean =>
-  t.col >= 0 && t.row >= 0 && t.col < MAP.cols && t.row < MAP.rows;
 
 /** 落城候选评分：越小越好；`null` 表示硬性不可用 */
 interface FootprintCost {
@@ -466,8 +460,8 @@ function footprintCost(
 ): FootprintCost | null {
   let sealed = 0;
   for (const t of wallOf(col, row)) {
-    if (!inBounds(t)) return null;
-    if (walls.has(keyOfTile(t.col, t.row))) return null;
+    if (!inMap(t.col, t.row)) return null;
+    if (walls.has(tileKey(t.col, t.row))) return null;
     const kind = tileKindAt(t.col, t.row);
     if (isWaterKind(kind) || kind === 'mountain') return null;
   }
@@ -476,8 +470,8 @@ function footprintCost(
   let blockedGates = 0;
   let landGates = 0;
   for (const t of approachesOf(col, row)) {
-    if (!inBounds(t)) return null;
-    if (walls.has(keyOfTile(t.col, t.row))) {
+    if (!inMap(t.col, t.row)) return null;
+    if (walls.has(tileKey(t.col, t.row))) {
       sealed += 1;
       continue;
     }
@@ -554,9 +548,9 @@ export function cityBlocks(): Record<string, CityBlock> {
     const sealed: GateSide[] = [];
     for (const side of GATE_SIDES) {
       const [ax, ay] = APPROACH_OFFSET[side];
-      if (used.has(keyOfTile(col + ax, row + ay))) sealed.push(side);
+      if (used.has(tileKey(col + ax, row + ay))) sealed.push(side);
     }
-    for (const t of wallOf(col, row)) used.set(keyOfTile(t.col, t.row), cityId);
+    for (const t of wallOf(col, row)) used.set(tileKey(t.col, t.row), cityId);
 
     const center = tileCenter(col, row);
     const tiles: CityBlock['tiles'] = [];
@@ -621,18 +615,18 @@ export function cityTileIndex(): {
     for (const t of block.tiles) {
       const isCenter = t.col === block.col && t.row === block.row;
       const isCorner = !isCenter && t.col !== block.col && t.row !== block.row;
-      wall.set(keyOfTile(t.col, t.row), {
+      wall.set(tileKey(t.col, t.row), {
         cityId: block.cityId,
         role: isCenter ? 'center' : isCorner ? 'corner' : 'gate',
       });
     }
     for (const side of GATE_SIDES) {
       const g = block.gateTiles[side];
-      wall.set(keyOfTile(g.col, g.row), { cityId: block.cityId, side, role: 'gate' });
+      wall.set(tileKey(g.col, g.row), { cityId: block.cityId, side, role: 'gate' });
       const a = block.approaches[side];
       // 门外格可能被两座城共用：先到先得，保证结果确定
-      if (!approach.has(keyOfTile(a.col, a.row))) {
-        approach.set(keyOfTile(a.col, a.row), { cityId: block.cityId, side });
+      if (!approach.has(tileKey(a.col, a.row))) {
+        approach.set(tileKey(a.col, a.row), { cityId: block.cityId, side });
       }
     }
   }
@@ -645,7 +639,7 @@ export function wallTileAt(
   col: number,
   row: number,
 ): { cityId: string; side?: GateSide; role: WallRole } | null {
-  return cityTileIndex().wall.get(keyOfTile(col, row)) ?? null;
+  return cityTileIndex().wall.get(tileKey(col, row)) ?? null;
 }
 
 /** 该格是否是某座城的门外格（出城列阵 / 围城落位） */
@@ -653,7 +647,7 @@ export function approachTileAt(
   col: number,
   row: number,
 ): { cityId: string; side: GateSide } | null {
-  return cityTileIndex().approach.get(keyOfTile(col, row)) ?? null;
+  return cityTileIndex().approach.get(tileKey(col, row)) ?? null;
 }
 
 /** 城心格 → 城 id */
@@ -662,10 +656,10 @@ export function cityAtCenter(col: number, row: number): string | null {
   if (!centerIndexCache) {
     centerIndexCache = new Map();
     for (const block of Object.values(cityBlocks())) {
-      centerIndexCache.set(keyOfTile(block.col, block.row), block.cityId);
+      centerIndexCache.set(tileKey(block.col, block.row), block.cityId);
     }
   }
-  return centerIndexCache.get(keyOfTile(col, row)) ?? null;
+  return centerIndexCache.get(tileKey(col, row)) ?? null;
 }
 
 /** 城池世界坐标：优先地理配表，缺失时退回旧 `City.x/y` */

@@ -4,11 +4,11 @@ import { migrateSave } from './migrate';
 export const SAVE_VERSION = 6;
 /** IndexedDB 结构版本：v6 起旧档一律作废，升级时清空存档库 */
 const DB_VERSION = 2;
-export const DB_NAME = 'sanguo-baye';
-export const STORE_NAME = 'saves';
+const DB_NAME = 'sanguo-baye';
+const STORE_NAME = 'saves';
 
 /** 【优化】§6.4 平衡预设：classic 锁原版参数，balanced 走校准值 */
-export interface SavePresets {
+interface SavePresets {
   balance: 'classic' | 'balanced';
   rules: Record<string, boolean>;
 }
@@ -37,7 +37,7 @@ interface StoredSaveFile {
   state: GameState;
 }
 
-export function defaultPresets(state: GameState): SavePresets {
+function defaultPresets(state: GameState): SavePresets {
   return {
     balance: 'balanced',
     rules: {

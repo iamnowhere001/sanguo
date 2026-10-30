@@ -22,7 +22,7 @@ export interface AudioCue {
 /** 单一伤害占目标满编的比例超过此值，追加“重击”层 */
 export const HEAVY_HIT_RATIO = 0.25;
 /** 拿不到目标满编时的绝对兜底阈值 */
-export const HEAVY_HIT_FLOOR = 260;
+const HEAVY_HIT_FLOOR = 260;
 
 const MOVE_BY_CLASS: Record<UnitClass, OneShotId> = {
   infantry: 'unit.move',

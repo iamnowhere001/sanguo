@@ -1,6 +1,6 @@
 import { BALANCE } from '../data/tables/balance';
-import { MAP } from '../data/tables/geography';
-import { inMap, marchCostForArmy, marchCostOfTile, marchStepCost } from '../data/tables/marchCost';
+import { MAP, inMap, tileKey } from '../data/tables/geography';
+import { marchCostForArmy, marchCostOfTile, marchStepCost } from '../data/tables/marchCost';
 import type { Army, GameState, General, GridPoint, GeneralSkillId, SiegeWeaponId, UnitClass } from '../core/state';
 import { defendersOf } from '../core/state';
 import { generalSkillOf, skillMarchMpBonus } from '../data/tables/generalTraits';
@@ -78,17 +78,6 @@ export function armyClassOf(army: Army): UnitClass {
   return army.unitClass ?? 'infantry';
 }
 
-export function isMarchable(col: number, row: number, unitClass?: UnitClass): boolean {
-  return (
-    Number.isFinite(marchCostOfTile(col, row, unitClass)) &&
-    col >= 0 &&
-    row >= 0 &&
-    col < MAP.cols &&
-    row < MAP.rows
-  );
-}
-
-const keyOf = (col: number, row: number) => `${col},${row}`;
 
 // ── 移动力 ─────────────────────────────────────────────────
 /**
@@ -723,7 +712,7 @@ export function reachableTargets(
 
 // ── 移动力与行军 ────────────────────────────────────────────
 /** 剩余路程（MP）：含当前这一步已走的零头 */
-export function armyDaysRemaining(_s: GameState, army: Army): number {
+function armyDaysRemaining(_s: GameState, army: Army): number {
   let prev: GridPoint | null = army.at;
   let total = 0;
   for (let i = 0; i < army.path.length; i++) {
@@ -945,7 +934,7 @@ export function armyReach(s: GameState, army: Army, cached?: MarchField): Map<st
       const d = field.dist[row * MAP.cols + col]!;
       if (!Number.isFinite(d) || d > budget) continue;
       if (col === army.at.col && row === army.at.row) continue;
-      out.set(keyOf(col, row), d);
+      out.set(tileKey(col, row), d);
     }
   }
   return out;
@@ -1009,7 +998,7 @@ export function dispatchField(
  * 目的地本身没有任何路程上限（多旬行军令会一直续走），但把整块大陆都点亮
  * 既不可读也画不动，所以只铺 3 旬的「第二圈」，更远的格仍然可点。
  */
-export const DISPATCH_HINT_XUN = 3;
+const DISPATCH_HINT_XUN = 3;
 
 export interface DispatchReach {
   /** 本旬可达：实色填充 + 实线边界 */
@@ -1049,7 +1038,7 @@ export function dispatchReachOf(
         const center = cityAtCenter(col, row);
         if (!center || s.cities[center]?.ownerId !== factionId) continue;
       }
-      (d <= df.mp ? within : beyond).add(keyOf(col, row));
+      (d <= df.mp ? within : beyond).add(tileKey(col, row));
     }
   }
   return { within, beyond };
@@ -1637,4 +1626,3 @@ export function runSiegeAttrition(s: GameState): void {
   }
 }
 
-export { cityAnchors, blockOf, sortieBlocked, sortieBlockedReason, gatesOf, freeGatesOf, siegeTargetOf };

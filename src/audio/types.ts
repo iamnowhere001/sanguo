@@ -8,7 +8,7 @@
  */
 
 /** 音效域：同时是混音总线 */
-export const SOUND_CATEGORIES = [
+const SOUND_CATEGORIES = [
   'bgm',
   'ambience',
   'ui',

@@ -26,9 +26,15 @@ import {
   projectLonLat,
   riverWorldWidth,
 } from '../data/tables/geography';
+import { clamp } from '../systems/formulas';
 import { isLand } from './terrainGrid';
 import { gateSites } from './gateGrid';
-import { clamp } from './camera';
+
+/** 垂线方向单位向量 + 原长（len 供沿线偏移的调用方复用，避免二次开方） */
+const normalOf = (dx: number, dy: number) => {
+  const len = Math.hypot(dx, dy) || 1;
+  return { nx: -dy / len, ny: dx / len, len };
+};
 
 export interface Bounds {
   x: number;
@@ -276,9 +282,7 @@ function riverPath(pts: Proj[], width: number, seed: number): Path2D {
     const c = dense[Math.min(dense.length - 1, i + 1)]!;
     const dx = c.x - a.x;
     const dy = c.y - a.y;
-    const len = Math.hypot(dx, dy) || 1;
-    const nx = -dy / len;
-    const ny = dx / len;
+    const { nx, ny } = normalOf(dx, dy);
     const wobble =
       1 +
       smoothNoise(i * 0.17, seed) * 0.05 +
@@ -423,9 +427,7 @@ function paintCoast(ctx: CanvasRenderingContext2D, b: Bounds): void {
     acc = 0;
     const dx = c.x - a.x;
     const dy = c.y - a.y;
-    const len = Math.hypot(dx, dy) || 1;
-    const nx = -dy / len;
-    const ny = dx / len;
+    const { nx, ny } = normalOf(dx, dy);
     const mid = { x: (a.x + c.x) / 2, y: (a.y + c.y) / 2 };
     // 用 isLand 判断哪一侧是海
     const side = isLand(
@@ -527,9 +529,7 @@ function ridgeMassifs(ridge: (typeof ridgePts)[number], idx: number): Massif[] {
     const c = pts[i + 1]!;
     const dx = c.x - a.x;
     const dy = c.y - a.y;
-    const len = Math.hypot(dx, dy) || 1;
-    const nx = -dy / len;
-    const ny = dx / len;
+    const { nx, ny, len } = normalOf(dx, dy);
     const spacing = unit * (0.54 + r() * 0.18);
     const steps = Math.max(2, Math.round(len / spacing));
     for (let s = 0; s < steps; s++) {
@@ -720,9 +720,7 @@ function paintMountains(ctx: CanvasRenderingContext2D, b: Bounds): void {
         const c = dense[Math.min(dense.length - 1, i + 1)]!;
         const dx = c.x - a.x;
         const dy = c.y - a.y;
-        const len = Math.hypot(dx, dy) || 1;
-        const nx = -dy / len;
-        const ny = dx / len;
+        const { nx, ny } = normalOf(dx, dy);
         const n1 = smoothNoise(i * 0.24, idx * 5 + 1);
         const n2 = smoothNoise(i * 0.19 + 9, idx * 7 + 3);
         const wl = w * coverage * (0.66 + n1 * 0.13);
@@ -774,9 +772,7 @@ function paintMountains(ctx: CanvasRenderingContext2D, b: Bounds): void {
       const c = ridge.pts[i + 1]!;
       const dx = c.x - a.x;
       const dy = c.y - a.y;
-      const len = Math.hypot(dx, dy) || 1;
-      const nx = -dy / len;
-      const ny = dx / len;
+      const { nx, ny, len } = normalOf(dx, dy);
       const count = Math.max(3, Math.round(len / 24));
       for (let k = 0; k < count; k++) {
         const t = (k + 0.5) / count;
@@ -821,9 +817,7 @@ function paintMountains(ctx: CanvasRenderingContext2D, b: Bounds): void {
       const c = ridge.pts[i + 1]!;
       const dx = c.x - a.x;
       const dy = c.y - a.y;
-      const len = Math.hypot(dx, dy) || 1;
-      const nx = -dy / len;
-      const ny = dx / len;
+      const { nx, ny, len } = normalOf(dx, dy);
       const count = Math.max(2, Math.round(len / (w * 0.35 + 22)));
       for (let k = 0; k < count; k++) {
         const t = (k + 0.5) / count;
@@ -868,9 +862,7 @@ function drawPassTrail(ctx: CanvasRenderingContext2D, site: ReturnType<typeof ga
     const c = base[Math.min(base.length - 1, i + 1)]!;
     const dx = c.x - a.x;
     const dy = c.y - a.y;
-    const len = Math.hypot(dx, dy) || 1;
-    const nx = -dy / len;
-    const ny = dx / len;
+    const { nx, ny } = normalOf(dx, dy);
     const off =
       (smoothNoise(i * 0.19, seed) - 0.5) * MAP.tile * 0.34 +
       Math.sin(i * 0.55 + seed) * MAP.tile * 0.08;
@@ -912,9 +904,7 @@ function drawPassTrail(ctx: CanvasRenderingContext2D, site: ReturnType<typeof ga
     const c = line[i + 1]!;
     const dx = c.x - a.x;
     const dy = c.y - a.y;
-    const len = Math.hypot(dx, dy) || 1;
-    const nx = -dy / len;
-    const ny = dx / len;
+    const { nx, ny } = normalOf(dx, dy);
     const half = MAP.tile * (0.17 + r() * 0.1);
     ctx.beginPath();
     ctx.moveTo(p.x - nx * half, p.y - ny * half);
@@ -935,9 +925,7 @@ function drawPassTrail(ctx: CanvasRenderingContext2D, site: ReturnType<typeof ga
     const c = line[i + 1]!;
     const dx = c.x - a.x;
     const dy = c.y - a.y;
-    const len = Math.hypot(dx, dy) || 1;
-    const nx = -dy / len;
-    const ny = dx / len;
+    const { nx, ny } = normalOf(dx, dy);
     for (const side of [-1, 1]) {
       if (r() < 0.3) continue;
       const off = MAP.tile * (0.45 + r() * 0.3) * side;
@@ -1542,9 +1530,7 @@ function paintRivers(ctx: CanvasRenderingContext2D, b: Bounds): void {
       const c = river.pts[i + 1]!;
       const dx = c.x - a.x;
       const dy = c.y - a.y;
-      const len = Math.hypot(dx, dy) || 1;
-      const nx = -dy / len;
-      const ny = dx / len;
+      const { nx, ny, len } = normalOf(dx, dy);
       const ang = Math.atan2(dy, dx);
 
       // 深浅水斑：拉长的椭圆顺着水流铺，打散整片纯色江面

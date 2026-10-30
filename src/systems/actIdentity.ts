@@ -11,7 +11,7 @@ import type { GameState } from '../core/state';
  * 单独成文件是为了让 policy / economy / domestic 取数时不反过来依赖
  * chapter 系统，避免系统层循环引用。
  */
-export function activeIdentity(state: GameState): ActIdentityDef | undefined {
+function activeIdentity(state: GameState): ActIdentityDef | undefined {
   const id = state.chapter?.identity;
   if (!id || state.settings.ruleset === 'classic') return undefined;
   return ACT_IDENTITIES[id];

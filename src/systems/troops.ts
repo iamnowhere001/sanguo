@@ -1,6 +1,7 @@
 import type { City, GameState, General } from '../core/state';
 import { effForce, effIntellect } from '../core/state';
-import { troopCap } from './formulas';
+import { generalSkillOf, skillRecruitMult } from '../data/tables/generalTraits';
+import { recruitCap, troopCap } from './formulas';
 
 /**
  * 兵力归属层。
@@ -12,6 +13,19 @@ import { troopCap } from './formulas';
  *
  * 这样既能「集中屯兵」，也能随时把兵分给任何一名在城武将。
  */
+
+/**
+ * 单次征兵上限：民忠基线 × 城池兵源特性 × 主将「亲和」。
+ *
+ * 征兵、批量征兵和城池面板预览都走这里，避免三处各乘一遍倍率后算出对不上的数。
+ */
+export function recruitCapFor(city: City, general?: General): number {
+  return Math.floor(
+    recruitCap(city.loyalty) *
+      (city.skill?.recruitCapMult ?? 1) *
+      skillRecruitMult(general ? generalSkillOf(general) : undefined),
+  );
+}
 
 /** 武将当前带兵上限（含装备加成） */
 export function troopCapOf(s: GameState, g: General): number {

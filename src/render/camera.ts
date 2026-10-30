@@ -1,4 +1,5 @@
 import { MAP } from '../data/tables/geography';
+import { clamp } from '../systems/formulas';
 
 /**
  * 地图相机（P0-3）。
@@ -25,8 +26,9 @@ export interface Layout {
   oy: number;
 }
 
-export const MIN_ZOOM = 0.3;
-/** 200% = 城池与野战单位的默认作战视角 */
+/** 20% = 1/CAMERA_BASE，整图刚好布满视口，再小就没有意义 */
+export const MIN_ZOOM = 0.2;
+/** 300% = 城池与野战单位的默认作战视角 */
 export const DEFAULT_ZOOM = 3;
 export const MAX_ZOOM = 6;
 
@@ -42,13 +44,10 @@ export const MAX_ZOOM = 6;
  * 档位只能保证"构图稳定"，不能保证"一个源像素对整数个屏幕像素"。
  */
 export const ZOOM_STOPS: readonly number[] = [
-  0.2, 0.3, 0.45, 0.65, 0.85, 1, 1.25, 1.6, 2, 2.5, 3, 3.2, 4, 5, 6, MAX_ZOOM,
+  MIN_ZOOM, 0.3, 0.45, 0.65, 0.85, 1, 1.25, 1.6, 2, 2.5, 3, 3.2, 4, 5, MAX_ZOOM,
 ];
 
 const CAMERA_BASE = 5;
-
-export const clamp = (v: number, lo: number, hi: number): number =>
-  Math.min(hi, Math.max(lo, v));
 
 /** 世界矩形固定为 MAP.width × MAP.height，换剧本时海岸线不会跟着缩放 */
 export function layoutOf(w: number, h: number): Layout {

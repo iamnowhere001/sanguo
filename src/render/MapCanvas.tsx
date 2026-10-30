@@ -57,7 +57,6 @@ import {
   MAX_ZOOM,
   MIN_ZOOM,
   centerOnWorld,
-  clamp,
   clampPan,
   layoutOf,
   nextZoomStop,
@@ -68,6 +67,7 @@ import {
   type Layout,
   type MapView,
 } from './camera';
+import { clamp } from '../systems/formulas';
 import { Minimap } from './Minimap';
 import { territoryField, territorySignature } from '../systems/territory';
 import { territoryPaint, territoryWash } from './territoryPaint';
@@ -152,9 +152,9 @@ function project(
  * 粗档：384 世界单位一块、1.5× 分辨率、LRU 32 块（约 42MB），州郡视角的底图。
  * 细档：144 世界单位一块、3× 分辨率、LRU 16 块（约 12MB），高倍率才启用。
  *
- * 为什么要两档：720% 时 layout.scale≈0.753、DPR 2，一个世界单位占 10.8 个设备像素，
- * 而粗档只烘 1.5 像素/单位，放大后每源像素摊 7 个设备像素，山脊、江岸全成色块。
- * 细档把每单位烘到 3 像素（≈3.6 设备像素）；144 的块宽又让整张地图只有 4×3 块，
+ * 为什么要两档：600%（MAX_ZOOM）时 layout.scale≈0.753、DPR 2，一个世界单位占 9 个设备像素，
+ * 而粗档只烘 1.5 像素/单位，放大后每源像素摊 6 个设备像素，山脊、江岸全成色块。
+ * 细档把每单位烘到 3 像素（≈3 设备像素）；144 的块宽又让整张地图只有 4×3 块，
  * 高倍率视野（约 400×310 世界单位）两三块就够，烘一次能长期复用。
  */
 const COARSE_STEP = 384;
@@ -908,9 +908,9 @@ const CLASS_PAPER = 'rgba(242,233,210,0.92)';
  *
  * - 棋子半径 < 6px（全图 20% 档）：任何字形都会糊成一团，退化成色点；
  * - 6–12px（州郡 100% 档）：单字，汉字在这个尺寸比图形更易读，也贴三国志系列传统；
- * - ≥ 12px（720% 近景）：矢量图徽，盾 / 蹄铁 / 弓 / 帆 / 双戟 / 卦爻。
+ * - ≥ 12px（600% 近景）：矢量图徽，盾 / 蹄铁 / 弓 / 帆 / 双戟 / 卦爻。
  */
-export function drawUnitClassMark(
+function drawUnitClassMark(
   ctx: CanvasRenderingContext2D,
   px: number,
   py: number,
@@ -1199,7 +1199,7 @@ function battleUnitAt(b: BattleState, x: number, y: number): BattleUnit | undefi
 }
 
 /** 战斗镜头焦点：野战取接战中心，攻城取城郭中心 */
-export function battleFocusWorld(b: BattleState): { x: number; y: number } {
+function battleFocusWorld(b: BattleState): { x: number; y: number } {
   if (b.field) return { x: b.field.x, y: b.field.y };
   if (b.cityBlock) {
     return {
@@ -1218,7 +1218,7 @@ export function battleFocusWorld(b: BattleState): { x: number; y: number } {
 /**
  * 战斗默认镜头倍率。
  *
- * 行军用 200% 看城池细节；战棋需要同时看到双方阵线与可达范围，
+ * 行军用 300% 看城池细节；战棋需要同时看到双方阵线与可达范围，
  * 因此按「一格约 52px」反算，小屏和大屏的战术视野保持一致。
  */
 function battleZoomFor(w: number, h: number): number {
@@ -1433,13 +1433,13 @@ export function MapCanvas({
   useEffect(() => {
     if (!size.w || !size.h || mobileInit.current) return;
     mobileInit.current = true;
-    // 大地图战斗：镜头对准接战点；平时默认 200% 州郡视角
+    // 大地图战斗：镜头对准接战点；平时默认 300% 州郡视角
     if (battle) {
       const focus = battleFocusWorld(battle);
       setView(centerOnWorld(focus.x, focus.y, battleZoomFor(size.w, size.h), size.w, size.h));
       return;
     }
-    // 默认州郡视角：任何屏幕都固定 200%，看清城池与关港
+    // 默认州郡视角：任何屏幕都固定 DEFAULT_ZOOM（300%），看清城池与关港
     centerView(DEFAULT_ZOOM);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [size.w, size.h]);
@@ -1512,7 +1512,7 @@ export function MapCanvas({
     const rapid = paintAt - lastPaintAt.current < RAPID_PAINT_MS;
     lastPaintAt.current = paintAt;
     const fine = view.zoom >= FINE_FROM;
-    // 高倍率时只用细档补烘：粗档在 720% 下本来就是模糊垫底，烘它纯属浪费预算
+    // 高倍率时只用细档补烘：粗档在 600% 下本来就是模糊垫底，烘它纯属浪费预算
     coarseTier.budget = rapid || fine ? 0 : CHUNK_BAKE_BUDGET;
     fineTier.budget = rapid || !fine ? 0 : FINE_BAKE_BUDGET;
     let missingChunks = 0;

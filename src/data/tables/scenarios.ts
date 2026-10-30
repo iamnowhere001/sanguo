@@ -21,7 +21,7 @@ export interface ScenarioDef {
   description: string;
   difficulty: string;
   factions: Faction[];
-  /** 若给出，覆盖城池归属（完整 61 城） */
+  /** 若给出，覆盖城池归属（完整 59 城） */
   cityOwners?: Record<string, string | null>;
   /** 势力 -> 参战武将 id 列表；未列出的非在野武将本剧本不登场 */
   rosters?: Record<string, string[]>;
@@ -34,7 +34,7 @@ function mk(id: string, name: string, rulerId: string, color: string): Faction {
   return { id, name, rulerId, color, isPlayer: false, cityIds: [] };
 }
 
-/** 四剧本共用一张 61 城节点图 */
+/** 四剧本共用一张 59 城节点图 */
 const MAP_EDGES: MapEdge[] = [
   // 凉州 / 关中
   { a: 'tianshui', b: 'wuwei', cost: 3 },

@@ -15,7 +15,7 @@ import { planCityOrders, type CouncilProfile } from './council';
  */
 
 /** 委任城的施政倾向：默认均衡；玩家可在城池面板改 */
-export type DelegationProfile = CouncilProfile;
+type DelegationProfile = CouncilProfile;
 
 export interface DelegationResult {
   cityId: string;

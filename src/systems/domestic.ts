@@ -4,9 +4,10 @@ import { done, fail, type OpResult } from '../core/result';
 import type { City, DomesticCmd, GameState, General, SearchEntry } from '../core/state';
 import { effForce, effIntellect, garrisonTroopsOf, neighborsOf } from '../core/state';
 import { log } from './economy';
-import { garrisonCapOf, recruitCap, statGain, tradeLimit } from './formulas';
+import { garrisonCapOf, statGain, tradeLimit } from './formulas';
 import {
   poolOf,
+  recruitCapFor,
   troopCapOf,
 } from './troops';
 import {
@@ -229,7 +230,7 @@ export function doRecruit(
   const g = s.generals[generalId]!;
 
   const skill = city.skill;
-  const capByLoyalty = Math.floor(recruitCap(city.loyalty) * (skill?.recruitCapMult ?? 1));
+  const capByLoyalty = recruitCapFor(city, g);
   const capByGeneral = Math.max(0, troopCapOf(s, g) - g.troops);
   const recruitCost =
     city.ownerId === s.playerFactionId ? policyRecruitCostMult(s) : 1;
@@ -280,7 +281,6 @@ export function doRecruitAll(s: GameState, cityId: string): OpResult {
     .sort((a, b) => troopCapOf(s, b) - b.troops - (troopCapOf(s, a) - a.troops));
 
   const skill = city.skill;
-  const capByLoyalty = Math.floor(recruitCap(city.loyalty) * (skill?.recruitCapMult ?? 1));
   const recruitCost =
     city.ownerId === s.playerFactionId ? policyRecruitCostMult(s) : 1;
   const goldPerTroop = BALANCE.RECRUIT.goldPerTroop * (skill?.recruitCostMult ?? 1) * recruitCost;
@@ -295,7 +295,7 @@ export function doRecruitAll(s: GameState, cityId: string): OpResult {
   let total = 0;
   for (const g of gens) {
     if (budget <= 0) break;
-    const gap = Math.min(Math.max(0, troopCapOf(s, g) - g.troops), capByLoyalty);
+    const gap = Math.min(Math.max(0, troopCapOf(s, g) - g.troops), recruitCapFor(city, g));
     const give = Math.min(gap, budget);
     if (give <= 0) continue;
     g.troops += give;

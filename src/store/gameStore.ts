@@ -7,8 +7,8 @@ import { migrateSave } from '../save/migrate';
 import { audio, cuesForAction, playerCityGain, sceneFor } from '../audio';
 import { playtest } from './playtest';
 
-export type Screen = 'menu' | 'select' | 'game';
-export type ToastTone = 'info' | 'good' | 'warn' | 'danger';
+type Screen = 'menu' | 'select' | 'game';
+type ToastTone = 'info' | 'good' | 'warn' | 'danger';
 
 export interface Toast {
   id: number;
@@ -38,7 +38,7 @@ const COUNTED_ACTIONS = new Set([
   'DEPLOY',
 ]);
 
-export interface MonthClickStats {
+interface MonthClickStats {
   label: string;
   total: number;
   byAction: Record<string, number>;

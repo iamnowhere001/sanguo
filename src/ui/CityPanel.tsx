@@ -18,13 +18,13 @@ import {
   foodOutput,
   garrisonCapOf,
   monthlyFoodUpkeep,
-  recruitCap,
   statGain,
   taxIncome,
   tradeLimit,
   trainingMultiplier,
 } from '../systems/formulas';
 import { edictCapOf, edictLeftOf, canMarchThisTurn, troopCapOf } from '../systems/domestic';
+import { recruitCapFor } from '../systems/troops';
 import { canTransport, durabilityMaxOf, transportRoom } from '../systems/logistics';
 import { PROJECTS, PROJECT_ORDER } from '../data/tables/projects';
 import { projectStartReason } from '../systems/projects';
@@ -273,7 +273,7 @@ export function CityPanel({
   );
   const netFood = foodRate - upkeep;
 
-  const capByLoyalty = Math.floor(recruitCap(city.loyalty) * (skill?.recruitCapMult ?? 1));
+  const capByLoyalty = recruitCapFor(city, agent);
   const capByGeneral = agent ? Math.max(0, troopCapOf(state, agent) - agent.troops) : 0;
   const recruitCostMult = isMine ? policyRecruitCostMult(state) : 1;
   const goldPerTroop =

@@ -119,7 +119,7 @@ const ScenarioSchema = z.object({
   ),
 });
 
-export interface ScenarioTable {
+interface ScenarioTable {
   id: string;
   name: string;
   year: number;

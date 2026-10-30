@@ -43,7 +43,7 @@ export function planPilotCommand(
   return engaged ? 'inspire' : null;
 }
 
-export type HandoffReason = 'commander-critical' | 'commander-killable';
+type HandoffReason = 'commander-critical' | 'commander-killable';
 
 export interface PilotHandoff {
   reason: HandoffReason;

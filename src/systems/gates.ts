@@ -23,7 +23,7 @@ import { log } from './economy';
 
 export type GateAccess = 'own' | 'neutral' | 'open' | 'blocked';
 
-export interface GateProduction {
+interface GateProduction {
   gold: number;
   food: number;
 }
@@ -92,7 +92,7 @@ export function gateBlockedFor(s: GameState, gateId: string, factionId: string):
 }
 
 
-export function gateProductionOf(gateId: string): GateProduction {
+function gateProductionOf(gateId: string): GateProduction {
   const gate = gateById(gateId);
   return { gold: gate?.gold ?? 0, food: gate?.food ?? 0 };
 }
@@ -156,7 +156,7 @@ export function gatesOfFaction(s: GameState, factionId: string): GateFeature[] {
 }
 
 /** 关防到某格的距离：取通行线所有格的切比雪夫距离最小值 */
-export function gateDistanceTo(site: GateSite, at: GridPoint): number {
+function gateDistanceTo(site: GateSite, at: GridPoint): number {
   let best = Infinity;
   for (const p of site.lane) {
     const d = Math.max(Math.abs(p.col - at.col), Math.abs(p.row - at.row));
@@ -178,7 +178,7 @@ export function gateDistanceTo(site: GateSite, at: GridPoint): number {
  * 部队停在"视觉上贴着关"的位置时，实际可能差 2 格 —— 玩家会以为点不动、
  * 无法占领。放宽到 2 格（5×5）既不会让远处部队攻关，也不会卡住贴脸站位的部队。
  */
-export const GATE_ASSAULT_RADIUS = 2;
+const GATE_ASSAULT_RADIUS = 2;
 
 export function armyAtGate(army: Army, gateId: string): boolean {
   const site = gateSiteById(gateId);

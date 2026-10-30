@@ -24,7 +24,7 @@ export function durabilityMaxOf(city: City): number {
 }
 
 /** 补齐旧档缺失的耐久：按当前上限的 80% 起算，避免读档即濒临城破 */
-export function ensureCityDurability(city: City): void {
+function ensureCityDurability(city: City): void {
   const max = durabilityMaxOf(city);
   if (typeof city.durability !== 'number' || Number.isNaN(city.durability)) {
     city.durability = Math.round(max * 0.8);

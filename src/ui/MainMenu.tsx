@@ -116,7 +116,7 @@ function AboutModal({ onClose }: { onClose: () => void }) {
         </p>
         <p className="muted">
           技术：TypeScript + React + Canvas；规则层为纯函数，随机数可复现，配表启动即校验。
-          当前内容为 189 / 200 / 208 / 220 四个剧本、61 城、19 处关隘与港口；战斗直接在
+          当前内容为 189 / 200 / 208 / 220 四个剧本、59 城、31 处关隘 / 港口 / 小路；战斗直接在
           576×432 大地图上展开，含内政、计策、外交与俘虏。后续继续补齐搜索点位、伤害预览与原版细节。
         </p>
         <button className="btn primary" onClick={onClose}>
@@ -306,7 +306,7 @@ export function MainMenu() {
             </span>
           </div>
 
-          <div className="menu-foot">四剧本 · 61 城 · 回合制单机 · v0.1</div>
+          <div className="menu-foot">四剧本 · 59 城 · 回合制单机 · v0.1</div>
         </div>
 
         <aside className="menu-side">

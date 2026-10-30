@@ -75,7 +75,7 @@ function foundationCityTarget(state: GameState): number {
 }
 
 /** 每一幕的目标只描述本幕的退出条件；幕与幕之间由 pendingCouncil 承接。 */
-export function actGoals(state: GameState, stage: number): ChapterGoal[] {
+function actGoals(state: GameState, stage: number): ChapterGoal[] {
   if (stage <= 0) {
     const target = foundationCityTarget(state);
     return [
@@ -163,7 +163,7 @@ export function chapterProgress(state: GameState): number {
   );
 }
 
-export function actExitMet(state: GameState): boolean {
+function actExitMet(state: GameState): boolean {
   const chapter = state.chapter;
   if (!chapter || chapter.stage >= 2) return false;
   return chapter.goals.some((g) => chapterGoalDone(state, g));
@@ -308,7 +308,7 @@ function rulerCityOf(state: GameState, factionId: string | null): string | undef
  * 从当前局势推导一个明确的转折战目标：优先近处、都城 / 重镇、
  * 敌国君主所在与高粮城。纯排序，不消耗随机数，读档前后一致。
  */
-export function planTurningBattle(
+function planTurningBattle(
   state: GameState,
   act: number,
 ): TurningBattle | undefined {

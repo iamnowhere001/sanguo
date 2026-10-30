@@ -1,5 +1,5 @@
 /**
- * 东汉末州域映射：把 61 城归入 12 个州。
+ * 东汉末州域映射：把 59 城归入 12 个州。
  *
  * 传闻系统按州生成，每州 3 条且恰好 1 条为真；
  * 州域只影响传闻与情报派遣范围，不改变地图道路与归属。
@@ -107,7 +107,7 @@ export const PROVINCES: ProvinceDef[] = [
 ];
 
 /** 城 id -> 州 id；由 PROVINCES 展开，避免两处维护 */
-export const PROVINCE_OF_CITY: Record<string, string> = Object.fromEntries(
+const PROVINCE_OF_CITY: Record<string, string> = Object.fromEntries(
   PROVINCES.flatMap((p) => p.cityIds.map((cityId) => [cityId, p.id] as const)),
 );
 

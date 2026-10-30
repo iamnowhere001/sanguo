@@ -27,7 +27,7 @@ import { edictCapOf, edictLeftOf, removeOnceOnly } from './domestic';
  * - 民心：每月提升本城民忠与粮草。
  * - 传闻每州 3 条、恰好 1 条为真；证伪会揭露真实城池。
  */
-export interface ExploreOutcome {
+interface ExploreOutcome {
   text: string;
   tone: LogKind;
 }
@@ -305,7 +305,7 @@ export function startExploration(
 }
 
 /** 本城是否有可追查的同类未验证传闻 */
-export function rumorForCity(
+function rumorForCity(
   s: GameState,
   cityId: string,
   direction: ExploreDirection,
@@ -442,7 +442,7 @@ function resolveGenericClue(
 }
 
 /** 传闻验证：情报方向每月调用；证伪会揭露真实城池 */
-export function verifyRumor(s: GameState, rumor: Rumor): ExploreOutcome {
+function verifyRumor(s: GameState, rumor: Rumor): ExploreOutcome {
   if (rumor.verified !== undefined) {
     return { text: `「${rumor.targetName}」的传闻已记录`, tone: 'info' };
   }

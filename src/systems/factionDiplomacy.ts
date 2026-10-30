@@ -23,7 +23,7 @@ export const DIPLOMACY_COST: Record<FactionDiplomacyKind, number> = {
   war: 0,
 };
 
-export function relationKey(a: string, b: string): string {
+function relationKey(a: string, b: string): string {
   return a < b ? `${a}|${b}` : `${b}|${a}`;
 }
 
@@ -122,7 +122,7 @@ export function setRelationState(
 }
 
 /** 从势力各城按金额从高到低扣金；不足返回 false */
-export function spendFactionGold(
+function spendFactionGold(
   state: GameState,
   factionId: string,
   amount: number,

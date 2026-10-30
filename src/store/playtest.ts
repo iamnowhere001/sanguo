@@ -8,9 +8,9 @@
 import type { GameState } from '../core/state';
 import { SCENARIOS } from '../data/tables/scenarios';
 
-export type PlaytestResult = 'running' | 'victory' | 'defeat' | 'abandoned';
+type PlaytestResult = 'running' | 'victory' | 'defeat' | 'abandoned';
 
-export interface PlaytestSession {
+interface PlaytestSession {
   id: string;
   startedAt: number;
   endedAt?: number;

@@ -28,7 +28,7 @@ import { commandPointsOf } from './turn';
  * - 所有评分都以伤害为单位，便于「进攻收益 vs 承伤风险」直接比较。
  */
 
-export interface ThreatSource {
+interface ThreatSource {
   unit: BattleUnit;
   /** 该敌人下回合能打到的所有格子 */
   tiles: Set<string>;
@@ -83,7 +83,7 @@ function candidateTiles(unit: BattleUnit, reach: Map<string, number>): Tile[] {
  * 敌方下回合的攻击范围：先算真实可达格，再展开射程。
  * 与旧实现的关键差别：地形、ZOC、占位都会影响可达性，不再按最大移动力画菱形。
  */
-export function buildThreatSources(b: BattleState, side: BattleSide): ThreatSource[] {
+function buildThreatSources(b: BattleState, side: BattleSide): ThreatSource[] {
   const foes = activeUnits(b, otherSide(side)).filter((e) => e.stunned === 0);
   return foes.map((foe) => {
     const range = attackRangeOf(foe.unitClass);
@@ -130,7 +130,7 @@ function threatHit(b: BattleState, foe: BattleUnit, ghost: BattleUnit): number {
  * 某格的下回合预计承伤。
  * 上限按当前兵力截断：打不到的气血不会被扣两次。
  */
-export function exposureAt(
+function exposureAt(
   b: BattleState,
   unit: BattleUnit,
   x: number,

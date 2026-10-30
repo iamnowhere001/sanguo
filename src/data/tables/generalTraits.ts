@@ -8,7 +8,7 @@ import type { General, GeneralSkillId, UnitClass } from '../../core/state';
  * 战斗 / 计策 / 攻城 / 内政从同一份效果表取值，避免各系统各写一套系数。
  */
 
-export interface SkillEffect {
+interface SkillEffect {
   /** 出手伤害乘数（可带兵种限定） */
   damageOut?: number;
   /** 受击伤害乘数（<1 为减伤） */
@@ -131,7 +131,7 @@ export const GENERAL_SKILLS: Record<GeneralSkillId, SkillDef> = {
  * 名将覆盖表：演义辨识度高的武将按人设点特技，其余走派生规则。
  * 键不存在时静默忽略，不因错字报错。
  */
-export const EXPLICIT_GENERAL_SKILLS: Record<string, GeneralSkillId> = {
+const EXPLICIT_GENERAL_SKILLS: Record<string, GeneralSkillId> = {
   lvbu: 'warGod',
   guanyu: 'warGod',
   zhangfei: 'fierce',

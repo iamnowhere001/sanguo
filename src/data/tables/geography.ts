@@ -4,7 +4,7 @@
  * 这里是**唯一的地理真值源**：经纬度 → 世界坐标的投影、海岸线、河流、湖泊、
  * 山脉、荒漠、林地、沼泽，以及 61 座城的真实落位。
  *
- * 设计裁决见 `docs/全地图规格-v1.md`，三条约束写在最前面：
+ * 设计裁决见 `docs/archive/全地图规格-v1.md`，三条约束写在最前面：
  *
  * 1. **本文件只描述地理，不参与任何规则**。
  *    `neighborsOf()` 仍然查 `scenarios.ts` 的邻接表 —— S 档不动玩法，
@@ -27,8 +27,8 @@
  * 落位，但城与城之间终于有足够的行军纵深；长江、黄河与洞庭 / 鄱阳
  * 也各自展开成 12–18 格宽的江面 / 湖面，可以直接在整张大地图上打水战。
  *
- * 渲染层用「总览 100% + 默认 200%」的相机适配更大世界：
- * 100% 看天下大势，200% 时城池与世界物件的屏幕尺寸与旧版 100% 一致。
+ * 渲染层用「总览 100% + 默认 300%」的相机适配更大世界：
+ * 100% 看天下大势，300% 时城池与世界物件的屏幕尺寸与旧版 100% 一致。
  */
 export const MAP = {
   cols: 576,
@@ -73,6 +73,14 @@ export function lonLatToTile(lon: number, lat: number): { col: number; row: numb
     row: ((lat1 - lat) / (lat1 - lat0)) * MAP.rows,
   };
 }
+
+/** 格坐标是否落在图内 */
+export function inMap(col: number, row: number): boolean {
+  return col >= 0 && row >= 0 && col < MAP.cols && row < MAP.rows;
+}
+
+/** 格坐标 → 一维 Map/Set key（放在这里是因为各层都要用，此前被抄了 4 遍） */
+export const tileKey = (col: number, row: number): string => `${col},${row}`;
 
 /**
  * 大陆轮廓：从鸭绿江口沿海南下到北部湾，再沿图外框闭合。
@@ -305,7 +313,7 @@ export interface LakeDef {
 
 /**
  * 湖泊。M 档整体放大约 1.4 倍：水战需要周转空间；
- * 2026-10 再收一档，避免洞庭 / 鄱阳在 200% 近景里吞掉整屏陆地，
+ * 2026-10 再收一档，避免洞庭 / 鄱阳在 300% 近景里吞掉整屏陆地，
  * 同时给沿岸城池留出完整的 3×3 城墙落位。
  */
 export const LAKES: LakeDef[] = [

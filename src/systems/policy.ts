@@ -38,7 +38,7 @@ export function policyTaxMult(state: GameState): number {
   return (activePolicy(state)?.taxMult ?? 1) * identityTaxMult(state);
 }
 
-export function policyTradeLimitMult(state: GameState): number {
+function policyTradeLimitMult(state: GameState): number {
   return (activePolicy(state)?.tradeLimitMult ?? 1) * identityTradeLimitMult(state);
 }
 

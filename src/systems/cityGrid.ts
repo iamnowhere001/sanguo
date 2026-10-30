@@ -42,8 +42,6 @@ export interface GateInfo {
   usable: boolean;
 }
 
-const keyOf = (col: number, row: number): string => `${col},${row}`;
-
 /** 该格上的部队（同一格最多一支） */
 export function armyAtTile(s: GameState, col: number, row: number): Army | null {
   for (const a of s.armies ?? []) {
@@ -141,5 +139,3 @@ export function siegeTargetOf(s: GameState, army: Army): string | null {
   if (city.ownerId === army.factionId) return null;
   return city.id;
 }
-
-export { keyOf as tileKey };

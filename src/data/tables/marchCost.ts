@@ -1,4 +1,3 @@
-import { MAP } from './geography';
 import type { GridPoint, UnitClass } from '../../core/state';
 import { ferryBetween, gateSiteAt } from '../../render/gateGrid';
 import { tileKindAt, type TileKind } from '../../render/terrainGrid';
@@ -16,7 +15,7 @@ import { tileKindAt, type TileKind } from '../../render/terrainGrid';
  * 让 `systems/cityGrid.ts` 直接依赖配表，比依赖 `systems/army.ts` 更干净，
  * 也不会绕出循环引用。
  */
-export const TILE_MARCH_COST: Record<TileKind, number> = {
+const TILE_MARCH_COST: Record<TileKind, number> = {
   plain: 1,
   forest: 2,
   hill: 2,
@@ -116,11 +115,4 @@ export function marchStepCost(
   return marchCostForArmy(to.col, to.row, unitClass);
 }
 
-export function inMap(col: number, row: number): boolean {
-  return col >= 0 && row >= 0 && col < MAP.cols && row < MAP.rows;
-}
 
-/** 地形本身是否可通行（不含城墙 / 部队占位） */
-export function isMarchable(col: number, row: number, unitClass?: UnitClass): boolean {
-  return inMap(col, row) && Number.isFinite(marchCostOfTile(col, row, unitClass));
-}

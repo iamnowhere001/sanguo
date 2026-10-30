@@ -24,7 +24,7 @@ import { activeUnits, distanceBetween } from './grid';
  *   实际开战和读档后的题目一致。
  */
 
-export interface BattleObjectivePlanSide {
+interface BattleObjectivePlanSide {
   main: BattleObjective;
   side?: BattleObjective;
 }
@@ -35,7 +35,7 @@ export interface BattleObjectivePlan {
   supplyPoint?: BattleObjectivePoint;
 }
 
-export interface BattleObjectiveContext {
+interface BattleObjectiveContext {
   seed: number;
   turn: number;
   battleSerial: number;
@@ -328,7 +328,7 @@ export function attachBattleObjectives(state: GameState, b: BattleState): void {
 }
 
 /** 该侧所有目标，供 AI 评分使用。 */
-export function objectivesForSide(b: BattleState, side: BattleSide): BattleObjective[] {
+function objectivesForSide(b: BattleState, side: BattleSide): BattleObjective[] {
   if (side === b.playerSide) {
     return [b.objective, b.sideObjective].filter((o): o is BattleObjective => Boolean(o));
   }

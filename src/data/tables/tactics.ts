@@ -68,7 +68,7 @@ export const TACTICS: Record<TacticId, TacticDef> = {
   },
 };
 
-export const TACTIC_LIST: TacticDef[] = Object.values(TACTICS);
+const TACTIC_LIST: TacticDef[] = Object.values(TACTICS);
 
 /** 智力达到阈值即解锁；不再看等级 */
 export function tacticUnlocked(unit: { intellect: number }, id: TacticId): boolean {

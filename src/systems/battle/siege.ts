@@ -30,7 +30,7 @@ export function cityTiles(b: BattleState): Array<{ x: number; y: number }> {
 }
 
 /** 当前站在城池格上的攻方部队 */
-export function besiegers(b: BattleState): ReturnType<typeof activeUnits> {
+function besiegers(b: BattleState): ReturnType<typeof activeUnits> {
   return activeUnits(b, 'attacker').filter(
     (u) => battleTerrainAt(b, u.x, u.y) === 'city',
   );

@@ -20,14 +20,6 @@ import {
 } from '../systems/battle';
 import { BATTLEFIELD_PALETTE, type BattlefieldPalette } from './battlefieldTheme';
 
-const TERRAIN_FILL: Record<BattleTerrain, string> = {
-  plain: '#3a352a',
-  forest: '#2c3d2b',
-  mountain: '#4a4034',
-  water: '#22343d',
-  city: '#41302b',
-};
-
 export const TERRAIN_SWATCH: Record<BattleTerrain, string> = {
   plain: '平原',
   forest: '森林',
@@ -36,7 +28,6 @@ export const TERRAIN_SWATCH: Record<BattleTerrain, string> = {
   city: '城池',
 };
 
-export { TERRAIN_FILL };
 
 const CLASS_GLYPH: Record<string, string> = {
   infantry: '步',

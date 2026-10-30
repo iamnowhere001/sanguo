@@ -20,7 +20,7 @@ import { canAttackFactions, isHostile } from './factionDiplomacy';
  * 不处理具体战斗。全部是纯函数，方便单测与调参。
  */
 
-export interface AttackForce {
+interface AttackForce {
   generals: General[];
   troops: number;
 }
@@ -47,7 +47,7 @@ export interface StrategicMove {
 }
 
 /** 边境城至少留下的驻军；内陆城为 0，可以放心抽调 */
-export function reserveFor(
+function reserveFor(
   state: GameState,
   city: City,
   factionId: string,
@@ -67,7 +67,7 @@ export function reserveFor(
  *
  * 兵力按「池兵会先补给缺口最大的将」估算，与实际出征时的补兵顺序一致。
  */
-export function selectAttackers(
+function selectAttackers(
   state: GameState,
   cityId: string,
   factionId: string,
@@ -120,7 +120,7 @@ export function selectAttackers(
 }
 
 /** 全军出击：不再保留边境驻军，用于「后方无威胁、目标很弱」的一击定局 */
-export function selectAllIn(
+function selectAllIn(
   state: GameState,
   cityId: string,
   factionId: string,
@@ -159,7 +159,7 @@ function otherThreat(
 }
 
 /** 实际能上场的守军：按兵力取前 N 名，预备队不参与战斗（兵力含池兵投影） */
-export function fieldedDefenders(state: GameState, cityId: string): General[] {
+function fieldedDefenders(state: GameState, cityId: string): General[] {
   const projected = projectedTroops(state, cityId);
   return Object.values(state.generals)
     .filter(
@@ -177,7 +177,7 @@ export function fieldedDefenders(state: GameState, cityId: string): General[] {
 }
 
 /** 守军上场兵力（含池兵投影），供 AI 评估兵力比 */
-export function fieldedTroops(state: GameState, cityId: string): number {
+function fieldedTroops(state: GameState, cityId: string): number {
   const projected = projectedTroops(state, cityId);
   return fieldedDefenders(state, cityId).reduce(
     (sum, g) => sum + (projected.get(g.id) ?? g.troops),

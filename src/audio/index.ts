@@ -12,20 +12,7 @@ import type { OneShotId } from './types';
 
 export const audio = new AudioEngine();
 
-export { SOUNDS, CATEGORY_GAIN } from './manifest';
-export type { AudioCue, CueContext, ScreenKind } from './director';
 export { cuesForAction, playerCityGain, sceneFor } from './director';
-export type {
-  AmbienceId,
-  AudioSettings,
-  BgmId,
-  OneShotId,
-  SceneAudio,
-  SoundCategory,
-  SoundDef,
-  SoundId,
-} from './types';
-export { DEFAULT_SETTINGS, isMusicCategory } from './types';
 
 let unlockInstalled = false;
 

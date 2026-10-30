@@ -18,7 +18,7 @@ import { cityDamageMultiplier, clamp, trainingMultiplier } from '../formulas';
  * 纯函数、不依赖 GameState：战斗层与数值沙盒必须调用同一份实现，
  * 否则“模拟器调参”和“实机手感”会变成两套规则。
  */
-export interface DamageAttacker {
+interface DamageAttacker {
   troops: number;
   force: number;
   unitClass: UnitClass;
@@ -32,7 +32,7 @@ export interface DamageAttacker {
   skill?: GeneralSkillId;
 }
 
-export interface DamageDefender {
+interface DamageDefender {
   troops: number;
   force: number;
   unitClass: UnitClass;
@@ -168,7 +168,7 @@ export function computeDamageValue(ctx: DamageContext): number {
  * 这里取 0 → ×0.70、100 → ×1.10，中间插值；缺省（undefined）视为满气力。
  * 与 `stamina`（武将体力）分工：气力归部队，体力归个人的计策消耗。
  */
-export function moraleMultOf(morale: number | undefined): number {
+function moraleMultOf(morale: number | undefined): number {
   if (morale === undefined) return 1;
   const M = BALANCE.MORALE;
   const v = Math.max(0, Math.min(M.max, morale));

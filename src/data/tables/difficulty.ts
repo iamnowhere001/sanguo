@@ -27,7 +27,7 @@ export interface DifficultyConfig {
   note: string;
 }
 
-export const DIFFICULTY_CONFIG: Record<Difficulty, DifficultyConfig> = {
+const DIFFICULTY_CONFIG: Record<Difficulty, DifficultyConfig> = {
   easy: {
     id: 'easy',
     label: '易',

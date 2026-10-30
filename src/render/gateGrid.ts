@@ -1,8 +1,10 @@
 import {
   CITY_COORDS,
   MAP,
+  inMap,
   lonLatToTile,
   projectLonLat,
+  tileKey,
   type Pt,
 } from '../data/tables/geography';
 import { GATES, type GateFeature } from '../data/tables/gates';
@@ -85,10 +87,6 @@ const ORTHO: ReadonlyArray<readonly [number, number]> = [
   [0, -1],
 ];
 
-const keyOf = (col: number, row: number): string => `${col},${row}`;
-
-const inMap = (col: number, row: number): boolean =>
-  col >= 0 && row >= 0 && col < MAP.cols && row < MAP.rows;
 
 // ── 地形掩码 ───────────────────────────────────────────────
 /**
@@ -997,15 +995,15 @@ export function gateSiteAt(col: number, row: number): GateSite | null {
     laneCache = new Map();
     for (const site of Object.values(gateSites())) {
       for (const p of site.lane) {
-        laneCache.set(keyOf(p.col, p.row), site);
+        laneCache.set(tileKey(p.col, p.row), site);
       }
       // 图标格即使不在 lane 内（异常落位）也能被点到
-      if (!laneCache.has(keyOf(site.center.col, site.center.row))) {
-        laneCache.set(keyOf(site.center.col, site.center.row), site);
+      if (!laneCache.has(tileKey(site.center.col, site.center.row))) {
+        laneCache.set(tileKey(site.center.col, site.center.row), site);
       }
     }
   }
-  return laneCache.get(keyOf(col, row)) ?? null;
+  return laneCache.get(tileKey(col, row)) ?? null;
 }
 
 /** 关港中心格 → 落位 */
@@ -1019,11 +1017,11 @@ export function gateAtCenter(col: number, row: number): GateSite | null {
     centerCache = new Map();
     for (const site of Object.values(gateSites())) {
       // 图标已移到岸上时，图标格与通行线中心格都算“点到了关港”
-      centerCache.set(keyOf(site.icon.col, site.icon.row), site);
-      centerCache.set(keyOf(site.center.col, site.center.row), site);
+      centerCache.set(tileKey(site.icon.col, site.icon.row), site);
+      centerCache.set(tileKey(site.center.col, site.center.row), site);
     }
   }
-  return centerCache.get(keyOf(col, row)) ?? null;
+  return centerCache.get(tileKey(col, row)) ?? null;
 }
 
 /** 关港图标世界坐标（港口取岸上滩头，不取江心） */
@@ -1055,11 +1053,11 @@ export function ferryHopFrom(col: number, row: number): { to: GridPoint; site: G
       if (!site.water || site.approaches.length !== 2) continue;
       const a = site.approaches[0]!;
       const b = site.approaches[1]!;
-      hopCache.set(keyOf(a.col, a.row), { to: b, site });
-      hopCache.set(keyOf(b.col, b.row), { to: a, site });
+      hopCache.set(tileKey(a.col, a.row), { to: b, site });
+      hopCache.set(tileKey(b.col, b.row), { to: a, site });
     }
   }
-  return hopCache.get(keyOf(col, row)) ?? null;
+  return hopCache.get(tileKey(col, row)) ?? null;
 }
 
 /** 两格之间是否正好是一次摆渡（同一港口的南北滩头） */
@@ -1071,4 +1069,3 @@ export function ferryBetween(a: GridPoint, b: GridPoint): GateSite | null {
 
 
 
-export { lonLatToTile };

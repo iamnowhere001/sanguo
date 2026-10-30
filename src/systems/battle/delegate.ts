@@ -18,7 +18,7 @@ function outcomeLabel(outcome: BattleOutcome | 'captured'): string {
   }
 }
 
-export interface DelegatePreview {
+interface DelegatePreview {
   eligible: boolean;
   reason?: string;
   /** 已上场守军与全部守军的差额；>0 表示有预备队，视为有援军。 */
@@ -38,7 +38,7 @@ export interface DelegatePreview {
  * 必须亲征的城：都城、重镇、历史城、敌国君主所在、当前转折战目标。
  * 这保证“委任出征”只清重复小城，不做取舍。
  */
-export function manualBattleReason(
+function manualBattleReason(
   state: GameState,
   cityId: string,
 ): string | null {
@@ -166,7 +166,7 @@ function emptyPreview(
 }
 
 /** 在状态副本上跑完整自动战，预览与实际结算共用同一份确定性推演。 */
-export function planDelegatedAttack(
+function planDelegatedAttack(
   state: GameState,
   fromCityId: string,
   targetCityId: string,

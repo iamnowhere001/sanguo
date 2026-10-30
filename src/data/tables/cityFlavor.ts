@@ -4,6 +4,7 @@ import type { CitySkill } from '../../core/state';
  * 新增城池的历史背景与专属技能。
  *
  * 只收 61 城扩展中新增的 26 座；原有 35 城保留既有设定，不在此表重复。
+ * （阳平关、濡须口后并入 `gates.ts` 作关防，地图城池实为 59 座。）
  * 技能全部是数据驱动的被动，具体接入点见：
  * - 粮产 / 季税：systems/economy.ts
  * - 征兵 / 演武 / 搜索 / 交易：systems/domestic.ts

@@ -63,7 +63,7 @@ export interface InterActChoiceDef {
   description: string;
 }
 
-export const INTERACT_CHOICES: Record<InterActChoiceId, InterActChoiceDef> = {
+const INTERACT_CHOICES: Record<InterActChoiceId, InterActChoiceDef> = {
   recuperate: {
     id: 'recuperate',
     label: '休养生息',

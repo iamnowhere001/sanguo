@@ -34,7 +34,7 @@ const root = createRoot(stage);
  * 截图钩子：把某个城池重新居中。
  *
  * 截图脚本只能派发滚轮事件，缩放锚点固定在视口中心，
- * 于是 720% 很容易落在没有城池的江面或荒地上，没法验收"城门可辨"。
+ * 于是 600% 很容易落在没有城池的江面或荒地上，没法验收"城门可辨"。
  * MapCanvas 在 `selectedCityId` 变化时会把该城居中，这里借这条现成逻辑：
  * 先置空再设回同一个 id，两次渲染就能触发居中。
  */
@@ -177,9 +177,9 @@ async function run(): Promise<BenchReport> {
     }),
   );
 
-  // ④ 拉到 720% 再横移：细档地形（I7 · 7.5）按预算补烘，量补烘期间的帧间隔
+  // ④ 拉到 600%（MAX_ZOOM）再横移：细档地形（I7 · 7.5）按预算补烘，量补烘期间的帧间隔
   report.phases.push(
-    await phase('deep-zoom@720%', 70, (i) => {
+    await phase('deep-zoom@600%', 70, (i) => {
       if (i < 16) wheel(-120, W / 2, H / 2);
       else moveTo(W * 0.2 + (i * 31) % (W * 0.66), H * 0.22 + (i * 23) % (H * 0.5));
     }),

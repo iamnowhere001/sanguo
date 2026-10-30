@@ -31,11 +31,10 @@ import {
   planDispatch,
   reachableTargets,
   resolveDispatchDest,
-  sortieBlocked,
   type DispatchPlan,
 } from '../systems/army';
 import { DispatchBar } from './DispatchBar';
-import { gatesOf, siegeTargetOf } from '../systems/cityGrid';
+import { gatesOf, siegeTargetOf, sortieBlocked } from '../systems/cityGrid';
 import {
   gateAccessLabel,
   gateGarrisonOf,

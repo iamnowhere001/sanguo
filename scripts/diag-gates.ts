@@ -5,7 +5,7 @@
  * 若封锁前后距离几乎不变，这座关在地理上就是装饰品：
  * 敌人可以从旁边的空地走过去，攻关也就失去意义。
  *
- * 用法：npx vite-node scripts/diag-gates.ts [gateId]
+ * 用法：npm run map:diag  （单座：`npm run map:diag -- <gateId>`；全部轨迹：`-- --all`）
  */
 import { GATES, gateById } from '../src/data/tables/gates';
 import { MAP } from '../src/data/tables/geography';

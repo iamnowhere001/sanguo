@@ -49,7 +49,7 @@ interface ToneOpts {
 }
 
 /** 单振荡器音 */
-export function tone(v: Voice, o: ToneOpts): void {
+function tone(v: Voice, o: ToneOpts): void {
   const t = v.t0 + (o.at ?? 0);
   const attack = Math.min(o.attack ?? 0.006, o.dur * 0.4);
   const osc = v.ctx.createOscillator();
@@ -82,7 +82,7 @@ interface NoiseOpts {
 }
 
 /** 滤波噪声：用于风声、刀剑、脚步、水声 */
-export function noise(v: Voice, o: NoiseOpts): void {
+function noise(v: Voice, o: NoiseOpts): void {
   const t = v.t0 + (o.at ?? 0);
   const attack = Math.min(o.attack ?? 0.004, o.dur * 0.5);
   const src = v.ctx.createBufferSource();
