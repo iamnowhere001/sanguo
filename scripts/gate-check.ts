@@ -146,6 +146,7 @@ for (const gate of GATES) {
 
 const line = (s: string) => console.log(s);
 line(`关防 ${GATES.length} 处 · 已落位 ${Object.keys(sites).length} 处`);
+const weak: string[] = [];
 for (const gate of GATES) {
   const site = sites[gate.id];
   if (!site) {
@@ -156,11 +157,22 @@ for (const gate of GATES) {
     site.approaches.length === 2
       ? site.approaches.map((p) => `${p.col},${p.row}`).join(' → ')
       : '无滩头';
+  if (site.weak) weak.push(gate.name);
   line(
     `  ${site.gate.kind === 'port' ? '港' : site.gate.kind === 'trail' ? '径' : '关'} ${gate.name.padEnd(4, '　')} ` +
       `中心 ${site.center.col},${site.center.row} · 图标 ${site.icon.col},${site.icon.row} · 线 ${site.lane.length} 格` +
-      `${site.water ? ` · 渡河 ${site.crossDays} MP` : ''} · ${ends}`,
+      `${site.water ? ` · 渡河 ${site.crossDays} MP` : ''} · ${ends}` +
+      `${site.weak ? ' · ⚠ 弱关（线外可绕）' : ''}`,
   );
+}
+
+if (weak.length > 0) {
+  line('');
+  line(
+    `⚠ ${weak.length} 处关隘线外可以绕过去（${weak.join('、')}）：` +
+      `它们拦不住人，地形没有形成屏障。`,
+  );
+  line('  这不是落位问题，是地形问题 —— 修法见 docs/关隘有效性体检-v1.md。');
 }
 
 if (problems.length > 0) {

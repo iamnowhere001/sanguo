@@ -1439,7 +1439,7 @@ export function MapCanvas({
       setView(centerOnWorld(focus.x, focus.y, battleZoomFor(size.w, size.h), size.w, size.h));
       return;
     }
-    // 默认州郡视角：任何屏幕都固定 300%，看清城池与关港
+    // 默认州郡视角：任何屏幕都固定 200%，看清城池与关港
     centerView(DEFAULT_ZOOM);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [size.w, size.h]);

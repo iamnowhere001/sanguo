@@ -63,17 +63,17 @@ describe('全国小地图 · 数学', () => {
       expect(box.w).toBeGreaterThan(0);
       expect(box.h).toBeGreaterThan(0);
     }
-    // 300% 作战视角下视野框明显小于全图
+    // 200% 作战视角下视野框明显小于全图
     expect(battle.w).toBeLessThan(overview.w);
     expect(battle.h).toBeLessThan(overview.h);
   });
 });
 
 describe('全国小地图 · 默认倍率', () => {
-  it('默认 300%，范围 20%–720%，且 300% 在缩放档位上', () => {
+  it('默认 200%，范围 30%–600%，且 200% 在缩放档位上', () => {
     expect(DEFAULT_ZOOM).toBe(3);
-    expect(MIN_ZOOM).toBe(0.2);
-    expect(MAX_ZOOM).toBe(7.2);
+    expect(MIN_ZOOM).toBe(0.3);
+    expect(MAX_ZOOM).toBe(6);
     expect(ZOOM_STOPS).toContain(DEFAULT_ZOOM);
     expect(DEFAULT_ZOOM).toBeGreaterThan(MIN_ZOOM);
     expect(DEFAULT_ZOOM).toBeLessThan(MAX_ZOOM);

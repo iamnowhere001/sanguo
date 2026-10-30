@@ -109,6 +109,10 @@ export const GATES: GateFeature[] = [
     tier: 3,
     edges: [['changan', 'wan']],
     guardCityId: 'changan',
+    // 没有锚点时取「长安—宛」中点，落位会被拉到秦岭西段（约 110.7°E），
+    // 而武关在商於古道东口（丹凤一带，约 111.0°E）。凿谷要沿真实路径走，
+    // 锚点不写就会凿出一条「从长安直插宛城」的假谷。
+    anchor: [111.0, 33.72],
     extraDays: 2,
     fortification: 8,
     gold: 18,
