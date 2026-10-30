@@ -50,9 +50,9 @@ export interface GateSite {
   /** 是否是水面渡线 */
   water: boolean;
   /**
-   * 渡河天数（仅港口有值）：陆地部队不下水，从一岸滩头一次跳到对岸滩头。
+   * 渡河 MP（仅港口有值）：陆地部队不下水，从一岸滩头一次跳到对岸滩头。
    *
-   * 原来的口径是「沿渡线逐格走 1.5 天/格」，一条 20 格的江面要走 30 天，
+   * 原来的口径是「沿渡线逐格走 1.5 MP/格」，一条 20 格的江面要花 30 MP，
    * 部队会在江心站着过旬——这正是要修的问题。现在按渡线长度折算成一次摆渡：
    * 江面越宽船程越长，但始终是一次位移，部队不会出现在水面上。
    */
@@ -315,7 +315,7 @@ function buildPassSite(gate: GateFeature, mid: { col: number; row: number }, tak
   };
 }
 
-/** 摆渡天数：过关耗时 + 每 4 格江面折 1 日船程（一次跳过去，不在水面停留） */
+/** 摆渡 MP：过关耗时 + 每 4 格江面折 1 MP 船程（一次跳过去，不在水面停留） */
 function crossDaysOf(gate: GateFeature, lane: GridPoint[]): number {
   return Math.max(2, gate.extraDays + Math.ceil(lane.length / 4));
 }

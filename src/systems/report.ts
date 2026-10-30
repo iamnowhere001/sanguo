@@ -5,6 +5,7 @@ import type {
   MonthSnapshot,
   Report,
   ReportLine,
+  XunBrief,
 } from '../core/state';
 import {
   citiesOf,
@@ -14,6 +15,8 @@ import {
   factionTroops,
   generalsOf,
 } from '../core/state';
+import { cityTroops } from '../core/selectors';
+import { monthlyFoodUpkeep } from './formulas';
 
 /** 玩家势力当前快照；月报用它对比月初与月末。 */
 export function playerSnapshot(state: GameState): MonthSnapshot {
@@ -224,4 +227,82 @@ export function buildMonthReport(
     subtitle: '月结已结算 · 展开“原因与明细”查看归因',
     lines,
   };
+}
+
+/**
+ * 旬报：每旬结束后的 5 行摘要。
+ *
+ * 只读本旬新增日志 + 当前城池状态，不推算未来；月结那一旬由月报接管。
+ * 非阻塞展示（`state.xunBrief`），避免每旬弹窗打断操作流。
+ */
+export function buildXunBrief(state: GameState, logStart: number): XunBrief {
+  const fid = state.playerFactionId;
+  const mine = citiesOf(state, fid);
+  const newLogs = state.log.slice(logStart);
+  const ai = newLogs.filter((l) => l.source === 'ai');
+  const attacks = ai.filter(
+    (l) =>
+      l.text.includes('出兵') ||
+      l.text.includes('攻打') ||
+      l.text.includes('来犯') ||
+      l.text.includes('攻占'),
+  );
+  const unrest = newLogs.filter(
+    (l) => l.kind === 'danger' && (l.text.includes('叛') || l.text.includes('倒戈')),
+  );
+  const lowLoyalty = generalsOf(state, fid).filter((g) => g.loyalty < 40);
+  const hungry = mine.filter(
+    (c) => c.food < monthlyFoodUpkeep(cityTroops(state, c.id)) * 2,
+  );
+  const built = newLogs.filter(
+    (l) => l.text.includes('完工') || l.text.includes('建成'),
+  );
+  const moves = ai.filter((l) => !attacks.includes(l));
+
+  const lines: ReportLine[] = [
+    {
+      label: '敌情',
+      text:
+        attacks.length > 0
+          ? `${attacks[0]!.text}${attacks.length > 1 ? `；另有 ${attacks.length - 1} 处军事动向` : ''}`
+          : '边境无战事，敌军未动。',
+      tone: attacks.length > 0 ? 'warn' : 'info',
+    },
+    {
+      label: '内变',
+      text:
+        unrest.length > 0
+          ? unrest.map((l) => l.text).join('；')
+          : lowLoyalty.length > 0
+            ? `${lowLoyalty.map((g) => `${g.name}（忠诚 ${g.loyalty}）`).join('、')} 有叛离风险`
+            : '人心稳定，无叛离。',
+      tone: unrest.length > 0 || lowLoyalty.length > 0 ? 'warn' : 'info',
+    },
+    {
+      label: '粮秣',
+      text:
+        hungry.length > 0
+          ? `${hungry.map((c) => c.name).join('、')} 军粮不足 2 旬，注意开垦或买粮`
+          : '各城军粮可支应，无断粮之虞。',
+      tone: hungry.length > 0 ? 'danger' : 'info',
+    },
+    {
+      label: '营造',
+      text:
+        built.length > 0
+          ? built.map((l) => l.text).join('；')
+          : '本旬无工程完工。',
+      tone: built.length > 0 ? 'good' : 'info',
+    },
+    {
+      label: '动向',
+      text:
+        moves.length > 0
+          ? `周边势力 ${moves.length} 项调动：${moves.slice(-2).map((l) => l.text).join('；')}`
+          : '周边势力按兵不动。',
+      tone: moves.length > 0 ? 'info' : 'info',
+    },
+  ];
+
+  return { year: state.year, month: state.month, xun: state.xun, lines };
 }

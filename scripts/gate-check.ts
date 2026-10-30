@@ -90,7 +90,7 @@ for (const gate of GATES) {
     }
     // 港口过河是「滩头 ↔ 滩头」的一次摆渡：渡线本身不可站，跳跃边必须成对存在
     if (gate.kind === 'port') {
-      if (site.crossDays <= 0) problems.push(`${gate.name}：渡河天数为 0`);
+      if (site.crossDays <= 0) problems.push(`${gate.name}：渡河 MP 为 0`);
       const hopA = ferryHopFrom(a.col, a.row);
       const hopB = ferryHopFrom(b.col, b.row);
       if (!hopA || hopA.to.col !== b.col || hopA.to.row !== b.row) {
@@ -120,7 +120,7 @@ for (const gate of GATES) {
   line(
     `  ${site.gate.kind === 'port' ? '港' : site.gate.kind === 'trail' ? '径' : '关'} ${gate.name.padEnd(4, '　')} ` +
       `中心 ${site.center.col},${site.center.row} · 图标 ${site.icon.col},${site.icon.row} · 线 ${site.lane.length} 格` +
-      `${site.water ? ` · 渡河 ${site.crossDays} 日` : ''} · ${ends}`,
+      `${site.water ? ` · 渡河 ${site.crossDays} MP` : ''} · ${ends}`,
   );
 }
 

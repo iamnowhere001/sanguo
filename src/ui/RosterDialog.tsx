@@ -3,6 +3,8 @@ import { BALANCE } from '../data/tables/balance';
 import type { GameState, General } from '../core/state';
 import { troopCapOf } from '../systems/domestic';
 import { ClassTag } from './atoms';
+import { aptitudeOf } from '../data/tables/unitClasses';
+import { generalSkillOf, skillDefOf } from '../data/tables/generalTraits';
 import { fmt, useEscape } from './common';
 
 function troopsOf(gens: General[]): number {
@@ -112,6 +114,27 @@ export function RosterDialog({
                   <span className="roster-stat">魅 {g.charm}</span>
                   <span className="roster-stat">忠 {g.loyalty}</span>
                   <span className="roster-stat">体 {g.stamina}</span>
+                  {/* 兵种适性：本行兵种的档位，S/A/B/C 见 v2 §3 */}
+                  {(() => {
+                    const apt = aptitudeOf(g)[g.unitClass];
+                    return (
+                      <span className={`roster-stat apt apt-${apt}`} title={`${g.name} 当前兵种适性 ${apt}`}>
+                        适 {apt}
+                      </span>
+                    );
+                  })()}
+                  {/* 武将特技：每人一条，按五维派生（见 generalTraits） */}
+                  {(() => {
+                    const sk = skillDefOf(generalSkillOf(g));
+                    return sk ? (
+                      <span
+                        className={`roster-skill sk-cat-${sk.category}`}
+                        title={`${g.name} · ${sk.name}：${sk.text}`}
+                      >
+                        {sk.name}
+                      </span>
+                    ) : null;
+                  })()}
                   <span className="roster-troops">
                     {fmt(g.troops)} / {fmt(troopCapOf(state, g))}
                   </span>

@@ -9,9 +9,11 @@ import type {
   InterActChoiceId,
   PolicyId,
   ProjectKind,
+  SiegeWeaponId,
 } from './state';
 import { emptyMonthFacts } from './state';
 import { BALANCE } from '../data/tables/balance';
+import { runDelegations, toggleDelegation } from '../systems/delegation';
 import { POLICIES } from '../data/tables/policies';
 import type { TacticId } from '../data/tables/tactics';
 import {
@@ -26,6 +28,7 @@ import {
 } from '../systems/economy';
 import {
   doBanquetAll,
+  doBatchDomestic,
   doClassChange,
   doDomestic,
   doMoveGeneral,
@@ -65,7 +68,7 @@ import {
 } from '../systems/factionDiplomacy';
 import { abandonCity } from '../systems/abandon';
 import { doPrisoner, type PrisonerAction } from '../systems/prisoners';
-import { playerSnapshot } from '../systems/report';
+import { playerSnapshot, buildXunBrief } from '../systems/report';
 import { applyPolicyMonthly, choosePolicy } from '../systems/policy';
 import { resolveEvent, maybeScheduleEvent } from '../systems/events';
 import { doTransport, runCityRepair } from '../systems/logistics';
@@ -106,7 +109,11 @@ export type Action =
   | { t: 'PERSUADE_CITY'; cityId: string }
   | { t: 'PRISONER'; prisonerId: string; action: PrisonerAction; agentId?: string }
   | { t: 'DEPLOY'; fromCityId: string; targetCityId: string; generalIds: string[] }
-  | { t: 'SORTIE'; fromCityId: string; targetCityId?: string; dest?: GridPoint; generalIds?: string[] }
+  | { t: 'SORTIE'; fromCityId: string; targetCityId?: string; dest?: GridPoint; generalIds?: string[]; siegeWeapon?: SiegeWeaponId }
+  /** 一括指令：对全部（或指定）己方城池统一下达同一内政，按政令余额自动截断 */
+  | { t: 'BATCH_DOMESTIC'; cmd: DomesticCmd; cityIds?: string[] }
+  /** 关闭旬报卡片（非阻塞，不涉及推进） */
+  | { t: 'DISMISS_XUN_BRIEF' }
   | { t: 'MOVE_ARMY'; armyId: string; to: GridPoint }
   | { t: 'ASSAULT'; armyId: string }
   | { t: 'ASSAULT_GATE'; armyId: string; gateId: string }
@@ -126,6 +133,7 @@ export type Action =
   | { t: 'DISMISS_UNIFY' }
   | { t: 'PARTITION' }
   | { t: 'CHOOSE_POLICY'; policyId: PolicyId }
+  | { t: 'TOGGLE_DELEGATION'; cityId: string }
   | { t: 'RESOLVE_EVENT'; optionId: string }
   /** 兼容旧调用：粮食上限已移除，该字段不再参与判定 */
   | { t: 'END_TURN'; confirmed?: boolean };
@@ -187,6 +195,13 @@ export function reduce(
   switch (action.t) {
     case 'DOMESTIC': {
       const r = doDomestic(s, action.cityId, action.cmd, action.generalId);
+      return { state: r.ok ? s : state, result: r };
+    }
+    case 'BATCH_DOMESTIC': {
+      if (s.phase !== 'map') {
+        return { state, result: { ok: false, message: '当前阶段无法下达内政' } };
+      }
+      const r = doBatchDomestic(s, action.cmd, action.cityIds);
       return { state: r.ok ? s : state, result: r };
     }
     case 'AUTO_GOVERN': {
@@ -428,7 +443,7 @@ export function reduce(
       // 目的地两种写法：`dest`（格，新语义）优先，`targetCityId`（城，旧语义）兜底
       const target = action.dest ?? action.targetCityId;
       if (!target) return { state, result: { ok: false, message: '未指定出征目的地' } };
-      const r = sortieArmy(s, action.fromCityId, target, action.generalIds);
+      const r = sortieArmy(s, action.fromCityId, target, action.generalIds, undefined, undefined, action.siegeWeapon);
       return { state: r.ok ? s : state, result: r };
     }
     case 'MOVE_ARMY': {
@@ -596,8 +611,8 @@ export function reduce(
             ok: true,
             message:
               BALANCE.TIMEOUT_OUTCOME === 'retreat'
-                ? '30 天已尽，进攻方撤退'
-                : '30 天已尽，进攻失败',
+                ? '30 回合已尽，进攻方撤退'
+                : '30 回合已尽，进攻失败',
             warnings: ['超时'],
           },
         };
@@ -616,7 +631,7 @@ export function reduce(
         };
       }
       beginSideTurn(s.battle, s.battle.playerSide);
-      return { state: s, result: { ok: true, message: '新的一天' } };
+      return { state: s, result: { ok: true, message: '新的回合' } };
     }
     case 'BATTLE_RETREAT': {
       if (!s.battle || s.phase !== 'battle') {
@@ -697,6 +712,24 @@ export function reduce(
       };
       return { state: s, result: { ok: true, message: '裂土分疆' } };
     }
+    case 'TOGGLE_DELEGATION': {
+      const city = s.cities[action.cityId];
+      if (!city) return { state, result: { ok: false, message: '城池不存在' } };
+      if (city.ownerId !== s.playerFactionId) {
+        return { state, result: { ok: false, message: '只能委任己方城池' } };
+      }
+      const on = toggleDelegation(s, action.cityId);
+      return {
+        state: s,
+        result: {
+          ok: true,
+          message: on
+            ? `${city.name} 已委任：每月自动排内政（出征仍需手动）`
+            : `${city.name} 取消委任`,
+        },
+      };
+    }
+
     case 'CHOOSE_POLICY': {
       if (s.settings.ruleset === 'classic') {
         return { state, result: { ok: false, message: '经典模式没有国策' } };
@@ -715,6 +748,11 @@ export function reduce(
       const r = resolveEvent(s, action.optionId);
       return { state: r.ok ? s : state, result: r };
     }
+    case 'DISMISS_XUN_BRIEF': {
+      if (!s.xunBrief) return { state, result: { ok: true, message: '' } };
+      delete s.xunBrief;
+      return { state: s, result: { ok: true, message: '' } };
+    }
     case 'END_TURN': {
       if (s.phase !== 'map') {
         return { state, result: { ok: false, message: '当前阶段无法结束回合' } };
@@ -732,6 +770,8 @@ export function reduce(
       }
 
       if (monthRolled) {
+        // 委任城先施政：政令按月重置，跨月这一旬是唯一窗口
+        runDelegations(s);
         refreshChapter(s);
         maybeScheduleEvent(s);
       }
@@ -766,6 +806,8 @@ export function reduce(
         return { state: s, result: { ok: true, message: '新的一月开始', warnings } };
       }
 
+      // 旬报：非月结的旬生成 5 行摘要；月结那旬由月报接管
+      s.xunBrief = buildXunBrief(s, logStart);
       return {
         state: s,
         result: {

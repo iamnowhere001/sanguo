@@ -156,6 +156,8 @@ function enemyPressure(state: GameState, city: City): { ratio: number; enemyTroo
   const own = Math.max(1, cityTroops(state, city.id));
   let enemyTroops = 0;
   for (const e of state.edges) {
+    // 险道（牂牁道 / 越嶲道 / 三峡）不算邻城威胁：隔着一整片山地，打不过来
+    if (e.wild) continue;
     const other = e.a === city.id ? e.b : e.b === city.id ? e.a : null;
     if (!other) continue;
     const n = state.cities[other];
@@ -171,6 +173,7 @@ function bestAttackOpportunity(state: GameState, city: City): { cityId: string; 
   if (own <= 0) return null;
   let best: { cityId: string; name: string; ratio: number } | null = null;
   for (const e of state.edges) {
+    if (e.wild) continue;
     const other = e.a === city.id ? e.b : e.b === city.id ? e.a : null;
     if (!other) continue;
     const n = state.cities[other];
@@ -203,6 +206,8 @@ interface ScoreInput {
   counts: Partial<Record<DomesticCmd, number>>;
   /** 同城连续排令时，用模拟后的属性计算下一条命令的收益 */
   projectedStats: Partial<Record<StatField, number>>;
+  /** 本道政令的主持武将：收益预览要计入其内政特技 */
+  general: General;
 }
 
 interface ScoredCommand {
@@ -238,12 +243,12 @@ function reasonFor(state: GameState, city: City, cmd: DomesticCmd, pressure: num
 }
 
 function scoreCommand(input: ScoreInput): ScoredCommand | null {
-  const { state, city, cmd, profile, goldLeft, staminaLeft, counts, projectedStats } = input;
+  const { state, city, cmd, profile, goldLeft, staminaLeft, counts, projectedStats, general } = input;
   const cfg = BALANCE.DOMESTIC[cmd];
   if (cfg.gold > goldLeft || cfg.stamina > staminaLeft) return null;
   const before = projectedStats[cfg.field] ?? city[cfg.field] ?? 0;
   if (before >= BALANCE.STAT_CAP[cfg.field]) return null;
-  const gain = domesticGain(state, city, cmd, before);
+  const gain = domesticGain(state, city, cmd, before, general);
   if (gain <= 0) return null;
 
   const pressure = enemyPressure(state, city).ratio;
@@ -312,6 +317,7 @@ export function planCityOrders(
           staminaLeft,
           counts,
           projectedStats,
+          general,
         }),
       )
       .filter((x): x is ScoredCommand => x !== null)
@@ -363,6 +369,7 @@ function attackableCount(state: GameState): number {
   const targets = new Set<string>();
   for (const c of myCities(state)) {
     for (const e of state.edges) {
+      if (e.wild) continue;
       const other = e.a === c.id ? e.b : e.b === c.id ? e.a : null;
       if (!other) continue;
       const t = state.cities[other];

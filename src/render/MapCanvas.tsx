@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { City, CitySize, GameState, GridPoint, UnitClass } from '../core/state';
+import type {
+  BattleState,
+  BattleUnit,
+  City,
+  CitySize,
+  GameState,
+  GridPoint,
+  UnitClass,
+} from '../core/state';
 import { cityTroops } from '../core/selectors';
 import { CITY_SIZE_LABEL, fortificationLabel } from '../data/tables/cities';
 import { MAP } from '../data/tables/geography';
@@ -23,7 +31,13 @@ import {
   gateSupplyCityOf,
 } from '../systems/gates';
 import { gatesOf, siegeTargetOf } from '../systems/cityGrid';
-import { TERRAIN_LABEL } from '../data/tables/unitClasses';
+import {
+  attackRangeOf,
+  inBattleBounds,
+  moveRangeOf,
+} from '../systems/battle/grid';
+import { durabilityMaxOf } from '../systems/logistics';
+import { TERRAIN_LABEL, UNIT_CLASS_LABEL } from '../data/tables/unitClasses';
 import {
   GATE_SIDES,
   cityBlocks,
@@ -37,10 +51,12 @@ import {
 import { gateAtCenter, gateSiteById, gateSites, gateWorldPos } from './gateGrid';
 import { factionPattern, PATTERN_LABEL } from './factionPattern';
 import { PALETTE, paintTerrain } from './terrainPaint';
+import { OVERVIEW_SCALE, terrainOverview } from './terrainOverview';
 import {
   DEFAULT_ZOOM,
   MAX_ZOOM,
   MIN_ZOOM,
+  centerOnWorld,
   clamp,
   clampPan,
   layoutOf,
@@ -52,6 +68,7 @@ import {
   type Layout,
   type MapView,
 } from './camera';
+import { Minimap } from './Minimap';
 import { territoryField, territorySignature } from '../systems/territory';
 import { territoryPaint, territoryWash } from './territoryPaint';
 import { beginPaintFrame, endPaintFrame, lapPaint } from './paintProfile';
@@ -279,28 +296,8 @@ function chunkAt(tier: ChunkTier, cx: number, cy: number): TerrainChunk | null {
 }
 
 /**
- * 全图总览缓存。
- *
- * 20% 缩放时整张地图都要显示。若继续用 576 世界单位的分块，一屏要
- * 一百多块、LRU 会反复淘汰重画。这里单独烘焙一张 691×518 的总览图
- * （世界尺寸的 1/10），低倍率时直接整图缩放绘制。
+ * 全图总览缓存：独立模块 `terrainOverview` 同时服务地图低倍率与小地图。
  */
-const OVERVIEW_SCALE = 1 / 10;
-let overviewCanvas: HTMLCanvasElement | null = null;
-
-function terrainOverview(): HTMLCanvasElement {
-  if (overviewCanvas) return overviewCanvas;
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.round(MAP.width * OVERVIEW_SCALE);
-  canvas.height = Math.round(MAP.height * OVERVIEW_SCALE);
-  const ctx = canvas.getContext('2d');
-  if (ctx) {
-    ctx.setTransform(OVERVIEW_SCALE, 0, 0, OVERVIEW_SCALE, 0, 0);
-    paintTerrain(ctx, { x: 0, y: 0, w: MAP.width, h: MAP.height });
-  }
-  overviewCanvas = canvas;
-  return canvas;
-}
 
 /**
  * 画一档分块，返回还缺多少块。
@@ -1126,7 +1123,7 @@ function drawArmyToken(
   ctx.textBaseline = 'middle';
   ctx.fillText(label, px, py + r * 1.05 + Math.max(5, r * 0.44));
 
-  // 移动力：选中时在棋子左上角显示剩余天数
+  // 移动力：选中时在棋子左上角显示剩余 MP
   if (opts.selected) {
     const mx = px - r * 1.1;
     const my = py - r * 1.1;
@@ -1167,7 +1164,7 @@ function drawArmyToken(
  */
 export interface DispatchOverlay {
   fromCityId: string;
-  /** 本旬移动力（天）：画「旬」标记用 */
+  /** 本旬剩余移动力（MP）：画「旬」标记用 */
   mp: number;
   /** 本旬可达（实色填充 + 实线边界） */
   within: Set<string>;
@@ -1179,16 +1176,74 @@ export interface DispatchOverlay {
   onPick: (tile: GridPoint) => void;
 }
 
+/** 战斗反馈飘字（与 BattleCanvas 的 BattleFx 同形，避免渲染层互相引用） */
+export interface BattleMapFx {
+  key: number;
+  x: number;
+  y: number;
+  text: string;
+  tone: 'damage' | 'good' | 'miss';
+}
+
+const BATTLE_CLASS_GLYPH: Record<string, string> = {
+  infantry: '步',
+  cavalry: '骑',
+  archer: '弓',
+  navy: '水',
+  elite: '极',
+  mystic: '玄',
+};
+
+function battleUnitAt(b: BattleState, x: number, y: number): BattleUnit | undefined {
+  return Object.values(b.units).find((u) => !u.routed && u.troops > 0 && u.x === x && u.y === y);
+}
+
+/** 战斗镜头焦点：野战取接战中心，攻城取城郭中心 */
+export function battleFocusWorld(b: BattleState): { x: number; y: number } {
+  if (b.field) return { x: b.field.x, y: b.field.y };
+  if (b.cityBlock) {
+    return {
+      x: (b.cityBlock.x0 + b.cityBlock.x1) / 2,
+      y: (b.cityBlock.y0 + b.cityBlock.y1) / 2,
+    };
+  }
+  const units = Object.values(b.units).filter((u) => !u.routed);
+  if (units.length === 0) return { x: MAP.width / 2, y: MAP.height / 2 };
+  return {
+    x: units.reduce((n, u) => n + u.x, 0) / units.length,
+    y: units.reduce((n, u) => n + u.y, 0) / units.length,
+  };
+}
+
+/**
+ * 战斗默认镜头倍率。
+ *
+ * 行军用 300% 看城池细节；战棋需要同时看到双方阵线与可达范围，
+ * 因此按「一格约 52px」反算，小屏和大屏的战术视野保持一致。
+ */
+function battleZoomFor(w: number, h: number): number {
+  const layout = layoutOf(w, h);
+  return clamp(52 / Math.max(1, MAP.tile * layout.scale), 0.35, 1.6);
+}
+
 export function MapCanvas({
   state,
   selectedCityId,
   dispatch,
   selectedArmyId,
   selectedGateId,
+  battle,
+  battleSelectedUnitId,
+  battleReachable,
+  battleTargets,
+  battleFx,
+  battleShowThreat = false,
   onSelect,
   onSelectArmy,
   onMoveArmy,
   onSelectGate,
+  onBattleCellClick,
+  onBattleUnitClick,
 }: {
   state: GameState;
   selectedCityId: string;
@@ -1198,10 +1253,23 @@ export function MapCanvas({
   selectedArmyId?: string | null;
   /** 选中的关防 id：显示高亮与关防提示 */
   selectedGateId?: string | null;
+  /**
+   * 大地图战斗覆盖层。
+   * 有值时画布进入战斗交互：点击格子 / 单位交给战斗回调，
+   * 不再响应城池、关防与行军调度。地形、相机与小地图仍复用同一套。
+   */
+  battle?: BattleState | null;
+  battleSelectedUnitId?: string | null;
+  battleReachable?: Array<{ x: number; y: number; cost: number }>;
+  battleTargets?: string[];
+  battleFx?: BattleMapFx | null;
+  battleShowThreat?: boolean;
   onSelect: (id: string) => void;
   onSelectArmy?: (id: string | null) => void;
   onMoveArmy?: (armyId: string, to: GridPoint) => void;
   onSelectGate?: (gateId: string | null) => void;
+  onBattleCellClick?: (x: number, y: number) => void;
+  onBattleUnitClick?: (unitId: string) => void;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -1364,10 +1432,29 @@ export function MapCanvas({
   useEffect(() => {
     if (!size.w || !size.h || mobileInit.current) return;
     mobileInit.current = true;
-    // 默认州郡视角：任何屏幕都固定 100%，看清城池与关港
+    // 大地图战斗：镜头对准接战点；平时默认 300% 州郡视角
+    if (battle) {
+      const focus = battleFocusWorld(battle);
+      setView(centerOnWorld(focus.x, focus.y, battleZoomFor(size.w, size.h), size.w, size.h));
+      return;
+    }
+    // 默认州郡视角：任何屏幕都固定 300%，看清城池与关港
     centerView(DEFAULT_ZOOM);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [size.w, size.h]);
+
+  /** 进入战斗时对准双方阵线；同一场战斗内不再跟着每次行动跳镜头 */
+  const battleFocusRef = useRef('');
+  useEffect(() => {
+    if (!battle || size.w < 10 || size.h < 10) return;
+    const key = `${battle.kind ?? 'city'}:${battle.fromCityId}:${battle.targetCityId}:${
+      battle.field?.x ?? battle.cityBlock?.x0 ?? ''
+    },${battle.field?.y ?? battle.cityBlock?.y0 ?? ''}`;
+    if (battleFocusRef.current === key) return;
+    battleFocusRef.current = key;
+    const focus = battleFocusWorld(battle);
+    setView(centerOnWorld(focus.x, focus.y, battleZoomFor(size.w, size.h), size.w, size.h));
+  }, [battle, size.w, size.h]);
 
   // 空闲时先把全图总览烘焙好，避免第一次点「全图」时卡一拍
   useEffect(() => {
@@ -1390,6 +1477,7 @@ export function MapCanvas({
   }, []);
 
   useEffect(() => {
+    if (battle) return;
     if (view.zoom <= MIN_ZOOM + 0.01 || !size.w || !size.h) return;
     const base = project(state, size.w, size.h);
     const target = base.find((p) => p.city.id === selectedCityId);
@@ -1962,9 +2050,11 @@ export function MapCanvas({
 
     // ── 部队 ──
     const armyHits: Array<{ id: string; x: number; y: number; r: number }> = [];
+    // 战斗中双方已化为战棋单位，行军棋子不再重复绘制
+    if (!battle) {
     for (const army of state.armies ?? []) {
       const pos = armyWorldPos(state, army);
-      if (!pos) continue;
+      if (!pos || army.garrisonGateId) continue;
       const cur = worldToScreen(pos.x, pos.y, size.w, size.h, view, layout);
       const color = state.factions[army.factionId]?.color ?? '#8a8274';
       const cellPx = MAP.tile * layout.scale * view.zoom;
@@ -2019,6 +2109,7 @@ export function MapCanvas({
         ctx.textBaseline = 'middle';
         ctx.fillText(label, cur.x + r * 0.7 + 6.5, cur.y - r * 1.9 + 7);
       }
+    }
     }
     armyHitsRef.current = armyHits;
 
@@ -2085,7 +2176,13 @@ export function MapCanvas({
 
       if (pri <= 2 && citySubLineVisible(level)) {
         const owner = c.ownerId ? state.factions[c.ownerId]?.name ?? '' : '无主';
-        const sub = `${owner} · ${cityTroops(state, c.id)}`;
+        // 情报前置：城名副行常驻兵力与城墙耐久%，不必点开面板
+        const troops = cityTroops(state, c.id);
+        const troopsText = troops >= 10000 ? `${(troops / 10000).toFixed(1)}万` : `${troops}`;
+        const maxDur = durabilityMaxOf(c);
+        const dur = Math.min(maxDur, c.durability ?? Math.round(maxDur * 0.8));
+        const durPct = maxDur > 0 ? Math.round((dur / maxDur) * 100) : 0;
+        const sub = `${owner} · 兵 ${troopsText} · 城 ${durPct}%`;
         ctx.font = subFont;
         const subW = ctx.measureText(sub).width + 8;
         const base = nameBox ?? above;
@@ -2125,7 +2222,7 @@ export function MapCanvas({
 
     // 悬停 tooltip
     // 调度部队时不弹城池 tooltip：它会挡住移动范围与路径预览
-    const hoverPoint = hover && !selectedArmyId ? pts.find((p) => p.city.id === hover) : null;
+    const hoverPoint = hover && !selectedArmyId && !battle ? pts.find((p) => p.city.id === hover) : null;
     if (hoverPoint) {
       const c = hoverPoint.city;
       const gens = Object.values(state.generals)
@@ -2218,7 +2315,7 @@ export function MapCanvas({
     }
 
     // 关防 tooltip
-    if (hoverGate && !selectedArmyId) {
+    if (hoverGate && !selectedArmyId && !battle) {
       const site = gateSiteById(hoverGate);
       const sp = site ? gateScreen.get(site.gate.id) : null;
       if (site && sp) {
@@ -2294,6 +2391,194 @@ export function MapCanvas({
       }
     }
 
+    // ── 大地图战斗覆盖层 ──
+    // 与行军共用同一张地形 / 相机：这里只叠战术信息，不另起战场底图。
+    if (battle) {
+      const cell = tileRect(0, 0).w;
+      const reachSet = new Set((battleReachable ?? []).map((p) => `${p.x},${p.y}`));
+      const targetSet = new Set(battleTargets ?? []);
+
+      // 敌方威胁范围：下回合「移动力 + 射程」能压到的格
+      if (battleShowThreat && cell >= 4) {
+        ctx.fillStyle = 'rgba(193,74,58,0.13)';
+        ctx.strokeStyle = 'rgba(193,74,58,0.34)';
+        ctx.lineWidth = 1;
+        for (const foe of Object.values(battle.units)) {
+          if (foe.routed || foe.troops <= 0 || foe.side === battle.playerSide) continue;
+          const reach = moveRangeOf(foe.unitClass) + attackRangeOf(foe.unitClass).max;
+          for (let dy = -reach; dy <= reach; dy++) {
+            for (let dx = -reach; dx <= reach; dx++) {
+              if (Math.abs(dx) + Math.abs(dy) > reach) continue;
+              const x = foe.x + dx;
+              const y = foe.y + dy;
+              if (!inBattleBounds(battle, x, y)) continue;
+              const box = tileRect(x, y);
+              ctx.fillRect(box.x, box.y, box.w, box.h);
+              if ((dx + dy) % 3 === 0) {
+                ctx.beginPath();
+                ctx.moveTo(box.x + box.w * 0.2, box.y + box.h);
+                ctx.lineTo(box.x + box.w, box.y + box.h * 0.2);
+                ctx.stroke();
+              }
+            }
+          }
+        }
+      }
+
+      // 本回合可达格
+      if (cell >= 3) {
+        for (const key of reachSet) {
+          const [x, y] = key.split(',').map(Number) as [number, number];
+          const box = tileRect(x, y);
+          ctx.fillStyle = 'rgba(93,154,139,0.28)';
+          ctx.fillRect(box.x, box.y, box.w, box.h);
+          ctx.strokeStyle = 'rgba(120,190,175,0.6)';
+          ctx.lineWidth = Math.max(1, cell * 0.035);
+          ctx.strokeRect(box.x + 1, box.y + 1, Math.max(0, box.w - 2), Math.max(0, box.h - 2));
+        }
+      }
+
+      // 悬停格：攻击目标 / 可走格高亮
+      if (hoverTile) {
+        const box = tileRect(hoverTile.col, hoverTile.row);
+        const unit = battleUnitAt(battle, hoverTile.col, hoverTile.row);
+        const canClick =
+          Boolean(unit) ||
+          reachSet.has(`${hoverTile.col},${hoverTile.row}`) ||
+          (battleTargets ?? []).includes(unit?.id ?? '');
+        ctx.fillStyle = canClick ? 'rgba(239,230,210,0.1)' : 'rgba(239,230,210,0.03)';
+        ctx.fillRect(box.x, box.y, box.w, box.h);
+        ctx.strokeStyle = canClick ? 'rgba(246,232,196,0.8)' : 'rgba(239,230,210,0.3)';
+        ctx.lineWidth = Math.max(1, cell * 0.04);
+        ctx.strokeRect(box.x + 1, box.y + 1, Math.max(0, box.w - 2), Math.max(0, box.h - 2));
+      }
+
+      // 单位：玩家方青、敌方赤；目标加虚线红圈
+      const cellPx = cell;
+      const radius = clamp(cellPx * 0.34, 9, 30);
+      const glyphFont = Math.max(8, Math.round(radius * 0.9));
+      const troopFont = Math.max(7, Math.round(radius * 0.62));
+      for (const u of Object.values(battle.units)) {
+        if (u.routed || u.troops <= 0) continue;
+        const p = tileScreen({ col: u.x, row: u.y });
+        const color = u.side === battle.playerSide ? '#5d9a8b' : '#c14a3a';
+        if (targetSet.has(u.id)) {
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, radius + 5, 0, Math.PI * 2);
+          ctx.setLineDash([3, 3]);
+          ctx.strokeStyle = 'rgba(224,92,70,0.95)';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+        ctx.save();
+        ctx.globalAlpha = u.hasActed ? 0.45 : 1;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y + 2, radius, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.lineWidth = u.id === battleSelectedUnitId ? 2.6 : 1;
+        ctx.strokeStyle =
+          u.id === battleSelectedUnitId ? '#f2dfa9' : 'rgba(20,19,15,0.62)';
+        ctx.stroke();
+        ctx.fillStyle = '#15130f';
+        ctx.font = `700 ${glyphFont}px "PingFang SC", "Noto Sans SC", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(BATTLE_CLASS_GLYPH[u.unitClass] ?? '兵', p.x, p.y + 0.5);
+
+        // 兵力数字走描边，压在任何地形上都读得清
+        const label = u.troops >= 10000 ? `${(u.troops / 10000).toFixed(1)}万` : `${u.troops}`;
+        ctx.font = `700 ${troopFont}px "JetBrains Mono", "PingFang SC", monospace`;
+        ctx.lineWidth = Math.max(2, troopFont * 0.35);
+        ctx.strokeStyle = 'rgba(10,9,7,0.92)';
+        ctx.strokeText(label, p.x, p.y + radius + troopFont * 0.75);
+        ctx.fillStyle = '#f4ead4';
+        ctx.fillText(label, p.x, p.y + radius + troopFont * 0.75);
+        if (u.isCommander) {
+          ctx.fillStyle = '#f2dfa9';
+          ctx.font = `700 ${glyphFont}px sans-serif`;
+          ctx.fillText('★', p.x + radius * 0.78, p.y - radius * 0.78);
+        }
+        ctx.restore();
+      }
+
+      // 飘字
+      if (battleFx) {
+        const p = tileScreen({ col: battleFx.x, row: battleFx.y });
+        const tone =
+          battleFx.tone === 'damage'
+            ? '#ffb4a0'
+            : battleFx.tone === 'good'
+              ? '#a9e2c4'
+              : '#d9cdb2';
+        ctx.font = `700 ${Math.max(13, Math.round(cell * 0.3))}px "PingFang SC", "Noto Sans SC", sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = 'rgba(10,9,7,0.85)';
+        ctx.strokeText(battleFx.text, p.x, p.y - cell * 0.55);
+        ctx.fillStyle = tone;
+        ctx.fillText(battleFx.text, p.x, p.y - cell * 0.55);
+      }
+
+      // 单位悬停情报
+      if (hoverTile) {
+        const unit = battleUnitAt(battle, hoverTile.col, hoverTile.row);
+        if (unit) {
+          const p = tileScreen({ col: unit.x, row: unit.y });
+          const title = `${unit.name} · ${UNIT_CLASS_LABEL[unit.unitClass]}`;
+          const stateText =
+            unit.side !== battle.playerSide
+              ? '敌军'
+              : unit.stunned > 0
+                ? `混乱 ${unit.stunned} 回合`
+                : unit.hasActed
+                  ? '本回合已行动'
+                  : unit.hasMoved
+                    ? '已移动 · 可攻击或待机'
+                    : '待命';
+          const lines = [
+            `兵 ${unit.troops}/${unit.maxTroops} · 武 ${unit.force} 智 ${unit.intellect}`,
+            stateText,
+          ];
+          ctx.font = '600 12px "PingFang SC", "Noto Sans SC", sans-serif';
+          const w = Math.max(
+            ctx.measureText(title).width,
+            ...lines.map((l) => {
+              ctx.font = '10.5px "PingFang SC", "Noto Sans SC", sans-serif';
+              return ctx.measureText(l).width;
+            }),
+          ) + 20;
+          const h = 46;
+          let tx = p.x + radius + 12;
+          let ty = p.y - h / 2;
+          if (tx + w > size.w - 8) tx = p.x - radius - w - 12;
+          ty = clamp(ty, 8, size.h - h - 8);
+          ctx.beginPath();
+          ctx.roundRect(tx, ty, w, h, 6);
+          ctx.fillStyle = 'rgba(20,18,14,0.96)';
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(75,67,50,0.9)';
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          ctx.textAlign = 'left';
+          ctx.textBaseline = 'alphabetic';
+          ctx.fillStyle = '#efe6d2';
+          ctx.font = '600 12px "PingFang SC", "Noto Sans SC", sans-serif';
+          ctx.fillText(title, tx + 10, ty + 18);
+          ctx.fillStyle = '#b9ad95';
+          ctx.font = '10.5px "PingFang SC", "Noto Sans SC", sans-serif';
+          lines.forEach((line, i) => ctx.fillText(line, tx + 10, ty + 32 + i * 13));
+        }
+      }
+      lapPaint('entities');
+    }
+
     // 有块没烘完，或者预算用完还有缺口：过一会儿再补一帧。
     endPaintFrame();
     if (missingChunks > 0 && !refineTimer.current) {
@@ -2319,6 +2604,12 @@ export function MapCanvas({
     hoverGate,
     territory,
     paintTick,
+    battle,
+    battleSelectedUnitId,
+    battleReachable,
+    battleTargets,
+    battleFx,
+    battleShowThreat,
   ]);
 
   /** 屏幕坐标 → 城池（用城墙矩形做命中，比圆心距离更准） */
@@ -2359,6 +2650,14 @@ export function MapCanvas({
     return best?.id ?? null;
   };
 
+  /** 战斗模式：屏幕位置落在哪个单位格上 */
+  const hitBattleUnit = (clientX: number, clientY: number): BattleUnit | null => {
+    if (!battle) return null;
+    const tile = tileAtScreen(clientX, clientY);
+    if (!tile) return null;
+    return battleUnitAt(battle, tile.col, tile.row) ?? null;
+  };
+
   /** 屏幕坐标 → 格 */
   const tileAtScreen = (clientX: number, clientY: number): GridPoint | null => {
     const canvas = canvasRef.current;
@@ -2380,20 +2679,22 @@ export function MapCanvas({
   };
 
   return (
-    <div className="map-wrap" ref={wrapRef}>
+    <div className={`map-wrap${battle ? ' map-battle' : ''}`} ref={wrapRef}>
       <canvas
         ref={canvasRef}
         className="map-canvas"
         style={{
           cursor: dragging
             ? 'grabbing'
-            : dispatch || selectedArmyId
+            : battle
               ? 'crosshair'
-              : view.zoom > MIN_ZOOM + 0.01
-                ? 'grab'
-                : hover || hoverArmy || hoverGate
-                  ? 'pointer'
-                  : 'default',
+              : dispatch || selectedArmyId
+                ? 'crosshair'
+                : view.zoom > MIN_ZOOM + 0.01
+                  ? 'grab'
+                  : hover || hoverArmy || hoverGate
+                    ? 'pointer'
+                    : 'default',
         }}
         onWheel={(e) => {
           if (size.w < 10) return;
@@ -2514,6 +2815,15 @@ export function MapCanvas({
           const sx = e.clientX - box.left;
           const sy = e.clientY - box.top;
 
+          // 战斗模式：指针只报告格子，单位命中在点击时判定
+          if (battle) {
+            setHoverTile(tileAtScreen(e.clientX, e.clientY));
+            if (hover) setHover(null);
+            if (hoverArmy) setHoverArmy(null);
+            if (hoverGate) setHoverGate(null);
+            return;
+          }
+
           // 派遣模式：指针只负责报告目的地格，不参与选中/悬停单位
           if (dispatch) {
             const tile = tileAtScreen(e.clientX, e.clientY);
@@ -2553,6 +2863,18 @@ export function MapCanvas({
           const rect = e.currentTarget.getBoundingClientRect();
           const sx = e.clientX - rect.left;
           const sy = e.clientY - rect.top;
+
+          // ⓪ 战斗模式：先判单位，再判格子
+          if (battle) {
+            const unit = hitBattleUnit(e.clientX, e.clientY);
+            if (unit) {
+              onBattleUnitClick?.(unit.id);
+              return;
+            }
+            const tile = tileAtScreen(e.clientX, e.clientY);
+            if (tile) onBattleCellClick?.(tile.col, tile.row);
+            return;
+          }
 
           // ⓪ 派遣模式：点格子即锁定目的地（敌城 3×3 会被吸附到城下）
           if (dispatch) {
@@ -2654,6 +2976,22 @@ export function MapCanvas({
           全图
         </button>
       </div>
+
+      <Minimap
+        state={state}
+        view={view}
+        viewportWidth={size.w}
+        viewportHeight={size.h}
+        battle={battle ?? null}
+        onNavigate={(world) => {
+          if (size.w < 10 || size.h < 10) return;
+          const zoom = view.zoom <= MIN_ZOOM + 0.01 ? DEFAULT_ZOOM : view.zoom;
+          setView(centerOnWorld(world.x, world.y, zoom, size.w, size.h));
+          setHover(null);
+          setHoverArmy(null);
+          setHoverGate(null);
+        }}
+      />
 
       {/* 图例成组叠在地图左上角：左下角留给提示条，避免浮层挤压后两者互相压字 */}
       <div className="map-legends">

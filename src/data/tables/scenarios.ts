@@ -40,7 +40,8 @@ const MAP_EDGES: MapEdge[] = [
   { a: 'tianshui', b: 'wuwei', cost: 3 },
   { a: 'tianshui', b: 'anding', cost: 2 },
   { a: 'tianshui', b: 'hanzhong', cost: 3 },
-  { a: 'wuwei', b: 'anding', cost: 3 },
+  // 凉州走廊：武威到安定横穿腾格里边缘，是通道但不算邻城
+  { a: 'wuwei', b: 'anding', cost: 3, wild: true },
   { a: 'anding', b: 'changan', cost: 3 },
   { a: 'changan', b: 'luoyang', cost: 3 },
   { a: 'changan', b: 'hanzhong', cost: 4 },
@@ -57,12 +58,10 @@ const MAP_EDGES: MapEdge[] = [
   // 并州 / 河北 / 幽州
   { a: 'jinyang', b: 'luoyang', cost: 3 },
   { a: 'jinyang', b: 'ye', cost: 3 },
-  { a: 'jinyang', b: 'xiangping', cost: 5 },
   { a: 'ye', b: 'puyang', cost: 2 },
   { a: 'ye', b: 'chenliu', cost: 3 },
-  { a: 'ye', b: 'xiangping', cost: 5 },
-  { a: 'xiangping', b: 'beihai', cost: 5 },
-  { a: 'xiangping', b: 'ji', cost: 4 },
+  // 辽西走廊：襄平唯一陆路，不能删；143 格，按险道处理（不然 AI 会把襄平当蓟的邻城）
+  { a: 'xiangping', b: 'ji', cost: 4, wild: true },
   { a: 'xiangping', b: 'beiping', cost: 3 },
   { a: 'ji', b: 'beiping', cost: 2 },
   { a: 'ji', b: 'zhuo', cost: 2 },
@@ -118,7 +117,8 @@ const MAP_EDGES: MapEdge[] = [
   { a: 'xiangyang', b: 'jiangling', cost: 2 },
   { a: 'jiangling', b: 'changsha', cost: 3 },
   { a: 'jiangling', b: 'jiangxia', cost: 2 },
-  { a: 'jiangling', b: 'jiangzhou', cost: 4 },
+  // 长江三峡：水路，陆军须借渡口
+  { a: 'jiangling', b: 'jiangzhou', cost: 4, wild: true },
   { a: 'changsha', b: 'guiyang', cost: 2 },
   { a: 'changsha', b: 'lingling', cost: 2 },
   { a: 'guiyang', b: 'lingling', cost: 2 },
@@ -156,7 +156,6 @@ const MAP_EDGES: MapEdge[] = [
   { a: 'zhangtong', b: 'mianzhu', cost: 2 },
   { a: 'mianzhu', b: 'chengdu', cost: 1 },
   { a: 'chengdu', b: 'jiangzhou', cost: 2 },
-  { a: 'jiangzhou', b: 'changsha', cost: 5 },
   { a: 'shangyong', b: 'hanzhong', cost: 3 },
   { a: 'shangyong', b: 'jiangzhou', cost: 4 },
   { a: 'shangyong', b: 'badong', cost: 3 },
@@ -167,8 +166,10 @@ const MAP_EDGES: MapEdge[] = [
   { a: 'badong', b: 'jiangzhou', cost: 2 },
   { a: 'jianning', b: 'yunnan', cost: 2 },
   { a: 'jianning', b: 'jiangzhou', cost: 4 },
-  { a: 'jianning', b: 'lingling', cost: 5 },
-  { a: 'yunnan', b: 'chengdu', cost: 5 },
+  // 牂牁道：南中通荆南，史实有路但极险，不算「邻城」
+  { a: 'jianning', b: 'lingling', cost: 5, wild: true },
+  // 越嶲道：南中入蜀，同上
+  { a: 'yunnan', b: 'chengdu', cost: 5, wild: true },
 ];
 
 // ── 名册与自动布防 ────────────────────────────────────────

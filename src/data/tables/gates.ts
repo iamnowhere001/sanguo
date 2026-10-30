@@ -31,7 +31,7 @@ export interface GateFeature {
   edges: Array<[string, string]>;
   /** 法理归属城：null 表示无主关防，任何势力都可通行并可派兵接管；小路恒为 null */
   guardCityId: string | null;
-  /** 通过该关防额外消耗的行军天数（在通行线中点结算一次） */
+  /** 通过该关防额外消耗的行军 MP（在通行线中点结算一次） */
   extraDays: number;
   /** 关防工事值：参与攻关守备计算，也用于面板展示 */
   fortification: number;

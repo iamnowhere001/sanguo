@@ -176,7 +176,7 @@ export function performCharge(
   if (g) grantExp(g, BALANCE.EXP.hit + Math.floor(dmg / 10));
   const routed = markRouted(b, d);
   if (routed && g) grantExp(g, BALANCE.EXP.kill);
-  b.log.push(`${a.name} 突击 ${d.name}：${dmg} 伤害并混乱 ${d.stunned} 天`);
+  b.log.push(`${a.name} 突击 ${d.name}：${dmg} 伤害并混乱 ${d.stunned} 回合`);
   if (b.log.length > 80) b.log.splice(0, b.log.length - 80);
   return { ok: true, message: `突击造成 ${dmg} 伤害`, damage: dmg, routed };
 }
@@ -199,7 +199,7 @@ export function moveUnit(b: BattleState, unitId: string, x: number, y: number): 
   if (u.troops <= 0) return fail('该单位已溃散');
   if (u.hasActed) return fail('该单位本回合已行动');
   if (u.stunned > 0) return fail('该单位处于混乱状态');
-  if (u.hasMoved) return fail('该单位本日已移动');
+  if (u.hasMoved) return fail('该单位本回合已移动');
   if (isOccupied(b, x, y, u.id)) return fail('目标格已被占据');
   const reach = reachableTiles(b, u);
   if (!reach.has(unitKey(x, y))) return fail('目标格不可到达');
@@ -224,7 +224,7 @@ export function undoMove(b: BattleState, unitId: string): OpResult {
   const u = b.units[unitId];
   if (!u || u.routed) return fail('单位不存在');
   if (u.troops <= 0) return fail('该单位已溃散');
-  if (!u.hasMoved) return fail('该单位本日尚未移动');
+  if (!u.hasMoved) return fail('该单位本回合尚未移动');
   if (u.hasActed) return fail('已行动，无法撤销移动');
   if (u.prevX === undefined || u.prevY === undefined) return fail('没有可撤销的移动');
   const wasOnSupply =

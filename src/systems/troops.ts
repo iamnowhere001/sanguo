@@ -56,7 +56,16 @@ export function distributeToGenerals(
  * 出征 / 守城前从池里补兵：按武力从高到低填满参战武将。
  * 就地修改 state（reducer 已在 draft 上调用），返回实际动用的池兵数。
  */
-export function topUpFromPool(s: GameState, cityId: string, gens: General[]): number {
+export function topUpFromPool(
+  s: GameState,
+  cityId: string,
+  gens: General[],
+  /**
+   * 不补兵的武将（通常是「参军」：0 兵随军，只贡献智力）。
+   * 三11 的军师本就不单独领兵，这里让它保持 0 兵而不是被池兵填满。
+   */
+  exclude?: Set<string>,
+): number {
   const city = s.cities[cityId];
   if (!city) return 0;
   let pool = poolOf(city);
@@ -68,6 +77,7 @@ export function topUpFromPool(s: GameState, cityId: string, gens: General[]): nu
   );
   for (const g of ordered) {
     if (pool <= 0) break;
+    if (exclude?.has(g.id)) continue;
     const gap = Math.max(0, troopCapOf(s, g) - g.troops);
     const give = Math.min(gap, pool);
     if (give <= 0) continue;

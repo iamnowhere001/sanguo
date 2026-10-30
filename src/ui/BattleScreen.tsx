@@ -62,6 +62,11 @@ function UnitCard({
         <b>{u.name}</b>
         <ClassTag c={u.unitClass} />
         {u.isCommander ? <span className="mini gold">主将</span> : null}
+        {u.skillName ? (
+          <span className="mini uc-skill" title="武将特技：影响普攻 / 计策 / 攻城 / 内政">
+            {u.skillName}
+          </span>
+        ) : null}
         {u.deputyNames?.length ? (
           <span className="mini">副将 {u.deputyNames.join('、')}</span>
         ) : null}
@@ -91,7 +96,13 @@ function UnitCard({
       ) : null}
       <div className="uc-stats">
         <span className="stamina-text">体力 {u.stamina}</span>
-        {u.stunned > 0 ? <span className="warn-text">混乱 {u.stunned} 天</span> : null}
+        {typeof u.morale === 'number' ? (
+          <span className={u.morale < BALANCE.MORALE.routThreshold ? 'warn-text' : ''}>
+            气力 {u.morale}
+            {u.morale < BALANCE.MORALE.routThreshold ? ' · 有溃散风险' : ''}
+          </span>
+        ) : null}
+        {u.stunned > 0 ? <span className="warn-text">混乱 {u.stunned} 回合</span> : null}
       </div>
       <div
         className={`uc-state${
@@ -228,7 +239,7 @@ function BattleScreenBody() {
   const targets = pendingTactic ? tacticHits.map((t) => t.id) : actions.targets;
   const reachable = pendingTactic ? [] : actions.reachable;
 
-  /** 本日还可行动的部队，按战场纵向顺序排列 */
+  /** 本回合还可行动的部队，按战场纵向顺序排列 */
   const readyUnits = useMemo(
     () =>
       Object.values(battle.units)
@@ -413,7 +424,7 @@ function BattleScreenBody() {
     if (u.side === playerSide) {
       if (u.hasActed || u.stunned > 0) {
         store.notify(
-          u.stunned > 0 ? '该部队处于混乱状态' : '该部队本日已行动',
+          u.stunned > 0 ? '该部队处于混乱状态' : '该部队本回合已行动',
           'warn',
         );
         return;
@@ -505,7 +516,7 @@ function BattleScreenBody() {
         const fresh = nextBattle.log.slice(logStart);
         setDayBrief({
           day: nextBattle.day - 1,
-          lines: fresh.length > 0 ? fresh.slice(-4) : ['敌军调动完毕，本日未接战'],
+          lines: fresh.length > 0 ? fresh.slice(-4) : ['敌军调动完毕，本回合未接战'],
         });
         const hide = window.setTimeout(() => setDayBrief(null), 3600);
         timersRef.current.push(hide);
@@ -691,7 +702,7 @@ function BattleScreenBody() {
     : pendingTactic
       ? `已选「${TACTICS[pendingTactic].name}」：点击高亮目标释放 · Esc 取消`
       : pendingCharge
-        ? '突击模式：点击高亮敌军（1.5× 伤害 + 混乱 1 天）· Esc 取消'
+        ? '突击模式：点击高亮敌军（1.5× 伤害 + 混乱 1 回合）· Esc 取消'
         : !selected
           ? readyCount > 0
             ? '选择一支待行动部队开始行动'
@@ -726,11 +737,11 @@ function BattleScreenBody() {
           </span>
           <span className="turn">
             {playerSide === 'defender' ? '守城战' : '出征'} · 第 {battle.day} /{' '}
-            {BALANCE.BATTLE_MAX_DAYS} 天 · 天气 {WEATHER_LABEL[battle.weather]}
+            {BALANCE.BATTLE_MAX_DAYS} 回合 · 天气 {WEATHER_LABEL[battle.weather]}
           </span>
           <span className={`turn turn-budget ${budgetTone}`}>
             {playerSide === 'defender' ? '预计失守' : '预计破城'}{' '}
-            {breakDays == null ? '—' : `~${breakDays}`} 天 · 剩余 {remainingDays} 天
+            {breakDays == null ? '—' : `~${breakDays}`} 回合 · 剩余 {remainingDays} 回合
           </span>
         </div>
 
@@ -897,7 +908,7 @@ function BattleScreenBody() {
           {dayBrief && !enemyTurn && !pilot ? (
             <div className="day-brief">
               <span className="day-brief-head">
-                敌军行动 · 第 {Math.max(1, dayBrief.day)} 天战况
+                敌军行动 · 第 {Math.max(1, dayBrief.day)} 回合战况
               </span>
               {dayBrief.lines.map((l, i) => (
                 <span key={i} className="day-brief-line">
@@ -922,7 +933,7 @@ function BattleScreenBody() {
                   className={`command-btn${battle.inspireSide === playerSide ? ' on' : ''}`}
                   disabled={commandBlocked || battle.inspireSide === playerSide}
                   onClick={() => command('inspire')}
-                  title="消耗 1 军令：本日我方攻击伤害 ×1.2"
+                  title="消耗 1 军令：本回合我方攻击伤害 ×1.2"
                 >
                   鼓舞 <em>伤害 +20%</em>
                 </button>
@@ -930,7 +941,7 @@ function BattleScreenBody() {
                   className={`command-btn${battle.guardSide === playerSide ? ' on' : ''}`}
                   disabled={commandBlocked || battle.guardSide === playerSide}
                   onClick={() => command('guard')}
-                  title="消耗 1 军令：本日我方受到伤害 ×0.7"
+                  title="消耗 1 军令：本回合我方受到伤害 ×0.7"
                 >
                   固守 <em>减伤 30%</em>
                 </button>
@@ -945,18 +956,18 @@ function BattleScreenBody() {
                     Boolean(selected.bonusMove)
                   }
                   onClick={() => command('march')}
-                  title="消耗 1 军令：选中部队本日移动 +2（需未移动）"
+                  title="消耗 1 军令：选中部队本回合移动 +2（需未移动）"
                 >
                   急袭 <em>移动 +2</em>
                 </button>
               </div>
               <p className="muted small command-note">
                 {battle.inspireSide === playerSide && battle.guardSide === playerSide
-                  ? '本日鼓舞生效：攻击 +20%；固守生效：受击 −30%'
+                  ? '本回合鼓舞生效：攻击 +20%；固守生效：受击 −30%'
                   : battle.inspireSide === playerSide
-                    ? '本日鼓舞生效：攻击 +20%'
+                    ? '本回合鼓舞生效：攻击 +20%'
                     : battle.guardSide === playerSide
-                      ? '本日固守生效：受击 −30%'
+                      ? '本回合固守生效：受击 −30%'
                       : `军令点整场共享，击溃敌军回 1 点（上限 ${BALANCE.MODERN.COMMAND_MAX}）。`}
               </p>
             </section>
@@ -975,7 +986,7 @@ function BattleScreenBody() {
                   className="btn ghost sm"
                   disabled={enemyTurn}
                   onClick={undoMove}
-                  title="把本日移动退回原位，不消耗行动"
+                  title="把本回合移动退回原位，不消耗行动"
                 >
                   撤销移动
                 </button>
@@ -994,7 +1005,7 @@ function BattleScreenBody() {
                   title={
                     selected.chargeUsed
                       ? '本场战斗已突击'
-                      : '突击：1.5× 伤害并造成 1 天混乱，每战限 1 次'
+                      : '突击：1.5× 伤害并造成 1 回合混乱，每战限 1 次'
                   }
                   onClick={() => setPendingCharge((v) => !v)}
                 >
@@ -1103,7 +1114,7 @@ function BattleScreenBody() {
               <div className="section-title">
                 <span>{pendingCharge ? '突击目标' : '可攻击目标'}</span>
                 <span className="muted small">
-                  {pendingCharge ? '1.5× 伤害 + 混乱 1 天' : '预计伤害'}
+                  {pendingCharge ? '1.5× 伤害 + 混乱 1 回合' : '预计伤害'}
                 </span>
               </div>
               <div className="target-list">
@@ -1289,7 +1300,7 @@ function BattleScreenBody() {
                 : '敌方行动中'}
           </span>
           <span className="sb-sep" />
-          <span>第 {battle.day} 天</span>
+          <span>第 {battle.day} 回合</span>
         </div>
       </footer>
 

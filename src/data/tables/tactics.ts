@@ -64,7 +64,7 @@ export const TACTICS: Record<TacticId, TacticDef> = {
     stamina: 30,
     range: 2,
     target: 'enemy',
-    short: '目标 1–3 天无法行动，每目标每战限 1 次',
+    short: '目标 1–3 回合无法行动，每目标每战限 1 次',
   },
 };
 

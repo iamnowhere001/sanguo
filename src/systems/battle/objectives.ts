@@ -178,7 +178,7 @@ function buildMain(
       kind: 'capture',
       side,
       title: '破城',
-      description: `第 ${deadline} 天前攻占 ${ctx.targetCityName}`,
+      description: `第 ${deadline} 回合前攻占 ${ctx.targetCityName}`,
       deadlineDay: deadline,
       reward: { ...ATK_MAIN_REWARD },
     };
@@ -187,7 +187,7 @@ function buildMain(
     kind: 'hold',
     side,
     title: '守城',
-    description: `坚守 ${ctx.targetCityName} 至第 ${deadline} 天`,
+    description: `坚守 ${ctx.targetCityName} 至第 ${deadline} 回合`,
     deadlineDay: deadline,
     reward: { ...DEF_MAIN_REWARD },
   };
@@ -382,8 +382,8 @@ export function objectiveProgress(b: BattleState, obj: BattleObjective): BattleO
     const deadline = obj.deadlineDay ?? BALANCE.MODERN.OBJECTIVE.DEADLINE_BASE;
     detail =
       b.day > deadline
-        ? `第 ${b.day} / ${deadline} 天 · 已过期限`
-        : `第 ${b.day} / ${deadline} 天`;
+        ? `第 ${b.day} / ${deadline} 回合 · 已过期限`
+        : `第 ${b.day} / ${deadline} 回合`;
     progress = clamp(b.day / Math.max(1, deadline), 0, 1);
   } else if (obj.kind === 'decapitate') {
     const target = obj.targetUnitId ? b.units[obj.targetUnitId] : undefined;

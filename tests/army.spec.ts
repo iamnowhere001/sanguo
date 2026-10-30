@@ -10,14 +10,13 @@ import {
   wallTileAt,
 } from '../src/render/terrainGrid';
 import {
-  MARCH_DAYS_PER_XUN,
+  MARCH_MP_PER_XUN,
   armyMaxMp,
   armyReach,
   dispatchField,
   dispatchPreviewOf,
   dispatchReachOf,
   firstLegEndOf,
-  marchDaysOfTile,
   moveArmyTo,
   planDispatch,
   reachableTargets,
@@ -25,6 +24,7 @@ import {
   routeForArmy,
   sortieArmy,
 } from '../src/systems/army';
+import { marchCostOfTile } from '../src/data/tables/marchCost';
 import { gatesOf, siegeTargetOf, sortieBlocked } from '../src/systems/cityGrid';
 import { gateSites } from '../src/render/gateGrid';
 import type { Army, GameState, GridPoint } from '../src/core/state';
@@ -39,7 +39,7 @@ function myCity(s: GameState): string {
 
 describe('网格大地图行军', () => {
   it('山岭与水域不可通行，平原最省天数', () => {
-    expect(marchDaysOfTile(0, 0)).toBeGreaterThan(0);
+    expect(marchCostOfTile(0, 0)).toBeGreaterThan(0);
     let sawWater = false;
     let sawMountain = false;
     for (let row = 0; row < MAP.rows && (!sawWater || !sawMountain); row++) {
@@ -47,11 +47,11 @@ describe('网格大地图行军', () => {
         const kind = tileKindAt(col, row);
         if (isWaterKind(kind)) {
           sawWater = true;
-          expect(Number.isFinite(marchDaysOfTile(col, row))).toBe(false);
+          expect(Number.isFinite(marchCostOfTile(col, row))).toBe(false);
         }
         if (kind === 'mountain') {
           sawMountain = true;
-          expect(Number.isFinite(marchDaysOfTile(col, row))).toBe(false);
+          expect(Number.isFinite(marchCostOfTile(col, row))).toBe(false);
         }
       }
     }
@@ -73,7 +73,7 @@ describe('网格大地图行军', () => {
         `${t.cityId} 的路线终点不是门外格`,
       ).toBe(true);
       for (const p of t.path) {
-        expect(Number.isFinite(marchDaysOfTile(p.col, p.row))).toBe(true);
+        expect(Number.isFinite(marchCostOfTile(p.col, p.row))).toBe(true);
         // 城墙对非城主不可通行：路线不得落在敌城墙上
         const wall = wallTileAt(p.col, p.row);
         if (wall) {
@@ -153,8 +153,8 @@ describe('网格大地图行军', () => {
   });
 
   it('每旬行军 10 天，约等于 10 格平原', () => {
-    expect(MARCH_DAYS_PER_XUN).toBe(10);
-    expect(marchDaysOfTile(0, 0)).toBeLessThanOrEqual(MARCH_DAYS_PER_XUN);
+    expect(MARCH_MP_PER_XUN).toBe(10);
+    expect(marchCostOfTile(0, 0)).toBeLessThanOrEqual(MARCH_MP_PER_XUN);
   });
 });
 
@@ -274,7 +274,7 @@ describe('L 档 · 逐格手动行军', () => {
     const r = moveArmyTo(s, army.id, first);
     expect(r.ok).toBe(true);
     expect(army.at).toEqual(first);
-    const cost = marchDaysOfTile(first.col, first.row);
+    const cost = marchCostOfTile(first.col, first.row);
     expect(army.mp).toBe(mpBefore - cost);
   });
 
@@ -328,7 +328,7 @@ describe('L 档 · 逐格手动行军', () => {
   it('过河靠摆渡：可达范围里没有水面，对岸滩头一次就到', () => {
     const s = fresh();
     const port = Object.values(gateSites()).find(
-      (x) => x.water && x.approaches.length === 2 && x.crossDays <= MARCH_DAYS_PER_XUN,
+      (x) => x.water && x.approaches.length === 2 && x.crossDays <= MARCH_MP_PER_XUN,
     );
     expect(port, '没有可用的渡口').toBeDefined();
     const near = port!.approaches[0]!;
@@ -476,7 +476,7 @@ describe('出征派遣 · 目的地是格', () => {
     let blocked: GridPoint | null = null;
     for (let row = 0; row < MAP.rows && !blocked; row++) {
       for (let col = 0; col < MAP.cols; col++) {
-        if (!Number.isFinite(marchDaysOfTile(col, row))) {
+        if (!Number.isFinite(marchCostOfTile(col, row))) {
           blocked = { col, row };
           break;
         }

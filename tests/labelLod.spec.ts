@@ -38,11 +38,12 @@ describe('名牌分级（7.6）', () => {
     expect(counts[3]).toBe(cities.length);
   });
 
-  it('关港名与副行放在州郡视角之后，低倍率只留地名', () => {
+  it('城名副行常驻，关港名放在郡县视角之后', () => {
     expect(gateLabelVisible(0)).toBe(false);
     expect(gateLabelVisible(1)).toBe(false);
     expect(gateLabelVisible(2)).toBe(true);
-    expect(citySubLineVisible(1)).toBe(false);
+    expect(citySubLineVisible(0)).toBe(true);
+    expect(citySubLineVisible(1)).toBe(true);
     expect(citySubLineVisible(2)).toBe(true);
   });
 });

@@ -1,0 +1,1129 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>三国·霸业 — 核心数值总表</title>
+<style>
+  :root{
+    --paper:#f2ebdb; --card:#faf6ea; --ink:#231c14; --ink2:#5c4c3a; --ink3:#8a7a63;
+    --line:#d2c5a8; --line2:#bfae8c; --red:#9c2f26; --gold:#8a6a2f; --green:#3f6b3a;
+    --mono:"SFMono-Regular",ui-monospace,Menlo,monospace;
+    --serif:"Noto Serif SC","Songti SC","Source Han Serif SC",STSong,serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;background:var(--paper);color:var(--ink);font-family:var(--serif);
+    font-size:14px;line-height:1.65;
+    background-image:
+      radial-gradient(circle at 18% 12%,rgba(156,47,38,.045),transparent 42%),
+      radial-gradient(circle at 82% 78%,rgba(138,106,47,.05),transparent 45%),
+      repeating-linear-gradient(0deg,rgba(120,100,70,.035) 0 1px,transparent 1px 3px);
+  }
+  .wrap{max-width:1240px;margin:0 auto;padding:0 26px 80px}
+  header.hero{padding:52px 0 28px;border-bottom:2px solid var(--ink);position:relative}
+  .hero .seal{
+    position:absolute;right:4px;top:46px;width:76px;height:76px;border:2px solid var(--red);
+    color:var(--red);display:grid;place-items:center;font-size:13px;letter-spacing:4px;
+    writing-mode:vertical-rl;text-orientation:upright;border-radius:4px;opacity:.85;
+    font-weight:700;line-height:1.1;
+  }
+  .kicker{font-size:12px;letter-spacing:.32em;color:var(--red);text-transform:uppercase}
+  h1{font-size:38px;margin:10px 0 8px;letter-spacing:.08em;font-weight:800}
+  .sub{color:var(--ink2);max-width:760px}
+  .meta{margin-top:18px;display:flex;flex-wrap:wrap;gap:10px 26px;font-size:12.5px;color:var(--ink3)}
+  .meta b{color:var(--ink);font-weight:600}
+
+  nav.tabs{
+    position:sticky;top:0;z-index:20;background:rgba(242,235,219,.94);
+    backdrop-filter:blur(6px);border-bottom:1px solid var(--line2);
+    margin:0 -26px;padding:0 26px;display:flex;gap:4px;flex-wrap:wrap;
+  }
+  nav.tabs a{
+    padding:11px 13px 9px;font-size:13.5px;color:var(--ink2);text-decoration:none;
+    border-bottom:2px solid transparent;white-space:nowrap;
+  }
+  nav.tabs a:hover{color:var(--ink)}
+  nav.tabs a.on{color:var(--red);border-bottom-color:var(--red);font-weight:600}
+
+  section{padding:46px 0 8px;scroll-margin-top:56px}
+  .sec-head{display:flex;align-items:baseline;gap:14px;border-bottom:1px solid var(--line2);padding-bottom:8px;margin-bottom:22px}
+  .sec-no{font-family:var(--mono);font-size:12px;color:var(--red);letter-spacing:.12em}
+  h2{font-size:24px;margin:0;letter-spacing:.06em}
+  .sec-note{color:var(--ink3);font-size:12.5px;margin-left:auto;text-align:right;max-width:52%}
+
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:12px;margin:0 0 22px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:3px;padding:14px 16px;position:relative}
+  .card::after{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--red);opacity:.55}
+  .card .k{font-size:11.5px;color:var(--ink3);letter-spacing:.14em}
+  .card .v{font-size:27px;font-weight:700;font-family:var(--mono);letter-spacing:-.02em;margin:2px 0 0}
+  .card .v small{font-size:13px;font-family:var(--serif);color:var(--ink2);margin-left:4px;font-weight:400}
+  .card .n{font-size:12px;color:var(--ink2)}
+
+  h3{font-size:16px;margin:26px 0 10px;letter-spacing:.05em;display:flex;align-items:center;gap:8px}
+  h3::before{content:"";width:7px;height:7px;background:var(--red);transform:rotate(45deg)}
+  h4{font-size:14px;margin:18px 0 8px;color:var(--ink2);letter-spacing:.04em}
+
+  table{border-collapse:collapse;width:100%;font-size:13px;background:var(--card);margin:0 0 6px}
+  th,td{border:1px solid var(--line);padding:6px 9px;text-align:left;vertical-align:middle}
+  th{background:#e9e0cb;font-weight:600;font-size:12.5px;letter-spacing:.04em;color:var(--ink)}
+  tbody tr:nth-child(even){background:rgba(233,224,203,.34)}
+  td.num,th.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+  td.mid,th.mid{text-align:center}
+  .dim{color:var(--ink3)}
+  .neg{color:#a2382c}
+  .pos{color:var(--green)}
+  caption{caption-side:top;text-align:left;font-size:12px;color:var(--ink3);padding:0 0 6px}
+  .scroll{max-height:620px;overflow:auto;border:1px solid var(--line);border-radius:3px}
+  .scroll table{margin:0;border:0}
+  .scroll th{position:sticky;top:0;z-index:2;box-shadow:inset 0 -1px 0 var(--line2)}
+  .scroll td,.scroll th{border-left:0;border-top:0}
+  .scroll td{border-bottom:1px solid var(--line)}
+
+  .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 10px}
+  .toolbar input,.toolbar select{
+    font-family:var(--serif);font-size:13px;padding:6px 10px;border:1px solid var(--line2);
+    background:var(--card);color:var(--ink);border-radius:3px;outline:none;
+  }
+  .toolbar input:focus,.toolbar select:focus{border-color:var(--red)}
+  .toolbar .count{font-size:12px;color:var(--ink3);margin-left:auto;font-family:var(--mono)}
+
+  .legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--ink2);margin:8px 0 14px}
+  .legend span b{color:var(--ink)}
+  .tag{display:inline-block;font-size:11px;padding:1px 6px;border:1px solid var(--line2);border-radius:2px;color:var(--ink2);background:rgba(255,255,255,.35)}
+  .tag.water{color:#2f5b74;border-color:#a9c1cd}
+  .tag.skill{color:var(--gold);border-color:#cbbb92}
+  .tag.no{color:var(--ink3);border-style:dashed}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+  @media (max-width:900px){.grid2{grid-template-columns:1fr}}
+
+  .note-box{background:rgba(156,47,38,.05);border-left:3px solid var(--red);padding:10px 14px;font-size:12.5px;color:var(--ink2);margin:12px 0 16px}
+  .formula{font-family:var(--mono);font-size:12.5px;background:#efe7d5;border:1px dashed var(--line2);padding:10px 12px;border-radius:3px;color:var(--ink);overflow-x:auto}
+  ul.plain{margin:6px 0 12px;padding-left:20px}
+  ul.plain li{margin:3px 0;color:var(--ink2)}
+  footer{margin-top:60px;padding-top:18px;border-top:1px solid var(--line2);font-size:12px;color:var(--ink3)}
+  .sup{font-size:10px;vertical-align:super;color:var(--red)}
+  .sortable th{cursor:pointer;user-select:none}
+  .sortable th:hover{background:#e2d7bf}
+  .sortable th::after{content:" ↕";font-size:9px;color:var(--ink3)}
+  .sortable th[data-dir="asc"]::after{content:" ↑";color:var(--red)}
+  .sortable th[data-dir="desc"]::after{content:" ↓";color:var(--red)}
+  @media print{
+    nav.tabs{display:none}.scroll{max-height:none;overflow:visible}body{background:#fff}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="seal">三國霸業</div>
+  <div class="kicker">Core Numbers · v1 · 2026-10-30</div>
+  <h1>核心数值总表</h1>
+  <p class="sub">
+    本表汇总《三国·霸业》当前版本的全部核心配表数值：武将五维、兵种机动与相性、城池与关防、行军耗时、战斗与内政公式。
+    数据直接从 <code>src/data/tables/</code> 抽取（唯一真值源），文档只做汇总，不另立数值。
+  </p>
+  <div class="meta">
+    <span>城池 <b>59</b> 座 · <b>9</b> 势力</span>
+    <span>武将 <b>338</b> 人</span>
+    <span>关防 <b>31</b> 处（关隘 12 · 渡口 16 · 小路 3）</span>
+    <span>剧本 <b>4</b> 部</span>
+    <span>大地图 <b>576 × 432</b> 格（每格 12 单位）</span>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs">
+  <a href="#overview" class="on">总览</a>
+  <a href="#units">兵种与机动</a>
+  <a href="#march">大地图行军</a>
+  <a href="#battle">战斗与攻城</a>
+  <a href="#cities">城池</a>
+  <a href="#gates">关隘·渡口</a>
+  <a href="#generals">武将</a>
+  <a href="#economy">内政与经济</a>
+  <a href="#modern">国策·模式·剧本</a>
+</nav>
+
+<!-- ───────────────────────── 总览 ───────────────────────── -->
+<section id="overview">
+  <div class="sec-head">
+    <span class="sec-no">01</span><h2>全局总览</h2>
+    <div class="sec-note">赤壁 208 默认态势；其余剧本在剧本层覆盖归属</div>
+  </div>
+
+  <div class="cards" id="overviewCards"></div>
+
+  <h3>势力版图（208 赤壁开局）</h3>
+  <table>
+    <thead><tr><th>势力</th><th class="num">城池</th><th class="num">占比</th><th>核心城</th><th>开局定位</th></tr></thead>
+    <tbody id="factionRows"></tbody>
+  </table>
+
+  <h3>规模分布</h3>
+  <div class="grid2">
+    <table>
+      <caption>城池规模</caption>
+      <thead><tr><th>规模</th><th class="num">数量</th><th class="num">驻军上限</th></tr></thead>
+      <tbody>
+        <tr><td>都城</td><td class="num">5</td><td class="num">14,000</td></tr>
+        <tr><td>大城</td><td class="num">11</td><td class="num">9,500</td></tr>
+        <tr><td>中城</td><td class="num">21</td><td class="num">6,800</td></tr>
+        <tr><td>小城</td><td class="num">22</td><td class="num">4,200</td></tr>
+      </tbody>
+    </table>
+    <table>
+      <caption>地形与特色</caption>
+      <thead><tr><th>项</th><th class="num">数量</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>平原地形</td><td class="num">42</td><td>战场按平原模板</td></tr>
+        <tr><td>山地地形</td><td class="num">17</td><td>战场按山地模板，落石可用</td></tr>
+        <tr><td>水城</td><td class="num">14</td><td>水军发挥、守城偏向水战</td></tr>
+        <tr><td>带专属技能</td><td class="num">25</td><td>粮 / 税 / 征兵 / 城防 / 搜索等被动</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ───────────────────────── 兵种 ───────────────────────── -->
+<section id="units">
+  <div class="sec-head">
+    <span class="sec-no">02</span><h2>兵种与机动</h2>
+    <div class="sec-note">战斗层「移动力 / 地形消耗」与大地图层「行军 MP」是两套口径，分别用于战棋格与大地图寻路</div>
+  </div>
+
+  <h3>六兵种基础值</h3>
+  <table>
+    <thead>
+      <tr><th>兵种</th><th class="num">战场移动力</th><th class="num">行军 MP/旬</th><th class="num">攻击距离</th><th>定位</th><th>特殊代价</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>步兵</td><td class="num">3</td><td class="num">10</td><td class="num">1</td><td>万能主力，山地略优</td><td class="dim">—</td></tr>
+      <tr><td>骑兵</td><td class="num">5</td><td class="num">14</td><td class="num">1</td><td>平原机动、冲锋克制弓兵</td><td class="dim">山地/森林行军代价高</td></tr>
+      <tr><td>弓兵</td><td class="num">3</td><td class="num">10</td><td class="num">2–3</td><td>远程输出、森林隐蔽</td><td>贴脸（距 1）伤害 ×0.5</td></tr>
+      <tr><td>水兵</td><td class="num">4</td><td class="num">10</td><td class="num">1</td><td>水战统治，登陆后虚弱</td><td>平原杀伤 ×0.5</td></tr>
+      <tr><td>极兵</td><td class="num">6</td><td class="num">14</td><td class="num">1</td><td>最快机动、全能强攻</td><td>每战 1 次突击（1.5× 伤害 + 混乱 1 天）；山地行军 ×4</td></tr>
+      <tr><td>玄兵</td><td class="num">2</td><td class="num">8</td><td class="num">1</td><td>计策专精</td><td>普攻 ×0.6、体力消耗 ×1.5</td></tr>
+    </tbody>
+  </table>
+  <div class="note-box">
+    转职门槛：<b>极兵需武力 ≥ 105</b>，<b>玄兵需智力 ≥ 105</b>；兵符（铁骑兵符 / 太玄兵符）全局唯一，装备即锁定，道具栏 4 格。
+  </div>
+  <div class="note-box">
+    <b>兵种适性 S/A/B/C</b>：每将每兵种一档，本行兵种 +1 档。
+    步 / 骑 / 极按武力，弓 / 玄按智力，水按统率；北方产马区骑兵 +1 档，南方水网城水军 +1 档、其余地区 −1 档。
+    伤害乘数：S ×1.12、A ×1.06、B ×1.00、C ×0.92；相性 × 地形 × 适性三件套合计上限 <b>2.0×</b>。
+  </div>
+  <div class="note-box">
+    <b>水军上岸与下水</b>：表中「行军 MP/旬」是<b>陆行</b>值。水军在江 / 湖 / 海上航行时按 <b>14 MP/旬</b>，
+    河湖 1 MP/格、海 2 MP/格，且不占渡口；其余兵种一律不能进入水域，只能借渡口摆渡（见 §03）。
+  </div>
+
+  <div class="grid2">
+    <div>
+      <h4>战场移动消耗（每格）</h4>
+      <table>
+        <thead><tr><th>兵种</th><th class="num">平原</th><th class="num">山地</th><th class="num">森林</th><th class="num">水域</th></tr></thead>
+        <tbody>
+          <tr><td>步兵</td><td class="num">1</td><td class="num">2</td><td class="num">2</td><td class="num">3</td></tr>
+          <tr><td>骑兵</td><td class="num">1</td><td class="num">3</td><td class="num">3</td><td class="num">4</td></tr>
+          <tr><td>弓兵</td><td class="num">1</td><td class="num">2</td><td class="num">2</td><td class="num">3</td></tr>
+          <tr><td>水兵</td><td class="num">2</td><td class="num">3</td><td class="num">3</td><td class="num">1</td></tr>
+          <tr><td>极兵</td><td class="num">1</td><td class="num">4</td><td class="num">3</td><td class="num">2</td></tr>
+          <tr><td>玄兵</td><td class="num">1</td><td class="num">2</td><td class="num">2</td><td class="num">2</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <h4>地形杀伤修正（所在格）</h4>
+      <table>
+        <thead><tr><th>兵种</th><th class="num">平原</th><th class="num">山地</th><th class="num">森林</th><th class="num">水域</th><th class="num">城池</th></tr></thead>
+        <tbody>
+          <tr><td>步兵</td><td class="num">1.00</td><td class="num">1.10</td><td class="num">1.00</td><td class="num">0.60</td><td class="num">1.00</td></tr>
+          <tr><td>骑兵</td><td class="num">1.20</td><td class="num">0.75</td><td class="num">0.70</td><td class="num">0.50</td><td class="num">1.00</td></tr>
+          <tr><td>弓兵</td><td class="num">0.90</td><td class="num">1.00</td><td class="num">1.20</td><td class="num">0.60</td><td class="num">1.00</td></tr>
+          <tr><td>水兵</td><td class="num">0.50</td><td class="num">0.30</td><td class="num">0.30</td><td class="num">1.50</td><td class="num">1.00</td></tr>
+          <tr><td>极兵</td><td class="num">1.15</td><td class="num">0.90</td><td class="num">0.85</td><td class="num">0.70</td><td class="num">1.00</td></tr>
+          <tr><td>玄兵</td><td class="num">0.95</td><td class="num">1.00</td><td class="num">0.90</td><td class="num">0.60</td><td class="num">1.00</td></tr>
+        </tbody>
+      </table>
+      <div class="formula">地形乘数 = 攻方格适性 / 守方格适性（守方站有利地形自然减伤）</div>
+    </div>
+  </div>
+
+  <h3>兵种相性（行 = 攻方，列 = 守方）</h3>
+  <table class="sortable" id="affinityTable">
+    <thead>
+      <tr><th>攻 ↓ / 守 →</th><th class="num">步兵</th><th class="num">骑兵</th><th class="num">弓兵</th><th class="num">水兵</th><th class="num">极兵</th><th class="num">玄兵</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>步兵</td><td class="num">1.00</td><td class="num">1.25</td><td class="num">0.85</td><td class="num">1.00</td><td class="num">0.90</td><td class="num">1.00</td></tr>
+      <tr><td>骑兵</td><td class="num">0.85</td><td class="num">1.00</td><td class="num">1.25</td><td class="num">0.90</td><td class="num">0.85</td><td class="num">1.10</td></tr>
+      <tr><td>弓兵</td><td class="num">1.20</td><td class="num">0.80</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">0.85</td><td class="num">1.10</td></tr>
+      <tr><td>水兵</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">0.90</td><td class="num">1.00</td></tr>
+      <tr><td>极兵</td><td class="num">1.15</td><td class="num">1.10</td><td class="num">1.15</td><td class="num">1.00</td><td class="num">1.00</td><td class="num">1.10</td></tr>
+      <tr><td>玄兵</td><td class="num">0.90</td><td class="num">0.90</td><td class="num">0.90</td><td class="num">0.90</td><td class="num">0.90</td><td class="num">1.00</td></tr>
+    </tbody>
+  </table>
+  <div class="legend">
+    <span>克制链：<b>步兵 → 骑兵 → 弓兵 → 步兵</b>（1.25 / 0.80–0.85）</span>
+    <span>水兵陆地弱势由地形表承担，不进相性，避免双重惩罚</span>
+  </div>
+
+  <h3>计策</h3>
+  <table>
+    <thead><tr><th>计策</th><th class="num">解锁智力</th><th class="num">体力</th><th class="num">射程</th><th>目标</th><th>效果</th></tr></thead>
+    <tbody>
+      <tr><td>治疗</td><td class="num">55</td><td class="num">20</td><td class="num">1</td><td>友军</td><td>恢复智力 ×2 兵力</td></tr>
+      <tr><td>火攻</td><td class="num">65</td><td class="num">20</td><td class="num">2</td><td>敌军</td><td>范围火焰伤害，雨天禁用</td></tr>
+      <tr><td>落石</td><td class="num">70</td><td class="num">25</td><td class="num">2</td><td>敌军</td><td>仅山地可用，伤害 = 智力 ×3.5</td></tr>
+      <tr><td>水计</td><td class="num">70</td><td class="num">25</td><td class="num">2</td><td>敌军</td><td>近水或雨天伤害 ×1.5</td></tr>
+      <tr><td>混乱</td><td class="num">85</td><td class="num">30</td><td class="num">2</td><td>敌军</td><td>目标 1–3 天无法行动，每目标每战限 1 次</td></tr>
+    </tbody>
+  </table>
+  <div class="legend"><span>成功率 = clamp(50 + 智力差 + 等级差 × 2, 10, 95)；同目标重复同计策每次 −20</span></div>
+</section>
+
+<!-- ───────────────────────── 行军 ───────────────────────── -->
+<section id="march">
+  <div class="sec-head">
+    <span class="sec-no">03</span><h2>大地图行军</h2>
+    <div class="sec-note">M 档：地图行军与场景战斗分离；每旬一个移动力（MP）预算</div>
+  </div>
+
+  <div class="grid2">
+    <div>
+      <h4>每格地形消耗（MP）</h4>
+      <table>
+        <thead><tr><th>地形</th><th class="num">MP/格</th><th>可通行</th></tr></thead>
+        <tbody>
+          <tr><td>平原</td><td class="num">1</td><td>是</td></tr>
+          <tr><td>林地</td><td class="num">2</td><td>是</td></tr>
+          <tr><td>丘陵</td><td class="num">2</td><td>是</td></tr>
+          <tr><td>荒漠</td><td class="num">2</td><td>是</td></tr>
+          <tr><td>沼泽</td><td class="num">3</td><td>是</td></tr>
+          <tr><td>山岭 / 海面 / 湖面 / 江河</td><td class="num">∞</td><td>否</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div>
+      <h4>机动与中继</h4>
+      <table>
+        <thead><tr><th>项</th><th class="num">数值</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><td>每旬移动力</td><td class="num">10 MP</td><td>按地形消耗累加，超出则本旬停在途中；兵种分档见 §02</td></tr>
+          <tr><td>烽燧提速</td><td class="num">+10%</td><td>每座 +10%，同城叠加上限 +30%</td></tr>
+          <tr><td>中继限制</td><td class="num">无</td><td>网格行军可在任意可站格停留，没有「必须经城」的限制</td></tr>
+          <tr><td>路径算法</td><td class="num">网格 Dijkstra</td><td>576×432 全图寻路，按地形 MP 计费；水军另用一张水面可通行的图</td></tr>
+          <tr><td>在途状态</td><td class="num">不计城防</td><td>行军中的部队不计入城防与驻军统计</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <h3>关防通行附加消耗</h3>
+  <table>
+    <thead><tr><th>类型</th><th class="num">附加 MP</th><th>通行规则</th></tr></thead>
+    <tbody>
+      <tr><td>关隘（pass）</td><td class="num">2–3 MP</td><td>山口只有 1 格宽通行线，中点结算一次；敌对时封锁整条线，须先攻关</td></tr>
+      <tr><td>渡口（port）</td><td class="num">摆渡结算</td><td>一次跳江，MP = max(2, 关防 extraDays + ⌈跨江格数 / 4⌉)，现表 5–7 MP；强制按水战开战。水军可自行航行，不借渡口</td></tr>
+      <tr><td>小路（trail）</td><td class="num">4–7 MP</td><td>绕开正关的山道，可通行但更慢；不能驻守、不封锁、不产钱粮</td></tr>
+    </tbody>
+  </table>
+  <div class="note-box">
+    <b>单位规范</b>：本页所有移动量以「移动力（MP）」计。每旬一支队伍有 10 MP（骑兵 14 / 玄兵 8），进入一格扣该格 MP，扣完即停。
+    MP 是预算，格是距离，二者不是同一件事——林地一格扣 2 MP，不代表"走了两格"。
+    本页不再用「天」作移动单位；「日」只出现在战斗回合（1 回合 = 1 日）与工程工期。
+  </div>
+  <div class="note-box">
+    寻路优先级：关防通行线 <b>优先于</b> 地形；渡线与普通陆地不同——江面本身是墙，陆军必须走港口摆渡。
+    水军例外：江 / 湖 / 海可直接航行（河湖 1 MP、海 2 MP），不必借渡口。
+  </div>
+</section>
+
+<!-- ───────────────────────── 战斗 ───────────────────────── -->
+<section id="battle">
+  <div class="sec-head">
+    <span class="sec-no">04</span><h2>战斗与攻城</h2>
+    <div class="sec-note">纯公式层，全部系数集中在 balance.ts</div>
+  </div>
+
+  <h3>伤害公式</h3>
+  <div class="formula">
+    伤害 = 攻方兵力 × 10% × RNG(0.9–1.1) × 武力系数 × 克制乘数 × 训练乘数 × 城防乘数 × 气力乘数<br>
+     克制乘数 = min(2.0, 兵种相性 × 地形乘数 × 适性乘数)<br>
+    武力系数 = clamp(1 + (攻方武力 − 守方武力) / 200, 0.60, 1.60)<br>
+    守方兵力项 = clamp(0.85 + 0.30 × 守方兵力 / 攻方兵力, 0.85, 1.15)<br>
+    最低伤害 = 攻方兵力 × 2%
+  </div>
+  <table>
+    <thead><tr><th>系数</th><th class="num">取值</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>基础伤害率</td><td class="num">10%</td><td>按攻方当前兵力</td></tr>
+      <tr><td>随机浮动</td><td class="num">0.90–1.10</td><td>每次结算</td></tr>
+      <tr><td>训练度加成</td><td class="num">+0.25% / 点</td><td>训练 100 → 伤害 ×1.25</td></tr>
+        <tr><td>适性乘数</td><td class="num">0.92–1.12</td><td>S ×1.12 / A ×1.06 / B ×1.00 / C ×0.92，按武将当前兵种</td></tr>
+        <tr><td>克制乘数上限</td><td class="num">2.0×</td><td>相性 × 地形 × 适性 合计后夹上限</td></tr>
+        <tr><td>气力乘数</td><td class="num">0.70–1.10</td><td>气力 0 → ×0.70，100 → ×1.10</td></tr>
+      <tr><td>城防减伤</td><td class="num">0.50 → 0.30</td><td>城池格受击倍率 = 0.5 − 0.2 × 城防%（下限 0.3）</td></tr>
+      <tr><td>守方日回血</td><td class="num">1%</td><td>守城方每日恢复兵力</td></tr>
+      <tr><td>溃散阈值</td><td class="num">15%</td><td>兵力低于出战兵力 15% 即溃散</td></tr>
+      <tr><td>撤退保留</td><td class="num">70%</td><td>超时/撤退保留兵力；城破撤往友城同样保留 70%</td></tr>
+      <tr><td>单场上限</td><td class="num">30 天</td><td>超时判为撤退（保留残兵）</td></tr>
+      <tr><td>上场编制</td><td class="num">攻 5 / 守 8 队</td><td>每队 = 1 主将 + 最多 2 副将，副将兵力并入主将</td></tr>
+      <tr><td>夹击加成</td><td class="num">1.08 / 1.15 / 1.20</td><td>按目标相邻友军数 1/2/3</td></tr>
+      <tr><td>体力耗尽</td><td class="num">×0.85</td><td>普攻衰减</td></tr>
+      <tr><td>俘获副将率</td><td class="num">30%</td><td>—</td></tr>
+    </tbody>
+  </table>
+
+  <h3>军令（每战 3 点，击溃敌军上限 +5）</h3>
+  <table>
+    <thead><tr><th>军令</th><th class="num">消耗</th><th class="num">效果</th></tr></thead>
+    <tbody>
+      <tr><td>鼓舞</td><td class="num">1</td><td class="num">伤害 ×1.2</td></tr>
+      <tr><td>固守</td><td class="num">1</td><td class="num">受击 ×0.7</td></tr>
+      <tr><td>急袭</td><td class="num">1</td><td class="num">移动 +2</td></tr>
+    </tbody>
+  </table>
+
+  <h3>城池耐久与破城</h3>
+  <div class="grid2">
+    <table>
+      <caption>耐久上限</caption>
+      <thead><tr><th>规模</th><th class="num">基础</th></tr></thead>
+      <tbody>
+        <tr><td>都城</td><td class="num">1,200</td></tr>
+        <tr><td>大城</td><td class="num">900</td></tr>
+        <tr><td>中城</td><td class="num">650</td></tr>
+        <tr><td>小城</td><td class="num">450</td></tr>
+      </tbody>
+    </table>
+    <table>
+      <caption>耐久规则</caption>
+      <thead><tr><th>项</th><th class="num">数值</th></tr></thead>
+      <tbody>
+        <tr><td>城防加成</td><td class="num">+6 / 点城防</td></tr>
+        <tr><td>城墙工程</td><td class="num">+260</td></tr>
+        <tr><td>月结修复</td><td class="num">上限 × 12%</td></tr>
+        <tr><td>攻城磨损</td><td class="num">每兵每回合 0.025 × (1 + 武力/200)</td></tr>
+        <tr><td>易主残留</td><td class="num">30%</td></tr>
+      </tbody>
+    </table>
+  </div>
+  
+<table>
+    <caption>气力与攻城器械</caption>
+    <thead><tr><th>项</th><th class="num">数值</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>初始气力</td><td class="num">100</td><td>部队级资源，与武将「体力」分开记账</td></tr>
+      <tr><td>伤亡扣减</td><td class="num">每损失 10% 兵力 −6</td><td>每回合按累计伤亡重算，不是逐次累加</td></tr>
+      <tr><td>自然恢复</td><td class="num">+2 / 回合</td><td>与伤亡扣减相抵后取整</td></tr>
+      <tr><td>伤害影响</td><td class="num">×0.70 – ×1.10</td><td>气力 0 → ×0.70，100 → ×1.10，线性</td></tr>
+      <tr><td>溃散阈值</td><td class="num">&lt; 20</td><td>每回合概率 =(20 − 气力)/100，溃散即剩半兵退出战场</td></tr>
+      <tr><td>冲车</td><td class="num">耐久 ×4</td><td rowspan="3">攻城器械只放大城墙伤害，对守军伤害 ×0.5；不带器械的裸兵按上面 0.025 慢慢磨</td></tr>
+      <tr><td>井阑</td><td class="num">耐久 ×3</td></tr>
+      <tr><td>投石 / 木兽</td><td class="num">×3 / ×2</td></tr>
+    </tbody>
+  </table>
+
+  <table>
+    <caption>破城时长速查（按真实城池复算）</caption>
+    <thead>
+      <tr>
+        <th>目标</th><th class="num">规模</th><th class="num">城防</th>
+        <th class="num">上限</th><th class="num">开局</th>
+        <th class="num">2,000 兵 / 武 80</th><th class="num">带冲车</th>
+        <th class="num">10,000 兵 / 武 95</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>许昌</td><td class="num">都城</td><td class="num">80</td><td class="num">1,680</td><td class="num">1,344</td><td class="num"><b>19.2</b> 回合（1.9 旬）</td><td class="num">4.8</td><td class="num">3.6</td></tr>
+      <tr><td>襄阳</td><td class="num">大城</td><td class="num">84</td><td class="num">1,404</td><td class="num">1,123</td><td class="num"><b>16.0</b> 回合（1.6 旬）</td><td class="num">4.0</td><td class="num">3.0</td></tr>
+      <tr><td>江夏</td><td class="num">中城</td><td class="num">58</td><td class="num">998</td><td class="num">798</td><td class="num"><b>11.4</b> 回合（1.1 旬）</td><td class="num">2.9</td><td class="num">2.2</td></tr>
+      <tr><td>柴桑</td><td class="num">中城</td><td class="num">60</td><td class="num">1,010</td><td class="num">808</td><td class="num"><b>11.5</b> 回合（1.1 旬）</td><td class="num">2.9</td><td class="num">2.2</td></tr>
+      <tr><td>夷陵</td><td class="num">小城</td><td class="num">84</td><td class="num">954</td><td class="num">763</td><td class="num"><b>10.9</b> 回合（1.1 旬）</td><td class="num">2.7</td><td class="num">2.1</td></tr>
+      <tr><td>新野</td><td class="num">小城</td><td class="num">42</td><td class="num">702</td><td class="num">562</td><td class="num"><b>8.0</b> 回合（0.8 旬）</td><td class="num">2.0</td><td class="num">1.5</td></tr>
+    </tbody>
+  </table>
+  <div class="note-box">
+    上表按
+    <code>开局耐久 = (规模基础 + 城防 × 6) × 0.8</code>、
+    <code>每回合磨损 = 兵力 × 0.025 × (1 + 武力 / 200)</code> 复算，回合 = 战斗内 1 日。
+    <b>旧值 0.12 下许昌只要 4.0 回合</b>——都城在一旬内连破两次，30 回合上限形同虚设，这是本轮改动的全部理由。
+    2,000 兵裸攻都城 19 回合意味着必须跨两旬、期间要顶住援军与补给压力；带冲车则压到 5 回合，
+    <b>器械从"锦上添花"变成破城的必要条件</b>。
+  </div>
+  <div class="legend"><span>破城双条件：<b>驻军清零</b> 或 <b>耐久归零</b></span><span>战场规则：区域控制（进入敌方相邻格停止移动）开启</span></div>
+</section>
+
+<!-- ───────────────────────── 城池 ───────────────────────── -->
+<section id="cities">
+  <div class="sec-head">
+    <span class="sec-no">05</span><h2>城池总表</h2>
+    <div class="sec-note">赤壁 208 归属；坐标、规模、城防、农商与专属技能</div>
+  </div>
+
+  <div class="toolbar">
+    <input id="citySearch" type="search" placeholder="搜索城名 / 技能" />
+    <select id="cityFaction"></select>
+    <select id="citySize">
+      <option value="">全部规模</option>
+      <option value="capital">都城</option>
+      <option value="large">大城</option>
+      <option value="medium">中城</option>
+      <option value="small">小城</option>
+    </select>
+    <span class="count" id="cityCount"></span>
+  </div>
+  <div class="scroll">
+    <table class="sortable" id="cityTable">
+      <thead>
+        <tr>
+          <th data-key="name">城名</th>
+          <th data-key="owner">势力</th>
+          <th data-key="size">规模</th>
+          <th data-key="terrain">地形</th>
+          <th class="num" data-key="fort">城防</th>
+          <th class="num" data-key="agri">农业</th>
+          <th class="num" data-key="com">商业</th>
+          <th class="num" data-key="loy">民忠</th>
+          <th class="num" data-key="def">治安</th>
+          <th class="num" data-key="gold">金</th>
+          <th class="num" data-key="food">粮</th>
+          <th class="num" data-key="pop">人口</th>
+          <th>特色</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+  <div class="legend">
+    <span>城防档位：<b>≥85 天险</b> · <b>≥70 易守难攻</b> · <b>≥55 城防坚固</b> · <b>≥40 城防一般</b> · <b>&lt;40 薄弱</b></span>
+    <span>合计：金 26,670 · 粮 72,650 · 人口 2,094,000 · 城防均值 63.6</span>
+  </div>
+
+  <h3>城池规模与上限</h3>
+  <table>
+    <thead><tr><th>规模</th><th class="num">驻军上限</th><th class="num">耐久基础</th><th>典型城</th></tr></thead>
+    <tbody>
+      <tr><td>都城</td><td class="num">14,000</td><td class="num">1,200</td><td>许昌 / 洛阳 / 长安 / 建业 / 成都</td></tr>
+      <tr><td>大城</td><td class="num">9,500</td><td class="num">900</td><td>邺 / 襄阳 / 江陵 / 汉中 / 吴</td></tr>
+      <tr><td>中城</td><td class="num">6,800</td><td class="num">650</td><td>江夏 / 陈留 / 合肥 / 柴桑</td></tr>
+      <tr><td>小城</td><td class="num">4,200</td><td class="num">450</td><td>新野 / 上党 / 夷陵 / 鄱阳</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ───────────────────────── 关港 ───────────────────────── -->
+<section id="gates">
+  <div class="sec-head">
+    <span class="sec-no">06</span><h2>关隘 · 渡口 · 小路</h2>
+    <div class="sec-note">每处关港只有一条 1 格宽通行线；归属由 guardCityId 派生，独立攻占后由 GateRuntime 覆盖</div>
+  </div>
+
+  <div class="cards" id="gateCards"></div>
+
+  <div class="toolbar">
+    <input id="gateSearch" type="search" placeholder="搜索关港名 / 所属城" />
+    <select id="gateKind">
+      <option value="">全部类型</option>
+      <option value="pass">关隘</option>
+      <option value="port">渡口</option>
+      <option value="trail">小路</option>
+    </select>
+    <span class="count" id="gateCount"></span>
+  </div>
+  <div class="scroll">
+    <table class="sortable" id="gateTable">
+      <thead>
+        <tr>
+          <th data-key="name">名称</th>
+          <th data-key="kind">类型</th>
+          <th class="num" data-key="tier">规模</th>
+          <th>归属城</th>
+          <th>所控道路</th>
+          <th class="num" data-key="extraDays">通行附加 MP</th>
+          <th class="num" data-key="fort">工事</th>
+          <th class="num" data-key="gold">月金</th>
+          <th class="num" data-key="food">月粮</th>
+          <th class="num" data-key="garrison">守军</th>
+          <th>说明</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <h3>关防数值分档</h3>
+  <table>
+    <thead><tr><th>类型 · 规模</th><th class="num">工事</th><th class="num">守军</th><th class="num">月金</th><th class="num">月粮</th><th class="num">通行附加 MP</th></tr></thead>
+    <tbody>
+      <tr><td>关隘 · 大型</td><td class="num">15–18</td><td class="num">2,600–3,200</td><td class="num">38–46</td><td class="num">100–125</td><td class="num">3</td></tr>
+      <tr><td>关隘 · 中型</td><td class="num">9–13</td><td class="num">1,700–2,300</td><td class="num">24–32</td><td class="num">60–90</td><td class="num">2</td></tr>
+      <tr><td>关隘 · 小型</td><td class="num">6–9</td><td class="num">1,300–1,700</td><td class="num">15–23</td><td class="num">40–60</td><td class="num">2</td></tr>
+      <tr><td>渡口 · 大型</td><td class="num">8–12</td><td class="num">1,700–2,200</td><td class="num">26–36</td><td class="num">100–145</td><td class="num">2</td></tr>
+      <tr><td>渡口 · 中型</td><td class="num">5–7</td><td class="num">1,200–1,600</td><td class="num">18–24</td><td class="num">80–100</td><td class="num">2</td></tr>
+      <tr><td>渡口 · 小型</td><td class="num">4–6</td><td class="num">900–1,300</td><td class="num">14–18</td><td class="num">55–80</td><td class="num">2</td></tr>
+      <tr><td>小路</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">0</td><td class="num">4–7</td></tr>
+    </tbody>
+  </table>
+  <div class="legend"><span>大关 = 演义主战场（潼关、虎牢、剑阁、濡须口）；小关 = 偏师可绕的隘口</span><span>渡口吃粮多、给钱少（养水军）；关隘相反</span></div>
+</section>
+
+<!-- ───────────────────────── 武将 ───────────────────────── -->
+<section id="generals">
+  <div class="sec-head">
+    <span class="sec-no">07</span><h2>武将总表</h2>
+    <div class="sec-note">338 人：登场 110 · 未登场 221 · 在野 7；五维 0–100（彩蛋人物可越界）；特技按五维 / 兵种派生 + 名将覆盖（generalTraits.ts）</div>
+  </div>
+
+  <div class="cards" id="generalCards"></div>
+
+  <div class="grid2">
+    <div>
+      <h4>统率榜（前 10）</h4>
+      <table><thead><tr><th class="num">#</th><th>武将</th><th class="num">统率</th></tr></thead><tbody id="topLead"></tbody></table>
+    </div>
+    <div>
+      <h4>武力榜（前 10）</h4>
+      <table><thead><tr><th class="num">#</th><th>武将</th><th class="num">武力</th></tr></thead><tbody id="topForce"></tbody></table>
+    </div>
+    <div>
+      <h4>智力榜（前 10）</h4>
+      <table><thead><tr><th class="num">#</th><th>武将</th><th class="num">智力</th></tr></thead><tbody id="topInt"></tbody></table>
+    </div>
+    <div>
+      <h4>政治 / 魅力榜（前 10）</h4>
+      <table><thead><tr><th class="num">#</th><th>武将</th><th class="num">政治</th><th class="num">魅力</th></tr></thead><tbody id="topPol"></tbody></table>
+    </div>
+  </div>
+
+  <h3>兵种分布与带兵上限</h3>
+  <div class="grid2">
+    <table>
+      <caption>兵种（全 338 人名册口径，含未登场）</caption>
+      <thead><tr><th>兵种</th><th class="num">人数</th><th class="num">初始总兵力</th></tr></thead>
+      <tbody id="classRows"></tbody>
+    </table>
+    <table>
+      <caption>核心公式</caption>
+      <thead><tr><th>项</th><th>公式</th></tr></thead>
+      <tbody>
+        <tr><td>带兵上限</td><td><span class="formula">统率×10 + 武力×8 + 智力×4 + 等级×80</span></td></tr>
+        <tr><td>五维补位</td><td class="dim">未入基准表的补位将领按武力 / 智力折算统率·政治·魅力</td></tr>
+        <tr><td>等级上限</td><td>20 级；升级经验 = floor(80 × L^1.4)</td></tr>
+        <tr><td>体力</td><td>上限 100，每月恢复 20</td></tr>
+        <tr><td>道具栏</td><td>4 格；兵符全局唯一</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>全员名单</h3>
+  <div class="toolbar">
+    <input id="genSearch" type="search" placeholder="搜索姓名" />
+    <select id="genStatus">
+      <option value="">全部状态</option>
+      <option value="active">登场</option>
+      <option value="inactive">未登场</option>
+      <option value="wild">在野</option>
+    </select>
+    <select id="genClass">
+      <option value="">全部兵种</option>
+      <option value="infantry">步兵</option>
+      <option value="cavalry">骑兵</option>
+      <option value="archer">弓兵</option>
+      <option value="navy">水兵</option>
+      <option value="elite">极兵</option>
+      <option value="mystic">玄兵</option>
+    </select>
+    <span class="count" id="genCount"></span>
+  </div>
+  <div class="scroll">
+    <table class="sortable" id="generalTable">
+      <thead>
+        <tr>
+          <th data-key="name">姓名</th>
+          <th class="num" data-key="lead">统率</th>
+          <th class="num" data-key="force">武力</th>
+          <th class="num" data-key="int">智力</th>
+          <th class="num" data-key="pol">政治</th>
+          <th class="num" data-key="charm">魅力</th>
+          <th class="num" data-key="loy">忠诚</th>
+          <th data-key="cls">兵种</th>
+          <th data-key="skill">特技</th>
+          <th class="num" data-key="troops">兵力</th>
+          <th data-key="status">状态</th>
+          <th data-key="loc">所在城</th>
+          <th data-key="faction">势力</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ───────────────────────── 内政经济 ───────────────────────── -->
+<section id="economy">
+  <div class="sec-head">
+    <span class="sec-no">08</span><h2>内政与经济</h2>
+    <div class="sec-note">改平衡只改 balance.ts，systems/ 不动数值</div>
+  </div>
+
+  <h3>内政五令</h3>
+  <table>
+    <thead><tr><th>命令</th><th class="num">金</th><th class="num">体力</th><th>提升项</th><th class="num">增益</th></tr></thead>
+    <tbody>
+      <tr><td>开垦</td><td class="num">60</td><td class="num">10</td><td>农业</td><td class="num">12 − ⌊值/120⌋（下限 4）</td></tr>
+      <tr><td>招商</td><td class="num">60</td><td class="num">10</td><td>商业</td><td class="num">12 − ⌊值/120⌋（下限 4）</td></tr>
+      <tr><td>出巡</td><td class="num">50</td><td class="num">10</td><td>民忠</td><td class="num">10 − ⌊值/20⌋（下限 3）</td></tr>
+      <tr><td>治理</td><td class="num">50</td><td class="num">10</td><td>治安</td><td class="num">10 − ⌊值/20⌋（下限 3）</td></tr>
+      <tr><td>演武</td><td class="num">80</td><td class="num">10</td><td>训练度</td><td class="num">10 − ⌊值/25⌋（下限 3）</td></tr>
+    </tbody>
+  </table>
+  <div class="legend"><span>属性上限：农业 999 · 商业 999 · 民忠 100 · 治安 100 · 训练 100</span></div>
+
+  <h3>资源与产出</h3>
+  <table>
+    <thead><tr><th>项</th><th class="num">数值</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>国库金上限</td><td class="num">30,000</td><td>粮食不设单城上限</td></tr>
+      <tr><td>月粮产</td><td class="num">农业 × 民忠 / 100</td><td>受灾害系数影响</td></tr>
+      <tr><td>季税</td><td class="num">商业 × 民忠 / 100 × 1.2</td><td>3 / 6 / 9 / 12 月结算</td></tr>
+      <tr><td>军粮消耗</td><td class="num">⌈总兵力 / 20⌉</td><td>极兵每 100 兵每月额外 +1 粮</td></tr>
+      <tr><td>征兵</td><td class="num">1 金 + 1 粮 / 兵</td><td>单次上限 = floor(民忠 × 8)</td></tr>
+      <tr><td>交易</td><td class="num">卖粮 2 金 / 买粮 8 金</td><td>单城月额度 = 商业 × 2</td></tr>
+      <tr><td>搜索</td><td class="num">40 金 · 10 体力</td><td>稀有率 2% × 权重（上限 25%）；连续未中每次 +15%（上限 4×），第 20 次必出</td></tr>
+      <tr><td>探索派遣</td><td class="num">40 金 / 月 · 1 政令</td><td>线索链 3 步必出目标；情报 120 金；民心 +2 民忠</td></tr>
+      <tr><td>宴请</td><td class="num">100 金</td><td>体力 +40 · 忠诚 +5</td></tr>
+      <tr><td>赏赐 / 没收</td><td class="num">—</td><td>忠诚 +15 / −30</td></tr>
+      <tr><td>外交</td><td class="num">150 金 · 20 体力</td><td>—</td></tr>
+      <tr><td>俘虏招降</td><td class="num">基础 30% · 10 体力</td><td>成功后忠诚 60</td></tr>
+    </tbody>
+  </table>
+
+  <h3>忠诚 · 灾害 · 饥荒</h3>
+  <div class="grid2">
+    <table>
+      <caption>忠诚变动</caption>
+      <thead><tr><th>事件</th><th class="num">变化</th></tr></thead>
+      <tbody>
+        <tr><td>出征归来</td><td class="num">−2</td></tr>
+        <tr><td>战败 / 撤退</td><td class="num">−4</td></tr>
+        <tr><td>断粮</td><td class="num">−5</td></tr>
+        <tr><td>攻下城池</td><td class="num">+2</td></tr>
+        <tr><td>战斗胜利</td><td class="num">+3</td></tr>
+        <tr><td>叛离阈值</td><td class="num">&lt;30（10%/月）</td></tr>
+      </tbody>
+    </table>
+    <table>
+      <caption>灾害</caption>
+      <thead><tr><th>项</th><th class="num">数值</th></tr></thead>
+      <tbody>
+        <tr><td>发生概率</td><td class="num">clamp((60 − 治安)/100, 0, 60%)</td></tr>
+        <tr><td>旱灾（55%）</td><td class="num">粮 −30% · 人口 −5% · 农业 −3</td></tr>
+        <tr><td>水灾（45%）</td><td class="num">粮 −25% · 人口 −8% · 民忠 −6</td></tr>
+        <tr><td>饥荒逃亡</td><td class="num">min(20%, 缺口比 × 50%)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>大地图设施（每城 3 座，城周 4 格内选址）</h3>
+  <table>
+    <thead><tr><th>设施</th><th class="num">造价</th><th class="num">效果</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>农田</td><td class="num">120 金</td><td class="num">+160 粮/月</td><td>不占政令，只花金</td></tr>
+      <tr><td>市场</td><td class="num">150 金</td><td class="num">+110 金/月</td><td>—</td></tr>
+      <tr><td>箭楼</td><td class="num">180 金</td><td class="num">+8 城防</td><td>单城加成上限 +24</td></tr>
+      <tr><td>烽燧</td><td class="num">100 金</td><td class="num">行军 +10%</td><td>单城加成上限 +30%</td></tr>
+    </tbody>
+  </table>
+
+  <h3>项目制内政</h3>
+  <table>
+    <thead><tr><th>项目</th><th class="num">周期</th><th class="num">金</th><th class="num">粮</th><th class="num">完成效果</th></tr></thead>
+    <tbody>
+      <tr><td>屯田</td><td class="num">3 月</td><td class="num">120</td><td class="num">0</td><td class="num">农业 +40</td></tr>
+      <tr><td>市集</td><td class="num">3 月</td><td class="num">120</td><td class="num">0</td><td class="num">商业 +40</td></tr>
+      <tr><td>城墙</td><td class="num">2 月</td><td class="num">100</td><td class="num">80</td><td class="num">城防 +20</td></tr>
+      <tr><td>兵营</td><td class="num">2 月</td><td class="num">140</td><td class="num">80</td><td class="num">训练 +10</td></tr>
+    </tbody>
+  </table>
+  <div class="legend"><span>每城同时施工 2 项 · 开工 10 体力 + 1 政令</span></div>
+</section>
+
+<!-- ───────────────────────── 现代模式 ───────────────────────── -->
+<section id="modern">
+  <div class="sec-head">
+    <span class="sec-no">09</span><h2>国策 · 模式 · 剧本</h2>
+    <div class="sec-note">现代重制层：国策每 3 回合三选一，三幕贯穿整局</div>
+  </div>
+
+  <h3>国策（8 条）</h3>
+  <table>
+    <thead><tr><th>国策</th><th>学派</th><th>收益</th><th>代价</th></tr></thead>
+    <tbody>
+      <tr><td>屯田</td><td>农政</td><td class="pos">粮产 +25%</td><td class="neg">商业内政 ×0.9</td></tr>
+      <tr><td>盐铁</td><td>财政</td><td class="pos">季税 +25% · 交易额度 +50%</td><td class="neg">每月民忠 −1</td></tr>
+      <tr><td>求贤</td><td>人事</td><td class="pos">搜索费 ×0.7 · 稀有命中 ×1.5</td><td class="neg">征兵金粮 ×1.2</td></tr>
+      <tr><td>练兵</td><td>军备</td><td class="pos">每月训练 +2 · 征兵 ×0.85</td><td class="neg">军粮 ×1.1</td></tr>
+      <tr><td>怀柔</td><td>内政</td><td class="pos">灾害损失 ×0.7 · 每月民忠 +1</td><td class="neg">季税 −10%</td></tr>
+      <tr><td>军屯</td><td>后勤</td><td class="pos">军粮 ×0.8</td><td class="neg">粮产 ×0.9</td></tr>
+      <tr><td>纵横</td><td>外交</td><td class="pos">外交 +20 点 · 劝降 +10 点</td><td class="neg">搜索费 ×1.15</td></tr>
+      <tr><td>奇谋</td><td>谋略</td><td class="pos">计策成功率 +15 点</td><td class="neg">每月训练 −1</td></tr>
+    </tbody>
+  </table>
+
+  <div class="grid2">
+    <table>
+      <caption>势力身份（持续到下一幕结束）</caption>
+      <thead><tr><th>身份</th><th>倍率</th></tr></thead>
+      <tbody>
+        <tr><td>种田</td><td>全势力粮产 +12%</td></tr>
+        <tr><td>贸易</td><td>季税 +15% · 交易额度 +25%</td></tr>
+        <tr><td>军事</td><td>征兵 −10% · 每月训练 +1</td></tr>
+        <tr><td>外交</td><td>外交 +12 点 · 劝降 +8 点</td></tr>
+      </tbody>
+    </table>
+    <table>
+      <caption>幕间三选一</caption>
+      <thead><tr><th>选择</th><th>一次性收益（幕 1→2 / 2→3）</th></tr></thead>
+      <tbody>
+        <tr><td>休养生息</td><td>每城粮 +300/+550 · 民忠 +4/+5</td></tr>
+        <tr><td>整军经武</td><td>每将补兵 +600/+1000 · 训练 +6/+8</td></tr>
+        <tr><td>远交近攻</td><td>每城金 +200/+350 · 敌方民忠 −3/−4</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>三幕与退出条件</h3>
+  <table>
+    <thead><tr><th>幕</th><th>月份</th><th>核心玩法</th><th>退出条件</th></tr></thead>
+    <tbody>
+      <tr><td>第一幕 · 立足</td><td>1–12 月</td><td>朝议、项目、探索、首场守城</td><td>控制 2–4 城，或完成关键守城</td></tr>
+      <tr><td>第二幕 · 争锋</td><td>13–36 月</td><td>国策、外交、斩将 / 截粮战、转折战</td><td>控制四成城池，或击败一个前 3 强敌（≥3 城且 ≥2,000 兵）</td></tr>
+      <tr><td>第三幕 · 定鼎</td><td>37 月起</td><td>破城战、劝降、委任出征</td><td>统一天下，或裂土分疆（≥40% 城池且在本幕 ≥6 回合）</td></tr>
+    </tbody>
+  </table>
+  <div class="legend">
+    <span>政令上限 = min(4, 2 + ⌊在城武将 / 3⌋)</span>
+    <span>每月事件概率 45%</span>
+    <span>转折战有效期 12 月 · 赏金 600–1,000 · 补给 ≥2,200 粮</span>
+    <span>委任出征只处理 3:1 且无预备队的普通城</span>
+  </div>
+
+  <h3>AI 难度</h3>
+  <table>
+    <thead>
+      <tr><th>难度</th><th class="num">出兵兵力比</th><th class="num">资源倍率</th><th class="num">月进攻上限</th><th class="num">留守比例</th><th class="num">窗口折扣</th><th class="num">战略调动</th><th>特性</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>易</td><td class="num">1.6</td><td class="num">0.8</td><td class="num">1</td><td class="num">50%</td><td class="num">0</td><td class="num">0</td><td>不用计策、单路出兵</td></tr>
+      <tr><td>中</td><td class="num">1.3</td><td class="num">1.0</td><td class="num">2</td><td class="num">35%</td><td class="num">10%</td><td class="num">2</td><td>两路出兵、抓空虚窗口</td></tr>
+      <tr><td>难</td><td class="num">1.1</td><td class="num">1.25</td><td class="num">3</td><td class="num">20%</td><td class="num">20%</td><td class="num">4</td><td>三路协同、集火主将</td></tr>
+    </tbody>
+  </table>
+
+  <h3>剧本</h3>
+  <table>
+    <thead><tr><th>剧本</th><th class="num">年代</th><th>难度</th><th class="num">道路</th><th>势力（城数 / 名册）</th></tr></thead>
+    <tbody id="scenarioRows"></tbody>
+  </table>
+  <div class="legend"><span>赤壁 208 直接读武将表默认驻防；189 / 200 / 220 由 cityOwners 与 rosters 覆盖归属与名册</span></div>
+
+  <h3>月度事件</h3>
+  <table>
+    <thead><tr><th>事件</th><th>选项</th><th>取舍</th></tr></thead>
+    <tbody>
+      <tr><td>蝗灾过境</td><td>开仓赈灾 / 强征余粮 / 邻州购粮</td><td>粮 −20% 换民忠 +6；或民忠 −10 换防灾 +2；或金 −300 换粮 +600</td></tr>
+      <tr><td>商队来投</td><td>派兵护送 / 课以重税 / 闭门不纳</td><td>金 +600 民忠 +2；金 +400 商业 −3 民忠 −4；商业 −2 民忠 −2</td></tr>
+      <tr><td>流民南下</td><td>安置 / 就地征兵 / 驱逐</td><td>人口 +8% 民忠 +5；兵力 +8% 民忠 −5；民忠 −8 防灾 +3</td></tr>
+      <tr><td>名士来访</td><td>礼聘 / 策问 / 谢绝</td><td>金 −400 农商 +8；智力 ≥70 得金 +500；民忠 +1</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<footer>
+  数据抽取自 <code>src/data/tables/{cities,generals,gates,balance,unitClasses,marchCost,scenarios,projects,policies,events,difficulty}.ts</code>；
+  生成日期 2026-10-30。表格支持点击表头排序、关键词筛选；打印时自动展开全部行。
+</footer>
+
+</div>
+
+<script id="data" type="application/json">{"scenarios":[{"id":"dongzhuo","name":"董卓弄权","year":189,"month":1,"difficulty":"偏高（群雄环伺）","desc":"董卓挟天子据洛阳、长安，关东诸侯各怀心思，天下初乱。","factions":[{"id":"caocao","name":"曹操","ruler":"曹操","cities":2,"roster":9},{"id":"liubei","name":"刘备","ruler":"刘备","cities":1,"roster":3},{"id":"dongzhuo","name":"董卓","ruler":"董卓","cities":4,"roster":10},{"id":"yuanshao","name":"袁绍","ruler":"袁绍","cities":9,"roster":10},{"id":"yuanshu","name":"袁术","ruler":"袁术","cities":3,"roster":5},{"id":"taoqian","name":"陶谦","ruler":"陶谦","cities":7,"roster":7},{"id":"sunjian","name":"孙坚","ruler":"孙坚","cities":11,"roster":12},{"id":"liubiao","name":"刘表","ruler":"刘表","cities":6,"roster":7},{"id":"liuzhang","name":"刘璋","ruler":"刘璋","cities":8,"roster":9},{"id":"mateng","name":"马腾","ruler":"马腾","cities":5,"roster":8},{"id":"zhanglu","name":"张鲁","ruler":"张鲁","cities":2,"roster":5},{"id":"gongsundu","name":"公孙度","ruler":"公孙度","cities":1,"roster":4}],"edges":119},{"id":"guandu","name":"曹操崛起","year":200,"month":1,"difficulty":"中（袁绍最强）","desc":"官渡前后，袁绍尽有河北，曹操初起于中原，刘备寄居新野。","factions":[{"id":"caocao","name":"曹操","ruler":"曹操","cities":13,"roster":22},{"id":"yuanshao","name":"袁绍","ruler":"袁绍","cities":12,"roster":13},{"id":"liubei","name":"刘备","ruler":"刘备","cities":1,"roster":7},{"id":"liubiao","name":"刘表","ruler":"刘表","cities":7,"roster":9},{"id":"sunquan","name":"孙权","ruler":"孙权","cities":8,"roster":21},{"id":"liuzhang","name":"刘璋","ruler":"刘璋","cities":8,"roster":11},{"id":"mateng","name":"马腾","ruler":"马腾","cities":5,"roster":8},{"id":"zhanglu","name":"张鲁","ruler":"张鲁","cities":2,"roster":5},{"id":"hanxuan","name":"韩玄","ruler":"韩玄","cities":2,"roster":6},{"id":"gongsundu","name":"公孙度","ruler":"公孙度","cities":1,"roster":4}],"edges":119},{"id":"chibi","name":"赤壁之战","year":208,"month":1,"difficulty":"中（经典）","desc":"曹操最强，孙刘弱小，经典对峙。","factions":[{"id":"liubei","name":"刘备","ruler":"刘备","cities":0,"roster":0},{"id":"caocao","name":"曹操","ruler":"曹操","cities":0,"roster":0},{"id":"sunquan","name":"孙权","ruler":"孙权","cities":0,"roster":0},{"id":"liubiao","name":"刘表","ruler":"刘表","cities":0,"roster":0},{"id":"liuzhang","name":"刘璋","ruler":"刘璋","cities":0,"roster":0},{"id":"mateng","name":"马腾","ruler":"马腾","cities":0,"roster":0},{"id":"zhanglu","name":"张鲁","ruler":"张鲁","cities":0,"roster":0},{"id":"hanxuan","name":"韩玄","ruler":"韩玄","cities":0,"roster":0},{"id":"gongsundu","name":"公孙度","ruler":"公孙度","cities":0,"roster":0}],"edges":119},{"id":"sanguo","name":"三国鼎立","year":220,"month":1,"difficulty":"偏高（三强对峙）","desc":"魏蜀吴三分天下，名将凋零，比拼国力、调度与关键战役。","factions":[{"id":"caocao","name":"魏","ruler":"曹操","cities":34,"roster":34},{"id":"liubei","name":"蜀","ruler":"刘备","cities":9,"roster":22},{"id":"sunquan","name":"吴","ruler":"孙权","cities":16,"roster":25}],"edges":119}],"cities":[{"id":"jiangxia","name":"江夏","owner":"liubei","size":"medium","terrain":"plain","water":true,"fort":58,"agri":200,"com":200,"loy":75,"def":55,"gold":300,"food":1200,"pop":42000,"skill":null},{"id":"xinye","name":"新野","owner":"liubei","size":"small","terrain":"plain","water":false,"fort":42,"agri":200,"com":160,"loy":70,"def":45,"gold":250,"food":1500,"pop":30000,"skill":null},{"id":"xuchang","name":"许昌","owner":"caocao","size":"capital","terrain":"plain","water":false,"fort":80,"agri":320,"com":340,"loy":85,"def":70,"gold":1500,"food":3000,"pop":90000,"skill":null},{"id":"luoyang","name":"洛阳","owner":"caocao","size":"capital","terrain":"plain","water":false,"fort":90,"agri":300,"com":320,"loy":80,"def":65,"gold":1200,"food":2600,"pop":80000,"skill":null},{"id":"changan","name":"长安","owner":"caocao","size":"capital","terrain":"plain","water":false,"fort":92,"agri":300,"com":290,"loy":78,"def":65,"gold":1100,"food":2400,"pop":80000,"skill":null},{"id":"chenliu","name":"陈留","owner":"caocao","size":"medium","terrain":"plain","water":false,"fort":55,"agri":240,"com":220,"loy":75,"def":55,"gold":600,"food":1400,"pop":45000,"skill":null},{"id":"puyang","name":"濮阳","owner":"caocao","size":"medium","terrain":"plain","water":false,"fort":50,"agri":220,"com":200,"loy":72,"def":50,"gold":500,"food":1300,"pop":38000,"skill":null},{"id":"ye","name":"邺","owner":"caocao","size":"large","terrain":"plain","water":false,"fort":76,"agri":280,"com":260,"loy":76,"def":60,"gold":900,"food":2200,"pop":62000,"skill":null},{"id":"runan","name":"汝南","owner":"caocao","size":"medium","terrain":"plain","water":false,"fort":52,"agri":210,"com":190,"loy":70,"def":48,"gold":450,"food":1200,"pop":40000,"skill":null},{"id":"wan","name":"宛","owner":"caocao","size":"large","terrain":"plain","water":false,"fort":70,"agri":230,"com":210,"loy":72,"def":55,"gold":550,"food":1300,"pop":42000,"skill":null},{"id":"xiaopei","name":"小沛","owner":"caocao","size":"small","terrain":"plain","water":false,"fort":44,"agri":160,"com":150,"loy":70,"def":50,"gold":400,"food":1000,"pop":28000,"skill":null},{"id":"xiapi","name":"下邳","owner":"caocao","size":"large","terrain":"plain","water":false,"fort":62,"agri":200,"com":240,"loy":68,"def":50,"gold":500,"food":1100,"pop":36000,"skill":null},{"id":"pengcheng","name":"彭城","owner":"caocao","size":"medium","terrain":"plain","water":false,"fort":52,"agri":220,"com":200,"loy":70,"def":52,"gold":480,"food":1200,"pop":38000,"skill":null},{"id":"beihai","name":"北海","owner":"caocao","size":"medium","terrain":"plain","water":true,"fort":50,"agri":180,"com":210,"loy":70,"def":45,"gold":420,"food":1000,"pop":32000,"skill":null},{"id":"jinyang","name":"晋阳","owner":"caocao","size":"medium","terrain":"mountain","water":false,"fort":80,"agri":170,"com":160,"loy":70,"def":55,"gold":380,"food":1000,"pop":26000,"skill":null},{"id":"zhuo","name":"涿郡","owner":"caocao","size":"small","terrain":"plain","water":false,"fort":45,"agri":150,"com":140,"loy":72,"def":45,"gold":250,"food":900,"pop":24000,"skill":{"name":"桃园乡勇","description":"乡里从军者众，单次征兵上限 +15%。"}},{"id":"ji","name":"蓟","owner":"caocao","size":"medium","terrain":"plain","water":false,"fort":65,"agri":190,"com":180,"loy":72,"def":52,"gold":420,"food":1200,"pop":36000,"skill":{"name":"幽州骑训","description":"边地马场充足，演武额外 +6 训练度。"}},{"id":"beiping","name":"北平","owner":"caocao","size":"medium","terrain":"plain","water":false,"fort":62,"agri":160,"com":150,"loy":70,"def":48,"gold":360,"food":1000,"pop":30000,"skill":{"name":"白马募兵","description":"边民踊跃从军，征兵金粮消耗 −15%。"}},{"id":"nanpi","name":"南皮","owner":"caocao","size":"medium","terrain":"plain","water":false,"fort":55,"agri":220,"com":200,"loy":74,"def":50,"gold":450,"food":1300,"pop":38000,"skill":{"name":"渤海粮仓","description":"渤海沃野，月粮产出 +20%。"}},{"id":"pingyuan","name":"平原","owner":"caocao","size":"small","terrain":"plain","water":false,"fort":48,"agri":180,"com":150,"loy":72,"def":45,"gold":300,"food":1000,"pop":28000,"skill":{"name":"平原仁政","description":"仁名远播，从本城发起劝降时成功率 +8%。"}},{"id":"shangdang","name":"上党","owner":"caocao","size":"small","terrain":"mountain","water":false,"fort":76,"agri":130,"com":120,"loy":70,"def":50,"gold":240,"food":700,"pop":20000,"skill":{"name":"太行壁垒","description":"依山筑垒，守城城防 +8。"}},{"id":"linzi","name":"临淄","owner":"caocao","size":"large","terrain":"plain","water":false,"fort":60,"agri":240,"com":260,"loy":76,"def":52,"gold":600,"food":1600,"pop":50000,"skill":{"name":"齐商遗风","description":"市井繁荣，季税 +25%。"}},{"id":"langya","name":"琅琊","owner":"caocao","size":"medium","terrain":"plain","water":false,"fort":52,"agri":190,"com":210,"loy":74,"def":48,"gold":400,"food":1200,"pop":32000,"skill":{"name":"名士之乡","description":"人才汇聚，搜索稀有命中率 +8%。"}},{"id":"guangling","name":"广陵","owner":"caocao","size":"medium","terrain":"plain","water":true,"fort":55,"agri":200,"com":230,"loy":72,"def":48,"gold":450,"food":1300,"pop":36000,"skill":{"name":"江淮漕运","description":"漕渠通江，每月交易额度 +50%。"}},{"id":"shouchun","name":"寿春","owner":"caocao","size":"large","terrain":"plain","water":true,"fort":74,"agri":250,"com":270,"loy":74,"def":52,"gold":650,"food":1700,"pop":52000,"skill":{"name":"淮南仓廪","description":"淮南粮道汇集，月粮产出 +18%。"}},{"id":"hefei","name":"合肥","owner":"caocao","size":"medium","terrain":"plain","water":false,"fort":78,"agri":180,"com":190,"loy":72,"def":55,"gold":420,"food":1100,"pop":30000,"skill":{"name":"逍遥津固守","description":"守城经验代代相传，守城城防 +10。"}},{"id":"hongnong","name":"弘农","owner":"caocao","size":"small","terrain":"mountain","water":false,"fort":86,"agri":130,"com":120,"loy":72,"def":45,"gold":240,"food":800,"pop":20000,"skill":{"name":"弘农杨氏","description":"望族门生故吏遍天下，搜索稀有命中率 +6%。"}},{"id":"jianye","name":"建业","owner":"sunquan","size":"capital","terrain":"plain","water":true,"fort":72,"agri":240,"com":260,"loy":78,"def":60,"gold":700,"food":1800,"pop":55000,"skill":null},{"id":"wu","name":"吴","owner":"sunquan","size":"large","terrain":"plain","water":true,"fort":58,"agri":260,"com":280,"loy":80,"def":60,"gold":800,"food":1900,"pop":52000,"skill":null},{"id":"kuaiji","name":"会稽","owner":"sunquan","size":"large","terrain":"plain","water":true,"fort":55,"agri":240,"com":250,"loy":78,"def":55,"gold":700,"food":1700,"pop":48000,"skill":null},{"id":"chaisang","name":"柴桑","owner":"sunquan","size":"medium","terrain":"plain","water":true,"fort":60,"agri":190,"com":200,"loy":76,"def":55,"gold":450,"food":1200,"pop":36000,"skill":null},{"id":"lujiang","name":"庐江","owner":"sunquan","size":"small","terrain":"plain","water":true,"fort":55,"agri":180,"com":190,"loy":74,"def":50,"gold":400,"food":1100,"pop":34000,"skill":null},{"id":"danyang","name":"丹阳","owner":"sunquan","size":"medium","terrain":"plain","water":false,"fort":58,"agri":180,"com":200,"loy":74,"def":48,"gold":380,"food":1100,"pop":32000,"skill":{"name":"丹阳精兵","description":"兵源精壮，单次征兵上限 +20%。"}},{"id":"yuzhang","name":"豫章","owner":"sunquan","size":"medium","terrain":"plain","water":true,"fort":55,"agri":210,"com":190,"loy":74,"def":48,"gold":400,"food":1300,"pop":36000,"skill":{"name":"豫章仓廪","description":"赣水两岸稻作兴旺，月粮产出 +15%。"}},{"id":"poyang","name":"鄱阳","owner":"sunquan","size":"small","terrain":"plain","water":true,"fort":52,"agri":150,"com":160,"loy":72,"def":42,"gold":240,"food":900,"pop":22000,"skill":{"name":"鄱阳练水","description":"湖面开阔，演武额外 +6 训练度。"}},{"id":"xiangyang","name":"襄阳","owner":"liubiao","size":"large","terrain":"plain","water":true,"fort":84,"agri":260,"com":280,"loy":70,"def":60,"gold":600,"food":2000,"pop":60000,"skill":null},{"id":"jiangling","name":"江陵","owner":"liubiao","size":"large","terrain":"plain","water":true,"fort":72,"agri":250,"com":240,"loy":74,"def":58,"gold":600,"food":1600,"pop":46000,"skill":null},{"id":"changsha","name":"长沙","owner":"liubiao","size":"large","terrain":"plain","water":false,"fort":60,"agri":240,"com":220,"loy":72,"def":55,"gold":550,"food":1500,"pop":44000,"skill":null},{"id":"wuling","name":"武陵","owner":"liubiao","size":"small","terrain":"mountain","water":false,"fort":62,"agri":140,"com":120,"loy":70,"def":45,"gold":240,"food":850,"pop":22000,"skill":{"name":"武陵山险","description":"蛮溪山险为屏，守城城防 +8。"}},{"id":"yiling","name":"夷陵","owner":"liubiao","size":"small","terrain":"mountain","water":false,"fort":84,"agri":120,"com":110,"loy":70,"def":45,"gold":220,"food":750,"pop":18000,"skill":{"name":"峡口天险","description":"江峡夹峙，守城城防 +10。"}},{"id":"gongan","name":"公安","owner":"liubiao","size":"small","terrain":"plain","water":true,"fort":58,"agri":150,"com":140,"loy":70,"def":45,"gold":260,"food":900,"pop":24000,"skill":{"name":"油江舟师","description":"水军常驻，演武额外 +6 训练度。"}},{"id":"chengdu","name":"成都","owner":"liuzhang","size":"capital","terrain":"plain","water":false,"fort":74,"agri":280,"com":300,"loy":75,"def":60,"gold":900,"food":2400,"pop":70000,"skill":null},{"id":"mianzhu","name":"绵竹","owner":"liuzhang","size":"small","terrain":"mountain","water":false,"fort":72,"agri":140,"com":120,"loy":70,"def":50,"gold":300,"food":800,"pop":20000,"skill":null},{"id":"zhangtong","name":"梓潼","owner":"liuzhang","size":"small","terrain":"mountain","water":false,"fort":78,"agri":130,"com":110,"loy":68,"def":55,"gold":260,"food":700,"pop":18000,"skill":null},{"id":"jiangzhou","name":"江州","owner":"liuzhang","size":"medium","terrain":"plain","water":false,"fort":55,"agri":200,"com":190,"loy":72,"def":52,"gold":420,"food":1100,"pop":34000,"skill":null},{"id":"langzhong","name":"阆中","owner":"liuzhang","size":"medium","terrain":"mountain","water":false,"fort":70,"agri":180,"com":150,"loy":72,"def":48,"gold":360,"food":1100,"pop":30000,"skill":{"name":"巴西劲卒","description":"巴西子弟悍勇，单次征兵上限 +15%。"}},{"id":"badong","name":"巴东","owner":"liuzhang","size":"small","terrain":"mountain","water":false,"fort":66,"agri":120,"com":100,"loy":70,"def":42,"gold":200,"food":700,"pop":16000,"skill":{"name":"三峡险塞","description":"峡口易守，守城城防 +10。"}},{"id":"jianning","name":"建宁","owner":"liuzhang","size":"small","terrain":"mountain","water":false,"fort":60,"agri":110,"com":90,"loy":68,"def":40,"gold":180,"food":650,"pop":15000,"skill":{"name":"南中征募","description":"部族归附者众，征兵金粮消耗 −20%。"}},{"id":"yunnan","name":"云南","owner":"liuzhang","size":"small","terrain":"mountain","water":false,"fort":58,"agri":100,"com":80,"loy":66,"def":38,"gold":160,"food":600,"pop":14000,"skill":{"name":"云南坝子","description":"坝区宜农，月粮产出 +15%。"}},{"id":"tianshui","name":"天水","owner":"mateng","size":"medium","terrain":"mountain","water":false,"fort":72,"agri":150,"com":130,"loy":72,"def":50,"gold":320,"food":900,"pop":22000,"skill":null},{"id":"wuwei","name":"武威","owner":"mateng","size":"medium","terrain":"plain","water":false,"fort":50,"agri":170,"com":160,"loy":70,"def":50,"gold":380,"food":1000,"pop":30000,"skill":null},{"id":"anding","name":"安定","owner":"mateng","size":"small","terrain":"mountain","water":false,"fort":58,"agri":140,"com":130,"loy":68,"def":48,"gold":300,"food":800,"pop":24000,"skill":null},{"id":"jincheng","name":"金城","owner":"mateng","size":"small","terrain":"mountain","water":false,"fort":64,"agri":120,"com":110,"loy":70,"def":42,"gold":220,"food":750,"pop":18000,"skill":{"name":"西凉铁骑","description":"骑战成风，演武额外 +8 训练度。"}},{"id":"wudu","name":"武都","owner":"mateng","size":"small","terrain":"mountain","water":false,"fort":80,"agri":110,"com":95,"loy":68,"def":42,"gold":190,"food":650,"pop":15000,"skill":{"name":"陇南险道","description":"陇道崎岖，守城城防 +10。"}},{"id":"hanzhong","name":"汉中","owner":"zhanglu","size":"large","terrain":"mountain","water":false,"fort":80,"agri":220,"com":200,"loy":76,"def":60,"gold":500,"food":1400,"pop":40000,"skill":null},{"id":"shangyong","name":"上庸","owner":"zhanglu","size":"small","terrain":"mountain","water":false,"fort":78,"agri":110,"com":100,"loy":70,"def":45,"gold":200,"food":650,"pop":16000,"skill":{"name":"上庸山城","description":"依山临水筑城，守城城防 +8。"}},{"id":"guiyang","name":"桂阳","owner":"hanxuan","size":"small","terrain":"plain","water":false,"fort":45,"agri":170,"com":150,"loy":68,"def":45,"gold":300,"food":900,"pop":26000,"skill":null},{"id":"lingling","name":"零陵","owner":"hanxuan","size":"small","terrain":"plain","water":false,"fort":42,"agri":160,"com":140,"loy":66,"def":42,"gold":280,"food":850,"pop":24000,"skill":null},{"id":"xiangping","name":"襄平","owner":"gongsundu","size":"medium","terrain":"plain","water":false,"fort":55,"agri":160,"com":150,"loy":72,"def":55,"gold":350,"food":900,"pop":28000,"skill":null}],"generals":[{"id":"liubei","name":"刘备","force":73,"int":74,"lead":78,"pol":80,"charm":99,"loy":100,"cls":"infantry","troops":800,"status":"active","loc":"jiangxia","ruler":true,"egg":false,"skill":"亲和","skillCat":"政","skillText":"征兵上限 +10%。"},{"id":"guanyu","name":"关羽","force":97,"int":75,"lead":95,"pol":64,"charm":93,"loy":95,"cls":"infantry","troops":900,"status":"active","loc":"jiangxia","ruler":false,"egg":false,"skill":"战神","skillCat":"战","skillText":"普攻伤害 +8%，逢阵必先声夺人。"},{"id":"zhangfei","name":"张飞","force":98,"int":42,"lead":92,"pol":27,"charm":60,"loy":92,"cls":"infantry","troops":800,"status":"active","loc":"xinye","ruler":false,"egg":false,"skill":"猛者","skillCat":"战","skillText":"普攻伤害 +6%，但所受伤害 +4%。"},{"id":"zhugeliang","name":"诸葛亮","force":38,"int":100,"lead":92,"pol":96,"charm":92,"loy":90,"cls":"infantry","troops":0,"status":"active","loc":"xinye","ruler":false,"egg":false,"skill":"神算","skillCat":"计","skillText":"计策成功率 +8 点。"},{"id":"jianyong","name":"简雍","force":22,"int":72,"lead":30,"pol":72,"charm":80,"loy":90,"cls":"infantry","troops":80,"status":"active","loc":"xinye","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"sunqian","name":"孙乾","force":24,"int":74,"lead":32,"pol":74,"charm":78,"loy":88,"cls":"infantry","troops":80,"status":"active","loc":"xinye","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"mizhu","name":"糜竺","force":26,"int":70,"lead":30,"pol":76,"charm":80,"loy":92,"cls":"infantry","troops":100,"status":"active","loc":"jiangxia","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"liuqi","name":"刘琦","force":42,"int":58,"lead":45,"pol":58,"charm":70,"loy":85,"cls":"infantry","troops":250,"status":"active","loc":"jiangxia","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"guanping","name":"关平","force":80,"int":62,"lead":78,"pol":58,"charm":74,"loy":92,"cls":"infantry","troops":400,"status":"active","loc":"jiangxia","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zhoucang","name":"周仓","force":84,"int":30,"lead":65,"pol":25,"charm":58,"loy":88,"cls":"infantry","troops":300,"status":"active","loc":"xinye","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"liaohua","name":"廖化","force":75,"int":64,"lead":72,"pol":55,"charm":64,"loy":85,"cls":"infantry","troops":250,"status":"active","loc":"xinye","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"chendao","name":"陈到","force":83,"int":66,"lead":74,"pol":50,"charm":62,"loy":90,"cls":"infantry","troops":300,"status":"active","loc":"jiangxia","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"caocao","name":"曹操","force":82,"int":91,"lead":96,"pol":94,"charm":94,"loy":100,"cls":"infantry","troops":1500,"status":"active","loc":"xuchang","ruler":true,"egg":false,"skill":"铁壁","skillCat":"战","skillText":"所受伤害 -10%，阵脚不乱。"},{"id":"dianwei","name":"典韦","force":96,"int":35,"lead":68,"pol":12,"charm":40,"loy":90,"cls":"infantry","troops":500,"status":"active","loc":"xuchang","ruler":false,"egg":false,"skill":"猛者","skillCat":"战","skillText":"普攻伤害 +6%，但所受伤害 +4%。"},{"id":"xunyu","name":"荀彧","force":45,"int":95,"lead":55,"pol":98,"charm":90,"loy":88,"cls":"infantry","troops":300,"status":"active","loc":"xuchang","ruler":false,"egg":false,"skill":"能吏","skillCat":"政","skillText":"内政效果 +15%。"},{"id":"guojia","name":"郭嘉","force":40,"int":97,"lead":60,"pol":86,"charm":82,"loy":86,"cls":"archer","troops":250,"status":"active","loc":"luoyang","ruler":false,"egg":false,"skill":"神算","skillCat":"计","skillText":"计策成功率 +8 点。"},{"id":"xiahoudun","name":"夏侯惇","force":90,"int":60,"lead":90,"pol":60,"charm":76,"loy":92,"cls":"cavalry","troops":700,"status":"active","loc":"chenliu","ruler":false,"egg":false,"skill":"铁壁","skillCat":"战","skillText":"所受伤害 -10%，阵脚不乱。"},{"id":"xiahouyuan","name":"夏侯渊","force":88,"int":58,"lead":87,"pol":52,"charm":70,"loy":90,"cls":"cavalry","troops":650,"status":"active","loc":"puyang","ruler":false,"egg":false,"skill":"猛者","skillCat":"战","skillText":"普攻伤害 +6%，但所受伤害 +4%。"},{"id":"caoren","name":"曹仁","force":88,"int":62,"lead":90,"pol":60,"charm":73,"loy":90,"cls":"infantry","troops":600,"status":"active","loc":"wan","ruler":false,"egg":false,"skill":"坚阵","skillCat":"战","skillText":"守城时（守方位于城池）所受伤害 -8%。"},{"id":"caohong","name":"曹洪","force":80,"int":50,"lead":75,"pol":35,"charm":62,"loy":85,"cls":"infantry","troops":500,"status":"active","loc":"runan","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zhangliao","name":"张辽","force":92,"int":78,"lead":93,"pol":66,"charm":80,"loy":84,"cls":"cavalry","troops":750,"status":"active","loc":"xiapi","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"xuhuang","name":"徐晃","force":90,"int":70,"lead":89,"pol":60,"charm":72,"loy":85,"cls":"infantry","troops":650,"status":"active","loc":"pengcheng","ruler":false,"egg":false,"skill":"猛者","skillCat":"战","skillText":"普攻伤害 +6%，但所受伤害 +4%。"},{"id":"yujin","name":"于禁","force":82,"int":68,"lead":88,"pol":70,"charm":66,"loy":82,"cls":"infantry","troops":550,"status":"active","loc":"beihai","ruler":false,"egg":false,"skill":"坚阵","skillCat":"战","skillText":"守城时（守方位于城池）所受伤害 -8%。"},{"id":"yuejin","name":"乐进","force":84,"int":60,"lead":82,"pol":50,"charm":63,"loy":84,"cls":"infantry","troops":550,"status":"active","loc":"xiaopei","ruler":false,"egg":false,"skill":"攻城","skillCat":"战","skillText":"攻城器械对城墙耐久伤害 +25%。"},{"id":"zhanghe","name":"张郃","force":88,"int":72,"lead":90,"pol":58,"charm":71,"loy":82,"cls":"cavalry","troops":600,"status":"active","loc":"ye","ruler":false,"egg":false,"skill":"铁壁","skillCat":"战","skillText":"所受伤害 -10%，阵脚不乱。"},{"id":"zhangyan","name":"张燕","force":78,"int":60,"lead":74,"pol":40,"charm":58,"loy":78,"cls":"cavalry","troops":500,"status":"active","loc":"jinyang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zhongyao","name":"钟繇","force":45,"int":80,"lead":55,"pol":88,"charm":78,"loy":86,"cls":"infantry","troops":400,"status":"active","loc":"changan","ruler":false,"egg":false,"skill":"能吏","skillCat":"政","skillText":"内政效果 +15%。"},{"id":"simayi","name":"司马懿","force":55,"int":98,"lead":98,"pol":93,"charm":88,"loy":82,"cls":"infantry","troops":300,"status":"active","loc":"xuchang","ruler":false,"egg":false,"skill":"神算","skillCat":"计","skillText":"计策成功率 +8 点。"},{"id":"jiaxu","name":"贾诩","force":48,"int":97,"lead":63,"pol":82,"charm":71,"loy":80,"cls":"infantry","troops":300,"status":"active","loc":"changan","ruler":false,"egg":false,"skill":"洞察","skillCat":"计","skillText":"计策成功率 +4 点，所受计策伤害 -10%。"},{"id":"chengyu","name":"程昱","force":52,"int":90,"lead":70,"pol":85,"charm":70,"loy":85,"cls":"infantry","troops":300,"status":"active","loc":"puyang","ruler":false,"egg":false,"skill":"洞察","skillCat":"计","skillText":"计策成功率 +4 点，所受计策伤害 -10%。"},{"id":"liuye","name":"刘晔","force":45,"int":88,"lead":58,"pol":86,"charm":74,"loy":82,"cls":"archer","troops":250,"status":"active","loc":"luoyang","ruler":false,"egg":false,"skill":"洞察","skillCat":"计","skillText":"计策成功率 +4 点，所受计策伤害 -10%。"},{"id":"xuchu","name":"许褚","force":96,"int":36,"lead":66,"pol":15,"charm":44,"loy":92,"cls":"infantry","troops":700,"status":"active","loc":"xuchang","ruler":false,"egg":false,"skill":"猛者","skillCat":"战","skillText":"普攻伤害 +6%，但所受伤害 +4%。"},{"id":"lidian","name":"李典","force":82,"int":70,"lead":78,"pol":66,"charm":68,"loy":86,"cls":"infantry","troops":550,"status":"active","loc":"xiaopei","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"caochun","name":"曹纯","force":80,"int":62,"lead":76,"pol":52,"charm":64,"loy":88,"cls":"cavalry","troops":600,"status":"active","loc":"chenliu","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"caoxiu","name":"曹休","force":78,"int":68,"lead":78,"pol":62,"charm":66,"loy":85,"cls":"cavalry","troops":500,"status":"active","loc":"runan","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"caozhen","name":"曹真","force":82,"int":70,"lead":86,"pol":70,"charm":72,"loy":85,"cls":"cavalry","troops":500,"status":"active","loc":"changan","ruler":false,"egg":false,"skill":"坚阵","skillCat":"战","skillText":"守城时（守方位于城池）所受伤害 -8%。"},{"id":"xiahoushang","name":"夏侯尚","force":75,"int":64,"lead":76,"pol":64,"charm":68,"loy":84,"cls":"cavalry","troops":450,"status":"active","loc":"wan","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zangba","name":"臧霸","force":85,"int":60,"lead":78,"pol":45,"charm":60,"loy":80,"cls":"infantry","troops":550,"status":"active","loc":"beihai","ruler":false,"egg":false,"skill":"猛者","skillCat":"战","skillText":"普攻伤害 +6%，但所受伤害 +4%。"},{"id":"manchong","name":"满宠","force":70,"int":82,"lead":82,"pol":80,"charm":68,"loy":86,"cls":"infantry","troops":400,"status":"active","loc":"ye","ruler":false,"egg":false,"skill":"坚阵","skillCat":"战","skillText":"守城时（守方位于城池）所受伤害 -8%。"},{"id":"jiangji","name":"蒋济","force":55,"int":84,"lead":65,"pol":84,"charm":70,"loy":84,"cls":"archer","troops":300,"status":"active","loc":"xuchang","ruler":false,"egg":false,"skill":"能吏","skillCat":"政","skillText":"内政效果 +15%。"},{"id":"sunquan","name":"孙权","force":76,"int":82,"lead":80,"pol":86,"charm":92,"loy":100,"cls":"infantry","troops":900,"status":"active","loc":"jianye","ruler":true,"egg":false,"skill":"亲和","skillCat":"政","skillText":"征兵上限 +10%。"},{"id":"zhouyu","name":"周瑜","force":72,"int":96,"lead":97,"pol":86,"charm":93,"loy":88,"cls":"archer","troops":900,"status":"active","loc":"jianye","ruler":false,"egg":false,"skill":"水神","skillCat":"战","skillText":"水兵出手伤害 +14%。"},{"id":"lusu","name":"鲁肃","force":55,"int":92,"lead":82,"pol":93,"charm":85,"loy":86,"cls":"archer","troops":400,"status":"active","loc":"wu","ruler":false,"egg":false,"skill":"能吏","skillCat":"政","skillText":"内政效果 +15%。"},{"id":"lvmeng","name":"吕蒙","force":85,"int":78,"lead":91,"pol":76,"charm":78,"loy":84,"cls":"navy","troops":600,"status":"active","loc":"kuaiji","ruler":false,"egg":false,"skill":"水神","skillCat":"战","skillText":"水兵出手伤害 +14%。"},{"id":"chengpu","name":"程普","force":82,"int":70,"lead":84,"pol":72,"charm":74,"loy":86,"cls":"navy","troops":500,"status":"active","loc":"chaisang","ruler":false,"egg":false,"skill":"水神","skillCat":"战","skillText":"水兵出手伤害 +14%。"},{"id":"taishici","name":"太史慈","force":90,"int":65,"lead":87,"pol":54,"charm":73,"loy":80,"cls":"archer","troops":650,"status":"active","loc":"lujiang","ruler":false,"egg":false,"skill":"弓神","skillCat":"战","skillText":"弓兵出手伤害 +14%。"},{"id":"zhangzhao","name":"张昭","force":30,"int":92,"lead":55,"pol":94,"charm":86,"loy":90,"cls":"infantry","troops":200,"status":"active","loc":"jianye","ruler":false,"egg":false,"skill":"能吏","skillCat":"政","skillText":"内政效果 +15%。"},{"id":"zhanghong","name":"张纮","force":28,"int":86,"lead":50,"pol":90,"charm":82,"loy":86,"cls":"infantry","troops":150,"status":"active","loc":"wu","ruler":false,"egg":false,"skill":"能吏","skillCat":"政","skillText":"内政效果 +15%。"},{"id":"guyong","name":"顾雍","force":30,"int":85,"lead":50,"pol":92,"charm":84,"loy":88,"cls":"infantry","troops":150,"status":"active","loc":"wu","ruler":false,"egg":false,"skill":"能吏","skillCat":"政","skillText":"内政效果 +15%。"},{"id":"zhugejin","name":"诸葛瑾","force":55,"int":85,"lead":72,"pol":86,"charm":84,"loy":88,"cls":"infantry","troops":250,"status":"active","loc":"jianye","ruler":false,"egg":false,"skill":"洞察","skillCat":"计","skillText":"计策成功率 +4 点，所受计策伤害 -10%。"},{"id":"buzhi","name":"步骘","force":60,"int":80,"lead":70,"pol":86,"charm":80,"loy":84,"cls":"infantry","troops":300,"status":"active","loc":"kuaiji","ruler":false,"egg":false,"skill":"能吏","skillCat":"政","skillText":"内政效果 +15%。"},{"id":"zhoutai","name":"周泰","force":90,"int":45,"lead":80,"pol":35,"charm":65,"loy":90,"cls":"infantry","troops":600,"status":"active","loc":"lujiang","ruler":false,"egg":false,"skill":"猛者","skillCat":"战","skillText":"普攻伤害 +6%，但所受伤害 +4%。"},{"id":"jiangqin","name":"蒋钦","force":82,"int":55,"lead":76,"pol":55,"charm":64,"loy":84,"cls":"navy","troops":500,"status":"active","loc":"chaisang","ruler":false,"egg":false,"skill":"水神","skillCat":"战","skillText":"水兵出手伤害 +14%。"},{"id":"handang","name":"韩当","force":85,"int":50,"lead":80,"pol":50,"charm":64,"loy":86,"cls":"navy","troops":500,"status":"active","loc":"chaisang","ruler":false,"egg":false,"skill":"水神","skillCat":"战","skillText":"水兵出手伤害 +14%。"},{"id":"chenwu","name":"陈武","force":86,"int":40,"lead":78,"pol":40,"charm":62,"loy":85,"cls":"infantry","troops":500,"status":"active","loc":"lujiang","ruler":false,"egg":false,"skill":"猛者","skillCat":"战","skillText":"普攻伤害 +6%，但所受伤害 +4%。"},{"id":"xusheng","name":"徐盛","force":83,"int":60,"lead":82,"pol":55,"charm":68,"loy":84,"cls":"navy","troops":450,"status":"active","loc":"jianye","ruler":false,"egg":false,"skill":"水神","skillCat":"战","skillText":"水兵出手伤害 +14%。"},{"id":"dingfeng","name":"丁奉","force":84,"int":58,"lead":84,"pol":60,"charm":70,"loy":84,"cls":"navy","troops":450,"status":"active","loc":"kuaiji","ruler":false,"egg":false,"skill":"水神","skillCat":"战","skillText":"水兵出手伤害 +14%。"},{"id":"lingtong","name":"凌统","force":88,"int":62,"lead":84,"pol":52,"charm":70,"loy":88,"cls":"infantry","troops":500,"status":"active","loc":"wu","ruler":false,"egg":false,"skill":"猛者","skillCat":"战","skillText":"普攻伤害 +6%，但所受伤害 +4%。"},{"id":"lvxun","name":"陆逊","force":72,"int":90,"lead":96,"pol":90,"charm":87,"loy":86,"cls":"archer","troops":400,"status":"active","loc":"kuaiji","ruler":false,"egg":false,"skill":"铁壁","skillCat":"战","skillText":"所受伤害 -10%，阵脚不乱。"},{"id":"zhuran","name":"朱然","force":80,"int":65,"lead":82,"pol":60,"charm":70,"loy":85,"cls":"navy","troops":450,"status":"active","loc":"jianye","ruler":false,"egg":false,"skill":"水神","skillCat":"战","skillText":"水兵出手伤害 +14%。"},{"id":"huanggai","name":"黄盖","force":86,"int":55,"lead":80,"pol":60,"charm":70,"loy":88,"cls":"navy","troops":600,"status":"active","loc":"chaisang","ruler":false,"egg":false,"skill":"水神","skillCat":"战","skillText":"水兵出手伤害 +14%。"},{"id":"liubiao","name":"刘表","force":65,"int":70,"lead":62,"pol":78,"charm":86,"loy":100,"cls":"infantry","troops":450,"status":"active","loc":"xiangyang","ruler":true,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"lvbu","name":"吕布","force":100,"int":26,"lead":89,"pol":13,"charm":36,"loy":60,"cls":"elite","troops":700,"status":"active","loc":"xiangyang","ruler":false,"egg":false,"skill":"战神","skillCat":"战","skillText":"普攻伤害 +8%，逢阵必先声夺人。"},{"id":"caimao","name":"蔡瑁","force":65,"int":60,"lead":60,"pol":45,"charm":50,"loy":75,"cls":"navy","troops":500,"status":"active","loc":"jiangling","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"huangzhong","name":"黄忠","force":94,"int":62,"lead":86,"pol":38,"charm":64,"loy":80,"cls":"archer","troops":600,"status":"active","loc":"changsha","ruler":false,"egg":false,"skill":"弓神","skillCat":"战","skillText":"弓兵出手伤害 +14%。"},{"id":"kuaiyue","name":"蒯越","force":45,"int":82,"lead":65,"pol":88,"charm":76,"loy":78,"cls":"infantry","troops":300,"status":"active","loc":"jiangling","ruler":false,"egg":false,"skill":"能吏","skillCat":"政","skillText":"内政效果 +15%。"},{"id":"wenpin","name":"文聘","force":85,"int":68,"lead":84,"pol":60,"charm":70,"loy":82,"cls":"navy","troops":700,"status":"active","loc":"jiangling","ruler":false,"egg":false,"skill":"水神","skillCat":"战","skillText":"水兵出手伤害 +14%。"},{"id":"zhangyun","name":"张允","force":60,"int":50,"lead":55,"pol":40,"charm":48,"loy":70,"cls":"navy","troops":400,"status":"active","loc":"jiangling","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"weiyan","name":"魏延","force":92,"int":62,"lead":84,"pol":40,"charm":57,"loy":72,"cls":"infantry","troops":750,"status":"active","loc":"changsha","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"wangwei","name":"王威","force":68,"int":55,"lead":60,"pol":50,"charm":55,"loy":75,"cls":"infantry","troops":400,"status":"active","loc":"changsha","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"huojun","name":"霍峻","force":78,"int":66,"lead":80,"pol":55,"charm":66,"loy":78,"cls":"infantry","troops":450,"status":"active","loc":"jiangling","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"xianglang","name":"向朗","force":55,"int":70,"lead":55,"pol":80,"charm":74,"loy":76,"cls":"infantry","troops":300,"status":"active","loc":"changsha","ruler":false,"egg":false,"skill":"能吏","skillCat":"政","skillText":"内政效果 +15%。"},{"id":"liuzhang","name":"刘璋","force":55,"int":62,"lead":40,"pol":45,"charm":68,"loy":100,"cls":"infantry","troops":500,"status":"active","loc":"chengdu","ruler":true,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zhangren","name":"张任","force":85,"int":70,"lead":88,"pol":62,"charm":72,"loy":88,"cls":"infantry","troops":600,"status":"active","loc":"mianzhu","ruler":false,"egg":false,"skill":"猛者","skillCat":"战","skillText":"普攻伤害 +6%，但所受伤害 +4%。"},{"id":"yanyan","name":"严颜","force":83,"int":65,"lead":82,"pol":60,"charm":70,"loy":82,"cls":"infantry","troops":550,"status":"active","loc":"zhangtong","ruler":false,"egg":false,"skill":"坚阵","skillCat":"战","skillText":"守城时（守方位于城池）所受伤害 -8%。"},{"id":"liyan","name":"李严","force":78,"int":70,"lead":84,"pol":78,"charm":70,"loy":78,"cls":"infantry","troops":500,"status":"active","loc":"jiangzhou","ruler":false,"egg":false,"skill":"坚阵","skillCat":"战","skillText":"守城时（守方位于城池）所受伤害 -8%。"},{"id":"huangquan","name":"黄权","force":60,"int":85,"lead":85,"pol":82,"charm":72,"loy":82,"cls":"infantry","troops":350,"status":"active","loc":"chengdu","ruler":false,"egg":false,"skill":"洞察","skillCat":"计","skillText":"计策成功率 +4 点，所受计策伤害 -10%。"},{"id":"fazheng","name":"法正","force":50,"int":92,"lead":78,"pol":82,"charm":72,"loy":80,"cls":"infantry","troops":300,"status":"active","loc":"chengdu","ruler":false,"egg":false,"skill":"洞察","skillCat":"计","skillText":"计策成功率 +4 点，所受计策伤害 -10%。"},{"id":"zhangsong","name":"张松","force":35,"int":80,"lead":40,"pol":85,"charm":60,"loy":70,"cls":"infantry","troops":200,"status":"active","loc":"chengdu","ruler":false,"egg":false,"skill":"能吏","skillCat":"政","skillText":"内政效果 +15%。"},{"id":"liuba","name":"刘巴","force":30,"int":86,"lead":35,"pol":90,"charm":70,"loy":80,"cls":"infantry","troops":150,"status":"active","loc":"chengdu","ruler":false,"egg":false,"skill":"能吏","skillCat":"政","skillText":"内政效果 +15%。"},{"id":"wuyi","name":"吴懿","force":82,"int":65,"lead":78,"pol":65,"charm":70,"loy":82,"cls":"infantry","troops":550,"status":"active","loc":"jiangzhou","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"mengda","name":"孟达","force":80,"int":70,"lead":76,"pol":70,"charm":68,"loy":75,"cls":"infantry","troops":500,"status":"active","loc":"zhangtong","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"leitong","name":"雷铜","force":78,"int":50,"lead":70,"pol":30,"charm":55,"loy":80,"cls":"infantry","troops":450,"status":"active","loc":"mianzhu","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"wulan","name":"吴兰","force":76,"int":45,"lead":70,"pol":30,"charm":55,"loy":78,"cls":"infantry","troops":450,"status":"active","loc":"jiangzhou","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"lengbao","name":"冷苞","force":74,"int":48,"lead":68,"pol":30,"charm":55,"loy":78,"cls":"infantry","troops":400,"status":"active","loc":"mianzhu","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"dengxian","name":"邓贤","force":72,"int":45,"lead":65,"pol":35,"charm":55,"loy":76,"cls":"infantry","troops":400,"status":"active","loc":"jiangzhou","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"mateng","name":"马腾","force":84,"int":60,"lead":84,"pol":40,"charm":80,"loy":100,"cls":"cavalry","troops":700,"status":"active","loc":"tianshui","ruler":true,"egg":false,"skill":"坚阵","skillCat":"战","skillText":"守城时（守方位于城池）所受伤害 -8%。"},{"id":"machao","name":"马超","force":96,"int":52,"lead":88,"pol":26,"charm":82,"loy":92,"cls":"cavalry","troops":700,"status":"active","loc":"wuwei","ruler":false,"egg":false,"skill":"猛者","skillCat":"战","skillText":"普攻伤害 +6%，但所受伤害 +4%。"},{"id":"pangde","name":"庞德","force":88,"int":60,"lead":88,"pol":38,"charm":72,"loy":86,"cls":"cavalry","troops":550,"status":"active","loc":"anding","ruler":false,"egg":false,"skill":"猛者","skillCat":"战","skillText":"普攻伤害 +6%，但所受伤害 +4%。"},{"id":"madai","name":"马岱","force":85,"int":60,"lead":80,"pol":45,"charm":68,"loy":88,"cls":"cavalry","troops":500,"status":"active","loc":"wuwei","ruler":false,"egg":false,"skill":"猛者","skillCat":"战","skillText":"普攻伤害 +6%，但所受伤害 +4%。"},{"id":"maxiu","name":"马休","force":72,"int":50,"lead":72,"pol":40,"charm":66,"loy":82,"cls":"cavalry","troops":350,"status":"active","loc":"tianshui","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"matie","name":"马铁","force":70,"int":45,"lead":70,"pol":38,"charm":64,"loy":80,"cls":"cavalry","troops":300,"status":"active","loc":"anding","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"hansui","name":"韩遂","force":78,"int":70,"lead":80,"pol":55,"charm":76,"loy":60,"cls":"cavalry","troops":500,"status":"active","loc":"tianshui","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"yanxing","name":"阎行","force":86,"int":55,"lead":78,"pol":45,"charm":60,"loy":75,"cls":"cavalry","troops":450,"status":"active","loc":"anding","ruler":false,"egg":false,"skill":"猛者","skillCat":"战","skillText":"普攻伤害 +6%，但所受伤害 +4%。"},{"id":"zhanglu","name":"张鲁","force":55,"int":70,"lead":55,"pol":58,"charm":82,"loy":100,"cls":"infantry","troops":700,"status":"active","loc":"hanzhong","ruler":true,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zhangwei","name":"张卫","force":78,"int":50,"lead":74,"pol":40,"charm":58,"loy":88,"cls":"infantry","troops":600,"status":"active","loc":"hanzhong","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"yangren","name":"杨任","force":80,"int":55,"lead":70,"pol":40,"charm":56,"loy":82,"cls":"infantry","troops":500,"status":"active","loc":"hanzhong","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"yangang","name":"杨昂","force":78,"int":50,"lead":70,"pol":38,"charm":54,"loy":80,"cls":"infantry","troops":450,"status":"active","loc":"hanzhong","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"yanpu","name":"阎圃","force":40,"int":80,"lead":55,"pol":80,"charm":72,"loy":82,"cls":"infantry","troops":150,"status":"active","loc":"hanzhong","ruler":false,"egg":false,"skill":"能吏","skillCat":"政","skillText":"内政效果 +15%。"},{"id":"yangsong","name":"杨松","force":30,"int":50,"lead":30,"pol":55,"charm":45,"loy":70,"cls":"infantry","troops":100,"status":"active","loc":"hanzhong","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"hanxuan","name":"韩玄","force":62,"int":50,"lead":50,"pol":40,"charm":50,"loy":100,"cls":"infantry","troops":500,"status":"active","loc":"guiyang","ruler":true,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zhaofan","name":"赵范","force":60,"int":55,"lead":45,"pol":50,"charm":50,"loy":72,"cls":"infantry","troops":400,"status":"active","loc":"lingling","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"liudu","name":"刘度","force":45,"int":50,"lead":45,"pol":50,"charm":55,"loy":72,"cls":"infantry","troops":400,"status":"active","loc":"lingling","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"xingdaorong","name":"邢道荣","force":88,"int":30,"lead":76,"pol":25,"charm":50,"loy":75,"cls":"infantry","troops":700,"status":"active","loc":"lingling","ruler":false,"egg":false,"skill":"猛者","skillCat":"战","skillText":"普攻伤害 +6%，但所受伤害 +4%。"},{"id":"yangling","name":"杨龄","force":70,"int":35,"lead":66,"pol":30,"charm":52,"loy":72,"cls":"infantry","troops":400,"status":"active","loc":"guiyang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"gongzhi","name":"巩志","force":65,"int":40,"lead":55,"pol":40,"charm":50,"loy":70,"cls":"infantry","troops":300,"status":"active","loc":"guiyang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"gongsundu","name":"公孙度","force":72,"int":62,"lead":76,"pol":70,"charm":74,"loy":100,"cls":"cavalry","troops":700,"status":"active","loc":"xiangping","ruler":true,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"gongsunkang","name":"公孙康","force":68,"int":58,"lead":70,"pol":64,"charm":66,"loy":84,"cls":"cavalry","troops":500,"status":"active","loc":"xiangping","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"gongsungong","name":"公孙恭","force":50,"int":55,"lead":60,"pol":62,"charm":64,"loy":80,"cls":"infantry","troops":400,"status":"active","loc":"xiangping","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"yangyi","name":"阳仪","force":65,"int":50,"lead":60,"pol":50,"charm":55,"loy":78,"cls":"infantry","troops":350,"status":"active","loc":"xiangping","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"dongzhuo","name":"董卓","force":72,"int":65,"lead":82,"pol":30,"charm":40,"loy":100,"cls":"infantry","troops":900,"status":"inactive","loc":"luoyang","ruler":true,"egg":false,"skill":"猛者","skillCat":"战","skillText":"普攻伤害 +6%，但所受伤害 +4%。"},{"id":"liru","name":"李儒","force":40,"int":90,"lead":60,"pol":75,"charm":50,"loy":90,"cls":"infantry","troops":300,"status":"inactive","loc":"luoyang","ruler":false,"egg":false,"skill":"洞察","skillCat":"计","skillText":"计策成功率 +4 点，所受计策伤害 -10%。"},{"id":"huaxiong","name":"华雄","force":92,"int":40,"lead":84,"pol":30,"charm":50,"loy":85,"cls":"infantry","troops":700,"status":"inactive","loc":"luoyang","ruler":false,"egg":false,"skill":"猛者","skillCat":"战","skillText":"普攻伤害 +6%，但所受伤害 +4%。"},{"id":"lisu","name":"李肃","force":70,"int":60,"lead":60,"pol":50,"charm":50,"loy":80,"cls":"cavalry","troops":450,"status":"inactive","loc":"changan","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"xurong","name":"徐荣","force":85,"int":60,"lead":80,"pol":55,"charm":60,"loy":82,"cls":"cavalry","troops":600,"status":"inactive","loc":"changan","ruler":false,"egg":false,"skill":"猛者","skillCat":"战","skillText":"普攻伤害 +6%，但所受伤害 +4%。"},{"id":"guosi","name":"郭汜","force":82,"int":40,"lead":70,"pol":40,"charm":45,"loy":70,"cls":"cavalry","troops":550,"status":"inactive","loc":"luoyang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"lifan","name":"李傕","force":85,"int":45,"lead":72,"pol":45,"charm":45,"loy":70,"cls":"cavalry","troops":600,"status":"inactive","loc":"changan","ruler":false,"egg":false,"skill":"猛者","skillCat":"战","skillText":"普攻伤害 +6%，但所受伤害 +4%。"},{"id":"niufu","name":"牛辅","force":70,"int":40,"lead":62,"pol":35,"charm":42,"loy":75,"cls":"infantry","troops":500,"status":"inactive","loc":"luoyang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zhangji","name":"张济","force":78,"int":50,"lead":68,"pol":45,"charm":50,"loy":75,"cls":"cavalry","troops":500,"status":"inactive","loc":"luoyang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"yuanshao","name":"袁绍","force":70,"int":75,"lead":80,"pol":81,"charm":92,"loy":100,"cls":"infantry","troops":900,"status":"inactive","loc":"ye","ruler":true,"egg":false,"skill":"铁壁","skillCat":"战","skillText":"所受伤害 -10%，阵脚不乱。"},{"id":"yanliang","name":"颜良","force":92,"int":40,"lead":84,"pol":30,"charm":58,"loy":85,"cls":"cavalry","troops":700,"status":"inactive","loc":"puyang","ruler":false,"egg":false,"skill":"猛者","skillCat":"战","skillText":"普攻伤害 +6%，但所受伤害 +4%。"},{"id":"wenchou","name":"文丑","force":90,"int":38,"lead":85,"pol":28,"charm":56,"loy":84,"cls":"cavalry","troops":650,"status":"inactive","loc":"jinyang","ruler":false,"egg":false,"skill":"猛者","skillCat":"战","skillText":"普攻伤害 +6%，但所受伤害 +4%。"},{"id":"tianfeng","name":"田丰","force":40,"int":94,"lead":55,"pol":92,"charm":72,"loy":88,"cls":"infantry","troops":200,"status":"inactive","loc":"ye","ruler":false,"egg":false,"skill":"神算","skillCat":"计","skillText":"计策成功率 +8 点。"},{"id":"jushou","name":"沮授","force":45,"int":92,"lead":65,"pol":92,"charm":80,"loy":88,"cls":"archer","troops":250,"status":"inactive","loc":"ye","ruler":false,"egg":false,"skill":"能吏","skillCat":"政","skillText":"内政效果 +15%。"},{"id":"shenpei","name":"审配","force":60,"int":82,"lead":70,"pol":85,"charm":70,"loy":86,"cls":"infantry","troops":400,"status":"inactive","loc":"ye","ruler":false,"egg":false,"skill":"能吏","skillCat":"政","skillText":"内政效果 +15%。"},{"id":"fengji","name":"逢纪","force":40,"int":78,"lead":60,"pol":78,"charm":66,"loy":82,"cls":"infantry","troops":200,"status":"inactive","loc":"ye","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"guotu","name":"郭图","force":35,"int":75,"lead":50,"pol":80,"charm":60,"loy":75,"cls":"infantry","troops":200,"status":"inactive","loc":"puyang","ruler":false,"egg":false,"skill":"能吏","skillCat":"政","skillText":"内政效果 +15%。"},{"id":"gaolan","name":"高览","force":85,"int":60,"lead":78,"pol":50,"charm":65,"loy":80,"cls":"infantry","troops":550,"status":"inactive","loc":"beihai","ruler":false,"egg":false,"skill":"猛者","skillCat":"战","skillText":"普攻伤害 +6%，但所受伤害 +4%。"},{"id":"chunyuqiong","name":"淳于琼","force":72,"int":40,"lead":60,"pol":20,"charm":40,"loy":75,"cls":"infantry","troops":500,"status":"inactive","loc":"jinyang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"yuanshu","name":"袁术","force":65,"int":60,"lead":60,"pol":35,"charm":60,"loy":100,"cls":"infantry","troops":700,"status":"inactive","loc":"runan","ruler":true,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"jiling","name":"纪灵","force":85,"int":50,"lead":82,"pol":40,"charm":62,"loy":82,"cls":"infantry","troops":600,"status":"inactive","loc":"runan","ruler":false,"egg":false,"skill":"猛者","skillCat":"战","skillText":"普攻伤害 +6%，但所受伤害 +4%。"},{"id":"zhangxun","name":"张勋","force":76,"int":50,"lead":70,"pol":45,"charm":55,"loy":78,"cls":"infantry","troops":550,"status":"inactive","loc":"runan","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"qiaorui","name":"桥蕤","force":70,"int":45,"lead":66,"pol":40,"charm":52,"loy":78,"cls":"infantry","troops":450,"status":"inactive","loc":"runan","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"yanxiang","name":"阎象","force":35,"int":70,"lead":45,"pol":72,"charm":60,"loy":80,"cls":"infantry","troops":150,"status":"inactive","loc":"runan","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"taoqian","name":"陶谦","force":55,"int":65,"lead":50,"pol":70,"charm":80,"loy":100,"cls":"infantry","troops":700,"status":"inactive","loc":"xiapi","ruler":true,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"caobao","name":"曹豹","force":65,"int":40,"lead":55,"pol":35,"charm":48,"loy":70,"cls":"infantry","troops":450,"status":"inactive","loc":"xiapi","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"chendeng","name":"陈登","force":55,"int":85,"lead":65,"pol":88,"charm":78,"loy":80,"cls":"archer","troops":250,"status":"inactive","loc":"xiapi","ruler":false,"egg":false,"skill":"能吏","skillCat":"政","skillText":"内政效果 +15%。"},{"id":"sunjian","name":"孙坚","force":88,"int":70,"lead":90,"pol":60,"charm":85,"loy":100,"cls":"infantry","troops":900,"status":"inactive","loc":"changsha","ruler":true,"egg":false,"skill":"铁壁","skillCat":"战","skillText":"所受伤害 -10%，阵脚不乱。"},{"id":"sunce","name":"孙策","force":90,"int":75,"lead":92,"pol":62,"charm":90,"loy":90,"cls":"cavalry","troops":800,"status":"inactive","loc":"changsha","ruler":false,"egg":false,"skill":"战神","skillCat":"战","skillText":"普攻伤害 +8%，逢阵必先声夺人。"},{"id":"zumao","name":"祖茂","force":78,"int":40,"lead":60,"pol":35,"charm":50,"loy":85,"cls":"infantry","troops":450,"status":"inactive","loc":"changsha","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zhuzhi","name":"朱治","force":70,"int":60,"lead":70,"pol":70,"charm":72,"loy":82,"cls":"navy","troops":400,"status":"inactive","loc":"chaisang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"wujing","name":"吴景","force":68,"int":55,"lead":60,"pol":55,"charm":60,"loy":80,"cls":"infantry","troops":450,"status":"inactive","loc":"lujiang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"sunjing","name":"孙静","force":65,"int":60,"lead":60,"pol":60,"charm":62,"loy":82,"cls":"infantry","troops":400,"status":"inactive","loc":"kuaiji","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"jiangwei","name":"姜维","force":89,"int":90,"lead":92,"pol":74,"charm":80,"loy":85,"cls":"infantry","troops":800,"status":"inactive","loc":"chengdu","ruler":false,"egg":false,"skill":"铁壁","skillCat":"战","skillText":"所受伤害 -10%，阵脚不乱。"},{"id":"wangping","name":"王平","force":80,"int":62,"lead":82,"pol":62,"charm":72,"loy":85,"cls":"infantry","troops":600,"status":"inactive","loc":"hanzhong","ruler":false,"egg":false,"skill":"坚阵","skillCat":"战","skillText":"守城时（守方位于城池）所受伤害 -8%。"},{"id":"guanxing","name":"关兴","force":82,"int":60,"lead":76,"pol":55,"charm":68,"loy":85,"cls":"infantry","troops":600,"status":"inactive","loc":"chengdu","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zhangbao","name":"张苞","force":80,"int":50,"lead":74,"pol":50,"charm":66,"loy":82,"cls":"infantry","troops":600,"status":"inactive","loc":"chengdu","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zhangyi","name":"张翼","force":75,"int":60,"lead":76,"pol":60,"charm":68,"loy":82,"cls":"infantry","troops":500,"status":"inactive","loc":"jiangzhou","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"wuban","name":"吴班","force":76,"int":50,"lead":70,"pol":55,"charm":62,"loy":80,"cls":"infantry","troops":500,"status":"inactive","loc":"chengdu","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"guohuai","name":"郭淮","force":82,"int":75,"lead":88,"pol":72,"charm":76,"loy":85,"cls":"cavalry","troops":700,"status":"inactive","loc":"changan","ruler":false,"egg":false,"skill":"坚阵","skillCat":"战","skillText":"守城时（守方位于城池）所受伤害 -8%。"},{"id":"quancong","name":"全琮","force":79,"int":65,"lead":78,"pol":64,"charm":70,"loy":82,"cls":"navy","troops":600,"status":"inactive","loc":"jianye","ruler":false,"egg":false,"skill":"水神","skillCat":"战","skillText":"水兵出手伤害 +14%。"},{"id":"lvdai","name":"吕岱","force":75,"int":70,"lead":80,"pol":72,"charm":74,"loy":82,"cls":"navy","troops":550,"status":"inactive","loc":"kuaiji","ruler":false,"egg":false,"skill":"水神","skillCat":"战","skillText":"水兵出手伤害 +14%。"},{"id":"sunshao","name":"孙韶","force":78,"int":60,"lead":76,"pol":55,"charm":68,"loy":80,"cls":"archer","troops":500,"status":"inactive","loc":"jianye","ruler":false,"egg":false,"skill":"弓神","skillCat":"战","skillText":"弓兵出手伤害 +14%。"},{"id":"zerong","name":"笮融","force":62,"int":50,"lead":40,"pol":30,"charm":35,"loy":68,"cls":"infantry","troops":350,"status":"inactive","loc":"xiapi","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"lvyou","name":"吕由","force":58,"int":45,"lead":55,"pol":40,"charm":50,"loy":72,"cls":"infantry","troops":300,"status":"inactive","loc":"xiapi","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"caohong2","name":"曹宏","force":55,"int":40,"lead":48,"pol":40,"charm":58,"loy":65,"cls":"infantry","troops":300,"status":"inactive","loc":"xiapi","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"sunben","name":"孙贲","force":78,"int":55,"lead":65,"pol":50,"charm":60,"loy":85,"cls":"cavalry","troops":450,"status":"inactive","loc":"changsha","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"sunfu","name":"孙辅","force":72,"int":50,"lead":60,"pol":50,"charm":58,"loy":82,"cls":"infantry","troops":400,"status":"inactive","loc":"wu","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"xukun","name":"徐琨","force":76,"int":58,"lead":65,"pol":50,"charm":58,"loy":84,"cls":"navy","troops":400,"status":"inactive","loc":"jianye","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"lvkuang","name":"吕旷","force":75,"int":45,"lead":65,"pol":40,"charm":52,"loy":75,"cls":"cavalry","troops":400,"status":"inactive","loc":"ye","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"lvxiang","name":"吕翔","force":72,"int":42,"lead":65,"pol":40,"charm":52,"loy":74,"cls":"infantry","troops":400,"status":"inactive","loc":"ye","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"caozhang","name":"曹彰","force":90,"int":55,"lead":82,"pol":45,"charm":65,"loy":88,"cls":"cavalry","troops":700,"status":"inactive","loc":"ye","ruler":false,"egg":false,"skill":"猛者","skillCat":"战","skillText":"普攻伤害 +6%，但所受伤害 +4%。"},{"id":"haozhao","name":"郝昭","force":85,"int":72,"lead":86,"pol":60,"charm":72,"loy":86,"cls":"infantry","troops":600,"status":"inactive","loc":"hefei","ruler":false,"egg":false,"skill":"攻城","skillCat":"战","skillText":"攻城器械对城墙耐久伤害 +25%。"},{"id":"wangshuang","name":"王双","force":88,"int":40,"lead":72,"pol":25,"charm":50,"loy":80,"cls":"cavalry","troops":600,"status":"inactive","loc":"changan","ruler":false,"egg":false,"skill":"猛者","skillCat":"战","skillText":"普攻伤害 +6%，但所受伤害 +4%。"},{"id":"sunli","name":"孙礼","force":80,"int":65,"lead":76,"pol":55,"charm":66,"loy":84,"cls":"infantry","troops":500,"status":"inactive","loc":"hefei","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"caoyu","name":"曹宇","force":55,"int":60,"lead":45,"pol":60,"charm":62,"loy":85,"cls":"infantry","troops":300,"status":"inactive","loc":"ye","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"caobiao","name":"曹彪","force":60,"int":55,"lead":55,"pol":55,"charm":60,"loy":82,"cls":"infantry","troops":300,"status":"inactive","loc":"ye","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zhaoyun","name":"赵云","force":96,"int":76,"lead":91,"pol":65,"charm":81,"loy":0,"cls":"archer","troops":0,"status":"wild","loc":"jiangxia","ruler":false,"egg":false,"skill":"战神","skillCat":"战","skillText":"普攻伤害 +8%，逢阵必先声夺人。"},{"id":"ganning","name":"甘宁","force":88,"int":60,"lead":85,"pol":30,"charm":64,"loy":0,"cls":"navy","troops":0,"status":"wild","loc":"jiangxia","ruler":false,"egg":false,"skill":"水神","skillCat":"战","skillText":"水兵出手伤害 +14%。"},{"id":"pangtong","name":"庞统","force":38,"int":97,"lead":85,"pol":85,"charm":75,"loy":0,"cls":"mystic","troops":0,"status":"wild","loc":"xiangyang","ruler":false,"egg":false,"skill":"神算","skillCat":"计","skillText":"计策成功率 +8 点。"},{"id":"xushu","name":"徐庶","force":60,"int":92,"lead":78,"pol":80,"charm":76,"loy":0,"cls":"archer","troops":0,"status":"wild","loc":"xinye","ruler":false,"egg":false,"skill":"洞察","skillCat":"计","skillText":"计策成功率 +4 点，所受计策伤害 -10%。"},{"id":"tianchou","name":"田畴","force":62,"int":80,"lead":55,"pol":78,"charm":70,"loy":0,"cls":"infantry","troops":0,"status":"wild","loc":"xiangping","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"yanbaihu","name":"严白虎","force":75,"int":30,"lead":60,"pol":30,"charm":50,"loy":0,"cls":"infantry","troops":0,"status":"wild","loc":"wu","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"nanfang_xiaogui","name":"南方小鬼","force":112,"int":106,"lead":30,"pol":20,"charm":25,"loy":0,"cls":"elite","troops":0,"status":"wild","loc":"jinyang","ruler":false,"egg":true,"skill":"战神","skillCat":"战","skillText":"普攻伤害 +8%，逢阵必先声夺人。"},{"id":"caoang","name":"曹昂","force":62,"int":58,"lead":60,"pol":54,"charm":67,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xuchang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"caoanmin","name":"曹安民","force":55,"int":48,"lead":52,"pol":46,"charm":61,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xuchang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"caode","name":"曹德","force":52,"int":44,"lead":48,"pol":43,"charm":59,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xuchang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"caoshuang","name":"曹爽","force":58,"int":52,"lead":55,"pol":50,"charm":64,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xuchang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"xiahouba","name":"夏侯霸","force":82,"int":62,"lead":73,"pol":58,"charm":75,"loy":70,"cls":"cavalry","troops":0,"status":"inactive","loc":"xuchang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"xiahouxuan","name":"夏侯玄","force":48,"int":80,"lead":62,"pol":72,"charm":70,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xuchang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"xiahouwei","name":"夏侯威","force":70,"int":55,"lead":63,"pol":52,"charm":69,"loy":70,"cls":"cavalry","troops":0,"status":"inactive","loc":"xuchang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"xiahoumao","name":"夏侯楙","force":45,"int":40,"lead":43,"pol":40,"charm":55,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xuchang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zhangxiu","name":"张绣","force":84,"int":60,"lead":73,"pol":56,"charm":75,"loy":70,"cls":"cavalry","troops":0,"status":"inactive","loc":"xuchang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"hucheer","name":"胡车儿","force":78,"int":32,"lead":57,"pol":34,"charm":64,"loy":70,"cls":"cavalry","troops":0,"status":"inactive","loc":"xuchang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"jiakui","name":"贾逵","force":55,"int":78,"lead":65,"pol":70,"charm":72,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xuchang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"wangling","name":"王凌","force":66,"int":70,"lead":68,"pol":64,"charm":73,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xuchang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"wangji","name":"王基","force":68,"int":76,"lead":72,"pol":69,"charm":75,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xuchang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"chenqun","name":"陈群","force":40,"int":86,"lead":61,"pol":77,"charm":69,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xuchang","ruler":false,"egg":false,"skill":"洞察","skillCat":"计","skillText":"计策成功率 +4 点，所受计策伤害 -10%。"},{"id":"chentai","name":"陈泰","force":70,"int":74,"lead":72,"pol":67,"charm":75,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xuchang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"chenjiao","name":"陈矫","force":42,"int":76,"lead":57,"pol":69,"charm":66,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xuchang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"simalang","name":"司马朗","force":38,"int":72,"lead":53,"pol":66,"charm":64,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xuchang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"simafu","name":"司马孚","force":44,"int":78,"lead":59,"pol":70,"charm":68,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xuchang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"simashi","name":"司马师","force":68,"int":88,"lead":77,"pol":78,"charm":80,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xuchang","ruler":false,"egg":false,"skill":"洞察","skillCat":"计","skillText":"计策成功率 +4 点，所受计策伤害 -10%。"},{"id":"simazhao","name":"司马昭","force":70,"int":86,"lead":77,"pol":77,"charm":80,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xuchang","ruler":false,"egg":false,"skill":"洞察","skillCat":"计","skillText":"计策成功率 +4 点，所受计策伤害 -10%。"},{"id":"dengai","name":"邓艾","force":82,"int":90,"lead":86,"pol":80,"charm":85,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xuchang","ruler":false,"egg":false,"skill":"洞察","skillCat":"计","skillText":"计策成功率 +4 点，所受计策伤害 -10%。"},{"id":"zhonghui","name":"钟会","force":60,"int":88,"lead":73,"pol":78,"charm":77,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xuchang","ruler":false,"egg":false,"skill":"洞察","skillCat":"计","skillText":"计策成功率 +4 点，所受计策伤害 -10%。"},{"id":"zhugedan","name":"诸葛诞","force":72,"int":70,"lead":71,"pol":64,"charm":75,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xuchang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"wenyang","name":"文鸯","force":86,"int":58,"lead":73,"pol":54,"charm":75,"loy":70,"cls":"cavalry","troops":0,"status":"inactive","loc":"xuchang","ruler":false,"egg":false,"skill":"猛者","skillCat":"战","skillText":"普攻伤害 +6%，但所受伤害 +4%。"},{"id":"guanqiujian","name":"毌丘俭","force":70,"int":68,"lead":69,"pol":62,"charm":73,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xuchang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"yangxiu","name":"杨修","force":36,"int":84,"lead":58,"pol":75,"charm":67,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xuchang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"xuyou","name":"许攸","force":34,"int":80,"lead":55,"pol":72,"charm":65,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xuchang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"maojie","name":"毛玠","force":40,"int":74,"lead":55,"pol":67,"charm":65,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xuchang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"cuiyan","name":"崔琰","force":38,"int":76,"lead":55,"pol":69,"charm":65,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xuchang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"litong","name":"李通","force":76,"int":56,"lead":67,"pol":53,"charm":71,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xuchang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zhuling","name":"朱灵","force":74,"int":52,"lead":64,"pol":50,"charm":69,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xuchang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"hanhao","name":"韩浩","force":66,"int":60,"lead":63,"pol":56,"charm":69,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xuchang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"qianzhao","name":"牵招","force":74,"int":66,"lead":70,"pol":61,"charm":74,"loy":70,"cls":"cavalry","troops":0,"status":"inactive","loc":"xuchang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"tianyu","name":"田豫","force":72,"int":74,"lead":73,"pol":67,"charm":76,"loy":70,"cls":"cavalry","troops":0,"status":"inactive","loc":"xuchang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"guansuo","name":"关索","force":76,"int":58,"lead":68,"pol":54,"charm":72,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jiangxia","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"guantong","name":"关统","force":62,"int":50,"lead":57,"pol":48,"charm":64,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jiangxia","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"fengxi","name":"冯习","force":68,"int":52,"lead":61,"pol":50,"charm":67,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jiangxia","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"futong","name":"傅彤","force":70,"int":50,"lead":61,"pol":48,"charm":67,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jiangxia","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"gaoxiang","name":"高翔","force":66,"int":54,"lead":61,"pol":51,"charm":67,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jiangxia","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"chenshi","name":"陈式","force":62,"int":48,"lead":56,"pol":46,"charm":64,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jiangxia","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"jufu","name":"句扶","force":72,"int":50,"lead":62,"pol":48,"charm":68,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jiangxia","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"mazhong","name":"马忠","force":68,"int":62,"lead":65,"pol":58,"charm":71,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jiangxia","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zhangni","name":"张嶷","force":74,"int":66,"lead":70,"pol":61,"charm":74,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jiangxia","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"huoyi","name":"霍弋","force":70,"int":68,"lead":69,"pol":62,"charm":73,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jiangxia","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"luoxian","name":"罗宪","force":72,"int":74,"lead":73,"pol":67,"charm":76,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jiangxia","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"fuqian","name":"傅佥","force":76,"int":58,"lead":68,"pol":54,"charm":72,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jiangxia","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zhugezhan","name":"诸葛瞻","force":62,"int":76,"lead":68,"pol":69,"charm":73,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jiangxia","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"dongyun","name":"董允","force":36,"int":78,"lead":55,"pol":70,"charm":65,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jiangxia","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"feiyi","name":"费祎","force":40,"int":84,"lead":60,"pol":75,"charm":68,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jiangxia","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"jiangwan","name":"蒋琬","force":38,"int":86,"lead":60,"pol":77,"charm":68,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jiangxia","ruler":false,"egg":false,"skill":"洞察","skillCat":"计","skillText":"计策成功率 +4 点，所受计策伤害 -10%。"},{"id":"maliang","name":"马良","force":40,"int":76,"lead":56,"pol":69,"charm":66,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jiangxia","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"masu","name":"马谡","force":52,"int":82,"lead":66,"pol":74,"charm":72,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jiangxia","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"xiangchong","name":"向宠","force":66,"int":66,"lead":66,"pol":61,"charm":71,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jiangxia","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"yangyishu","name":"杨仪","force":42,"int":74,"lead":56,"pol":67,"charm":66,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jiangxia","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"dengzhi","name":"邓芝","force":54,"int":72,"lead":62,"pol":66,"charm":69,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jiangxia","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zongyu","name":"宗预","force":50,"int":70,"lead":59,"pol":64,"charm":67,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jiangxia","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"sunyi","name":"孙翊","force":74,"int":52,"lead":64,"pol":50,"charm":69,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jianye","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"sunkuang","name":"孙匡","force":52,"int":46,"lead":49,"pol":45,"charm":59,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jianye","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"sundeng","name":"孙登","force":46,"int":72,"lead":58,"pol":66,"charm":66,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jianye","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"sunhe","name":"孙和","force":44,"int":68,"lead":55,"pol":62,"charm":64,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jianye","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"sunhuan","name":"孙桓","force":72,"int":62,"lead":68,"pol":58,"charm":72,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jianye","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"sunjiao","name":"孙皎","force":68,"int":58,"lead":64,"pol":54,"charm":69,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jianye","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zhouxun","name":"周循","force":60,"int":56,"lead":58,"pol":53,"charm":66,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jianye","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"lvfan","name":"吕范","force":62,"int":74,"lead":67,"pol":67,"charm":73,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jianye","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"heqi","name":"贺齐","force":76,"int":62,"lead":70,"pol":58,"charm":73,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jianye","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"quanrou","name":"全柔","force":58,"int":56,"lead":57,"pol":53,"charm":65,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jianye","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zhuhuan","name":"朱桓","force":78,"int":64,"lead":72,"pol":59,"charm":75,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jianye","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zhuyi","name":"朱异","force":72,"int":58,"lead":66,"pol":54,"charm":71,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jianye","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zhuju","name":"朱据","force":64,"int":60,"lead":62,"pol":56,"charm":68,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jianye","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zhangcheng","name":"张承","force":58,"int":72,"lead":64,"pol":66,"charm":71,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jianye","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"gucheng","name":"顾承","force":52,"int":66,"lead":58,"pol":61,"charm":66,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jianye","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zhugeke","name":"诸葛恪","force":56,"int":84,"lead":69,"pol":75,"charm":74,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jianye","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"shiyi","name":"是仪","force":32,"int":74,"lead":51,"pol":67,"charm":62,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jianye","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"kane","name":"阚泽","force":30,"int":80,"lead":53,"pol":72,"charm":64,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jianye","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"xuezong","name":"薛综","force":34,"int":76,"lead":53,"pol":69,"charm":64,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jianye","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"luotong","name":"骆统","force":48,"int":74,"lead":60,"pol":67,"charm":68,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jianye","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"lukai","name":"陆凯","force":50,"int":78,"lead":63,"pol":70,"charm":70,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jianye","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"lukang","name":"陆抗","force":78,"int":88,"lead":83,"pol":78,"charm":83,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jianye","ruler":false,"egg":false,"skill":"洞察","skillCat":"计","skillText":"计策成功率 +4 点，所受计策伤害 -10%。"},{"id":"luji","name":"陆绩","force":34,"int":76,"lead":53,"pol":69,"charm":64,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jianye","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"panjun","name":"潘濬","force":56,"int":76,"lead":65,"pol":69,"charm":71,"loy":70,"cls":"navy","troops":0,"status":"inactive","loc":"jianye","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zhonglimu","name":"钟离牧","force":74,"int":62,"lead":69,"pol":58,"charm":73,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"jianye","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"lingcao","name":"凌操","force":76,"int":44,"lead":62,"pol":43,"charm":67,"loy":70,"cls":"navy","troops":0,"status":"inactive","loc":"jianye","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"liupan","name":"刘磐","force":72,"int":52,"lead":63,"pol":50,"charm":68,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xiangyang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"liucong","name":"刘琮","force":40,"int":50,"lead":45,"pol":48,"charm":57,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xiangyang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"huangzu","name":"黄祖","force":66,"int":50,"lead":59,"pol":48,"charm":66,"loy":70,"cls":"navy","troops":0,"status":"inactive","loc":"xiangyang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"sufei","name":"苏飞","force":60,"int":54,"lead":57,"pol":51,"charm":65,"loy":70,"cls":"navy","troops":0,"status":"inactive","loc":"xiangyang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"chenjiu","name":"陈就","force":58,"int":40,"lead":50,"pol":40,"charm":59,"loy":70,"cls":"navy","troops":0,"status":"inactive","loc":"xiangyang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zhangwu","name":"张武","force":62,"int":38,"lead":51,"pol":38,"charm":60,"loy":70,"cls":"cavalry","troops":0,"status":"inactive","loc":"xiangyang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"hansong","name":"韩嵩","force":36,"int":72,"lead":52,"pol":66,"charm":63,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xiangyang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"fusun","name":"傅巽","force":34,"int":70,"lead":50,"pol":64,"charm":61,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xiangyang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"yiji","name":"伊籍","force":40,"int":74,"lead":55,"pol":67,"charm":65,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xiangyang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zhangsu","name":"张肃","force":44,"int":66,"lead":54,"pol":61,"charm":64,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"chengdu","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zhengdu","name":"郑度","force":38,"int":76,"lead":55,"pol":69,"charm":65,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"chengdu","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"liuxun","name":"刘循","force":58,"int":52,"lead":55,"pol":50,"charm":64,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"chengdu","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"liugui","name":"刘璝","force":64,"int":50,"lead":58,"pol":48,"charm":65,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"chengdu","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"yanghuai","name":"杨怀","force":62,"int":46,"lead":55,"pol":45,"charm":63,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"chengdu","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"gaopei","name":"高沛","force":60,"int":46,"lead":54,"pol":45,"charm":62,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"chengdu","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"feiguan","name":"费观","force":50,"int":62,"lead":55,"pol":58,"charm":64,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"chengdu","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"lihui","name":"李恢","force":56,"int":74,"lead":64,"pol":67,"charm":71,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"chengdu","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zhuoying","name":"卓膺","force":54,"int":48,"lead":51,"pol":46,"charm":61,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"chengdu","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"wanglei","name":"王累","force":42,"int":66,"lead":53,"pol":61,"charm":63,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"chengdu","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"mawan","name":"马玩","force":68,"int":40,"lead":55,"pol":40,"charm":63,"loy":70,"cls":"cavalry","troops":0,"status":"inactive","loc":"wuwei","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"chengyin","name":"程银","force":66,"int":38,"lead":53,"pol":38,"charm":61,"loy":70,"cls":"cavalry","troops":0,"status":"inactive","loc":"wuwei","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"likan","name":"李堪","force":64,"int":36,"lead":51,"pol":37,"charm":60,"loy":70,"cls":"cavalry","troops":0,"status":"inactive","loc":"wuwei","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zhangheng","name":"张横","force":66,"int":40,"lead":54,"pol":40,"charm":62,"loy":70,"cls":"cavalry","troops":0,"status":"inactive","loc":"wuwei","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"liangxing","name":"梁兴","force":68,"int":42,"lead":56,"pol":42,"charm":64,"loy":70,"cls":"cavalry","troops":0,"status":"inactive","loc":"wuwei","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"houxuan","name":"侯选","force":62,"int":38,"lead":51,"pol":38,"charm":60,"loy":70,"cls":"cavalry","troops":0,"status":"inactive","loc":"wuwei","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"chengyi","name":"成宜","force":64,"int":36,"lead":51,"pol":37,"charm":60,"loy":70,"cls":"cavalry","troops":0,"status":"inactive","loc":"wuwei","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"yangqiu","name":"杨秋","force":62,"int":44,"lead":54,"pol":43,"charm":62,"loy":70,"cls":"cavalry","troops":0,"status":"inactive","loc":"wuwei","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"yangbai","name":"杨柏","force":58,"int":46,"lead":53,"pol":45,"charm":61,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"hanzhong","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zhangfu","name":"张富","force":56,"int":44,"lead":51,"pol":43,"charm":60,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"hanzhong","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"lixiu","name":"李休","force":42,"int":60,"lead":50,"pol":56,"charm":61,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"hanzhong","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"yangchou","name":"杨丑","force":54,"int":42,"lead":49,"pol":42,"charm":59,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"hanzhong","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"gongsunyuan","name":"公孙渊","force":66,"int":60,"lead":63,"pol":56,"charm":69,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xiangping","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"beiyan","name":"卑衍","force":62,"int":48,"lead":56,"pol":46,"charm":64,"loy":70,"cls":"cavalry","troops":0,"status":"inactive","loc":"xiangping","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"yangzuo","name":"杨祚","force":58,"int":46,"lead":53,"pol":45,"charm":61,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xiangping","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"liuyi","name":"柳毅","force":56,"int":44,"lead":51,"pol":43,"charm":60,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xiangping","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"liuxian","name":"刘贤","force":54,"int":44,"lead":50,"pol":43,"charm":59,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"changsha","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"baolong","name":"鲍隆","force":58,"int":36,"lead":48,"pol":37,"charm":58,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"changsha","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"chenying","name":"陈应","force":56,"int":38,"lead":48,"pol":38,"charm":58,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"changsha","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"jinxuan","name":"金旋","force":58,"int":48,"lead":54,"pol":46,"charm":62,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"changsha","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"yuanshang","name":"袁尚","force":62,"int":56,"lead":59,"pol":53,"charm":66,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"nanpi","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"yuantan","name":"袁谭","force":60,"int":48,"lead":55,"pol":46,"charm":63,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"nanpi","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"yuanxi","name":"袁熙","force":54,"int":50,"lead":52,"pol":48,"charm":61,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"nanpi","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"gaogan","name":"高干","force":66,"int":60,"lead":63,"pol":56,"charm":69,"loy":70,"cls":"cavalry","troops":0,"status":"inactive","loc":"nanpi","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"guoyuan","name":"郭援","force":62,"int":48,"lead":56,"pol":46,"charm":64,"loy":70,"cls":"cavalry","troops":0,"status":"inactive","loc":"nanpi","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"jiangyiqu","name":"蒋义渠","force":58,"int":46,"lead":53,"pol":45,"charm":61,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"nanpi","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"mayan","name":"马延","force":60,"int":40,"lead":51,"pol":40,"charm":60,"loy":70,"cls":"cavalry","troops":0,"status":"inactive","loc":"nanpi","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zhangyib","name":"张顗","force":58,"int":40,"lead":50,"pol":40,"charm":59,"loy":70,"cls":"cavalry","troops":0,"status":"inactive","loc":"nanpi","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"hanmeng","name":"韩猛","force":66,"int":38,"lead":53,"pol":38,"charm":61,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"nanpi","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"jiaochu","name":"焦触","force":56,"int":40,"lead":49,"pol":40,"charm":59,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"nanpi","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"suyou","name":"苏由","force":52,"int":48,"lead":50,"pol":46,"charm":60,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"nanpi","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"cenbi","name":"岑璧","force":54,"int":42,"lead":49,"pol":42,"charm":59,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"nanpi","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"dongmin","name":"董旻","force":58,"int":44,"lead":52,"pol":43,"charm":61,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"luoyang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"fanchou","name":"樊稠","force":74,"int":46,"lead":61,"pol":45,"charm":67,"loy":70,"cls":"cavalry","troops":0,"status":"inactive","loc":"luoyang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"limeng","name":"李蒙","force":66,"int":40,"lead":54,"pol":40,"charm":62,"loy":70,"cls":"cavalry","troops":0,"status":"inactive","loc":"luoyang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"wangfang","name":"王方","force":62,"int":40,"lead":52,"pol":40,"charm":61,"loy":70,"cls":"cavalry","troops":0,"status":"inactive","loc":"luoyang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"yangding","name":"杨定","force":64,"int":46,"lead":56,"pol":45,"charm":64,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"luoyang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"huzhen","name":"胡轸","force":60,"int":42,"lead":52,"pol":42,"charm":61,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"luoyang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"duanwei","name":"段煨","force":62,"int":56,"lead":59,"pol":53,"charm":66,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"luoyang","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"chenlan","name":"陈兰","force":58,"int":40,"lead":50,"pol":40,"charm":59,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"shouchun","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"leibo","name":"雷薄","force":60,"int":38,"lead":50,"pol":38,"charm":59,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"shouchun","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"lifeng","name":"李丰","force":56,"int":42,"lead":50,"pol":42,"charm":59,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"shouchun","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"lejiu","name":"乐就","force":54,"int":40,"lead":48,"pol":40,"charm":58,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"shouchun","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zhangkai","name":"张闿","force":52,"int":36,"lead":45,"pol":37,"charm":56,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"shouchun","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"mifang","name":"糜芳","force":52,"int":50,"lead":51,"pol":48,"charm":61,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xiapi","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"xudan","name":"许耽","force":54,"int":42,"lead":49,"pol":42,"charm":59,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xiapi","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"wanglang","name":"王朗","force":38,"int":76,"lead":55,"pol":69,"charm":65,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xiapi","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zhaoyu","name":"赵昱","force":40,"int":66,"lead":52,"pol":61,"charm":62,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xiapi","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zhangkuang","name":"章诳","force":48,"int":40,"lead":44,"pol":40,"charm":56,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xiapi","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"chengui","name":"陈珪","force":36,"int":78,"lead":55,"pol":70,"charm":65,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xiapi","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"quexuan","name":"阙宣","force":58,"int":34,"lead":47,"pol":35,"charm":57,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"xiapi","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"huanjie","name":"桓阶","force":40,"int":74,"lead":55,"pol":67,"charm":65,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"changsha","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"sudai","name":"苏代","force":56,"int":44,"lead":51,"pol":43,"charm":60,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"changsha","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"liuxiang","name":"刘祥","force":50,"int":46,"lead":48,"pol":45,"charm":59,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"changsha","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"chengzi","name":"程咨","force":52,"int":42,"lead":48,"pol":42,"charm":58,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"changsha","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"ruizhi","name":"芮祉","force":54,"int":48,"lead":51,"pol":46,"charm":61,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"changsha","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"sunxiang","name":"孙香","force":52,"int":46,"lead":49,"pol":45,"charm":59,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"changsha","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"sunhe2","name":"孙河","force":56,"int":48,"lead":52,"pol":46,"charm":61,"loy":70,"cls":"cavalry","troops":0,"status":"inactive","loc":"changsha","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"dengdang","name":"邓当","force":60,"int":40,"lead":51,"pol":40,"charm":60,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"changsha","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zhuhao","name":"朱皓","force":46,"int":56,"lead":51,"pol":53,"charm":61,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"changsha","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"wuqi","name":"吴祺","force":44,"int":50,"lead":47,"pol":48,"charm":58,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"changsha","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"xujiao","name":"徐矫","force":50,"int":44,"lead":47,"pol":43,"charm":58,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"changsha","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"},{"id":"zhoushang","name":"周尚","force":42,"int":58,"lead":49,"pol":54,"charm":60,"loy":70,"cls":"infantry","troops":0,"status":"inactive","loc":"changsha","ruler":false,"egg":false,"skill":"疾走","skillCat":"行","skillText":"战棋移动 +1 格，每旬行军 MP +2。"}],"gates":[{"name":"潼关","kind":"pass","tier":1,"guard":"changan","guardName":"长安","roads":"长安—弘农 · 长安—洛阳","extraDays":3,"fort":18,"gold":44,"food":120,"garrison":3000,"water":false,"note":"关中东大门，扼守长安—洛阳大道；曹操破马超后设防重镇"},{"name":"函谷关","kind":"pass","tier":2,"guard":"hongnong","guardName":"弘农","roads":"弘农—洛阳","extraDays":2,"fort":12,"gold":32,"food":80,"garrison":2200,"water":false,"note":"崤函之险，弘农东侧；六国合纵叩关处"},{"name":"虎牢关","kind":"pass","tier":1,"guard":"luoyang","guardName":"洛阳","roads":"洛阳—陈留 · 洛阳—许昌","extraDays":3,"fort":16,"gold":40,"food":110,"garrison":2800,"water":false,"note":"洛阳东门户，中原咽喉；三英战吕布之地"},{"name":"武关","kind":"pass","tier":3,"guard":"changan","guardName":"长安","roads":"长安—宛","extraDays":2,"fort":8,"gold":18,"food":50,"garrison":1500,"water":false,"note":"秦岭东南通道，长安—宛城；刘邦入关即由此道"},{"name":"散关","kind":"pass","tier":2,"guard":"changan","guardName":"长安","roads":"长安—汉中","extraDays":2,"fort":11,"gold":28,"food":75,"garrison":2100,"water":false,"note":"陈仓道南口，“明修栈道、暗度陈仓”的陈仓道门户"},{"name":"壶关","kind":"pass","tier":2,"guard":"shangdang","guardName":"上党","roads":"上党—邺","extraDays":2,"fort":10,"gold":26,"food":65,"garrison":1900,"water":false,"note":"太行山口，上党东出"},{"name":"井陉关","kind":"pass","tier":3,"guard":"jinyang","guardName":"晋阳","roads":"晋阳—邺","extraDays":2,"fort":8,"gold":20,"food":55,"garrison":1500,"water":false,"note":"太行八陉之一，晋阳—邺城；韩信背水一战之地"},{"name":"阳平关","kind":"pass","tier":2,"guard":"hanzhong","guardName":"汉中","roads":"汉中—梓潼","extraDays":2,"fort":12,"gold":30,"food":80,"garrison":2200,"water":false,"note":"汉中西门户，蜀道北口；刘备取汉中、赵云空营退曹兵于此"},{"name":"剑阁","kind":"pass","tier":1,"guard":"zhangtong","guardName":"梓潼","roads":"汉中—梓潼","extraDays":3,"fort":18,"gold":42,"food":115,"garrison":3000,"water":false,"note":"剑门天险，一夫当关；姜维拒钟会于此，邓艾遂走阴平"},{"name":"葭萌关","kind":"pass","tier":2,"guard":"langzhong","guardName":"阆中","roads":"阆中—梓潼","extraDays":2,"fort":10,"gold":26,"food":70,"garrison":1900,"water":false,"note":"嘉陵江上游要冲；马超战张飞于葭萌"},{"name":"祁山堡","kind":"pass","tier":3,"guard":"tianshui","guardName":"天水","roads":"天水—汉中","extraDays":2,"fort":8,"gold":22,"food":60,"garrison":1600,"water":false,"note":"陇右南口；诸葛亮六出祁山，皆以此为进退之门"},{"name":"瓦口关","kind":"pass","tier":3,"guard":"langzhong","guardName":"阆中","roads":"阆中—江州","extraDays":2,"fort":7,"gold":18,"food":50,"garrison":1400,"water":false,"note":"宕渠山道；张飞智取瓦口隘，大破张郃"},{"name":"孟津渡","kind":"port","tier":1,"guard":null,"guardName":null,"roads":"晋阳—洛阳","extraDays":2,"fort":8,"gold":28,"food":110,"garrison":1800,"water":true,"note":"黄河渡口，洛阳北岸；八百诸侯会孟津"},{"name":"河阳渡","kind":"port","tier":2,"guard":null,"guardName":null,"roads":"晋阳—洛阳","extraDays":2,"fort":6,"gold":20,"food":90,"garrison":1400,"water":true,"note":"黄河渡口，河内北岸；与孟津斜对，是并州南下的另一处渡头"},{"name":"白马津","kind":"port","tier":2,"guard":null,"guardName":null,"roads":"陈留—濮阳","extraDays":2,"fort":5,"gold":18,"food":80,"garrison":1200,"water":true,"note":"黄河渡口，陈留—濮阳；关羽斩颜良解白马之围"},{"name":"延津","kind":"port","tier":2,"guard":null,"guardName":null,"roads":"邺—陈留","extraDays":2,"fort":5,"gold":18,"food":80,"garrison":1200,"water":true,"note":"黄河渡口，邺城—陈留；文丑殒命之处"},{"name":"夏口渡","kind":"port","tier":1,"guard":null,"guardName":null,"roads":"江夏—公安 · 江夏—夷陵","extraDays":2,"fort":10,"gold":30,"food":120,"garrison":1900,"water":true,"note":"汉水入江处，江夏南岸；孙权筑夏口城"},{"name":"汉阳渡","kind":"port","tier":2,"guard":null,"guardName":null,"roads":"江夏—公安 · 江夏—夷陵","extraDays":2,"fort":6,"gold":22,"food":95,"garrison":1400,"water":true,"note":"汉水北岸渡头，与夏口斜对；黄祖水军旧屯"},{"name":"赤壁渡","kind":"port","tier":1,"guard":null,"guardName":null,"roads":"江陵—江夏","extraDays":2,"fort":9,"gold":30,"food":120,"garrison":1800,"water":true,"note":"长江中游南岸，江陵—江夏；周瑜火攻破曹之处"},{"name":"乌林渡","kind":"port","tier":2,"guard":null,"guardName":null,"roads":"江陵—江夏","extraDays":2,"fort":6,"gold":22,"food":95,"garrison":1400,"water":true,"note":"长江北岸渡头，与赤壁斜对；曹军连船屯于乌林"},{"name":"寻阳渡","kind":"port","tier":2,"guard":null,"guardName":null,"roads":"柴桑—庐江","extraDays":2,"fort":6,"gold":20,"food":90,"garrison":1400,"water":true,"note":"长江下游渡口，柴桑—庐江"},{"name":"皖口渡","kind":"port","tier":3,"guard":null,"guardName":null,"roads":"柴桑—庐江","extraDays":2,"fort":5,"gold":16,"food":70,"garrison":1100,"water":true,"note":"皖水入江口，与寻阳斜对；孙权破皖城即由此上陆"},{"name":"濡须口","kind":"port","tier":1,"guard":"lujiang","guardName":"庐江","roads":"合肥—庐江","extraDays":2,"fort":12,"gold":34,"food":140,"garrison":2100,"water":true,"note":"巢湖入江口，淮南水战要地；孙权筑濡须坞拒曹操"},{"name":"采石渡","kind":"port","tier":2,"guard":null,"guardName":null,"roads":"建业—庐江","extraDays":2,"fort":7,"gold":22,"food":100,"garrison":1500,"water":true,"note":"长江下游，建业对岸；虞允文采石大捷之地"},{"name":"横江渡","kind":"port","tier":3,"guard":null,"guardName":null,"roads":"建业—庐江","extraDays":2,"fort":5,"gold":16,"food":75,"garrison":1200,"water":true,"note":"历阳横江浦，与采石斜对；孙策渡江起兵处"},{"name":"瓜洲渡","kind":"port","tier":2,"guard":null,"guardName":null,"roads":"广陵—建业","extraDays":2,"fort":6,"gold":20,"food":90,"garrison":1300,"water":true,"note":"广陵—建业之间的长江渡口，北岸要津"},{"name":"京口渡","kind":"port","tier":2,"guard":null,"guardName":null,"roads":"广陵—建业","extraDays":2,"fort":6,"gold":20,"food":90,"garrison":1300,"water":true,"note":"长江南岸渡头，与瓜洲斜对；孙权徙治京口"},{"name":"白帝渡","kind":"port","tier":3,"guard":null,"guardName":null,"roads":"巴东—夷陵","extraDays":2,"fort":5,"gold":15,"food":60,"garrison":900,"water":true,"note":"三峡出口，白帝城下；刘备托孤之地"},{"name":"子午谷","kind":"trail","tier":3,"guard":null,"guardName":null,"roads":"长安—汉中","extraDays":6,"fort":0,"gold":0,"food":0,"garrison":0,"water":false,"note":"魏延子午谷奇谋：七百余里无人烟，可绕散关直趋长安，然险远难行"},{"name":"轘辕道","kind":"trail","tier":3,"guard":null,"guardName":null,"roads":"洛阳—许昌","extraDays":4,"fort":0,"gold":0,"food":0,"garrison":0,"water":false,"note":"轘辕关小路：嵩山间道，可绕虎牢关东南而下许昌"},{"name":"阴平道","kind":"trail","tier":3,"guard":null,"guardName":null,"roads":"武都—绵竹","extraDays":6,"fort":0,"gold":0,"food":0,"garrison":0,"water":false,"note":"邓艾偷渡阴平：行无人之地七百余里，绕开剑阁直取江油、绵竹"}]}</script>
+<script>
+(function(){
+  const D = JSON.parse(document.getElementById('data').textContent);
+  const CITY = D.cities, GEN = D.generals, GATES = D.gates, SCEN = D.scenarios;
+
+  const SIZE = {capital:'都城',large:'大城',medium:'中城',small:'小城'};
+  const SIZE_RANK = {capital:4,large:3,medium:2,small:1};
+  const TERRAIN = {plain:'平原',mountain:'山地'};
+  const CLS = {infantry:'步兵',cavalry:'骑兵',archer:'弓兵',navy:'水兵',elite:'极兵',mystic:'玄兵'};
+  const STATUS = {active:'登场',inactive:'未登场',wild:'在野'};
+  const KIND = {pass:'关隘',port:'渡口',trail:'小路'};
+  const FACTION = {
+    liubei:'刘备',caocao:'曹操',sunquan:'孙权',liubiao:'刘表',liuzhang:'刘璋',
+    mateng:'马腾',zhanglu:'张鲁',hanxuan:'韩玄',gongsundu:'公孙度',
+    wei:'魏',shu:'蜀',wu:'吴'
+  };
+  const cityOf = {};
+  CITY.forEach(c => cityOf[c.id] = c);
+
+  const num = v => v.toLocaleString('en-US');
+  const esc = s => String(s).replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+
+  // 总览卡片
+  const totalTroops = GEN.filter(g => g.status === 'active').reduce((a,b) => a + b.troops, 0);
+  const sums = {
+    gold: CITY.reduce((a,c) => a + c.gold, 0),
+    food: CITY.reduce((a,c) => a + c.food, 0),
+    pop: CITY.reduce((a,c) => a + c.pop, 0),
+    fort: Math.round(CITY.reduce((a,c) => a + c.fort, 0) / CITY.length * 10) / 10,
+  };
+  document.getElementById('overviewCards').innerHTML = [
+    ['城池', CITY.length, '座', '9 势力 · 5 都城'],
+    ['武将', GEN.length, '人', '登场 110 · 在野 7'],
+    ['关防', GATES.length, '处', '关 12 · 渡 16 · 小道 3'],
+    ['剧本', SCEN.length, '部', '189 / 200 / 208 / 220'],
+    ['初始金', num(sums.gold), '', '全图城池合计'],
+    ['初始粮', num(sums.food), '', '全图城池合计'],
+    ['人口', (sums.pop/10000).toFixed(1), '万', '全图城池合计'],
+    ['城防均值', sums.fort, '', '0–100 制'],
+    ['登场总兵力', num(totalTroops), '', '110 名登场武将'],
+  ].map(([k,v,u,n]) => `<div class="card"><div class="k">${k}</div><div class="v">${v}${u?`<small>${u}</small>`:''}</div><div class="n">${n}</div></div>`).join('');
+
+  // 势力版图
+  const owners = {};
+  CITY.forEach(c => { if (c.owner) (owners[c.owner] = owners[c.owner] || []).push(c); });
+  const coreCity = {
+    liubei:'江夏 · 新野', caocao:'许昌 · 洛阳 · 长安', sunquan:'建业 · 吴 · 会稽',
+    liubiao:'襄阳 · 江陵 · 长沙', liuzhang:'成都 · 江州', mateng:'天水 · 武威',
+    zhanglu:'汉中 · 上庸', hanxuan:'桂阳 · 零陵', gongsundu:'襄平',
+  };
+  const role = {
+    liubei:'荆南客军，两城起家', caocao:'中原霸主，25 城压顶', sunquan:'江东水路，8 城后方',
+    liubiao:'荆襄集团，水城最多', liuzhang:'益州天府，纵深最大', mateng:'西凉铁骑，地形险',
+    zhanglu:'汉中山城，守强攻弱', hanxuan:'荆南偏师，两小城', gongsundu:'辽东孤城',
+  };
+  document.getElementById('factionRows').innerHTML = Object.entries(owners)
+    .sort((a,b) => b[1].length - a[1].length)
+    .map(([id, list]) => `<tr><td>${FACTION[id] || id}</td><td class="num">${list.length}</td><td class="num">${(list.length/CITY.length*100).toFixed(1)}%</td><td>${coreCity[id]||'—'}</td><td class="dim">${role[id]||''}</td></tr>`).join('');
+
+  // ── 通用排序 ──
+  function sortable(table, getter){
+    const ths = table.querySelectorAll('th');
+    ths.forEach((th, idx) => {
+      th.addEventListener('click', () => {
+        const cur = th.dataset.dir;
+        ths.forEach(t => delete t.dataset.dir);
+        th.dataset.dir = cur === 'asc' ? 'desc' : 'asc';
+        const dir = th.dataset.dir === 'asc' ? 1 : -1;
+        const rows = Array.from(table.tBodies[0].rows);
+        rows.sort((a,b) => {
+          const va = getter(a, idx), vb = getter(b, idx);
+          if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir;
+          return String(va).localeCompare(String(vb), 'zh-CN') * dir;
+        });
+        rows.forEach(r => table.tBodies[0].appendChild(r));
+      });
+    });
+  }
+
+  // ── 城池 ──
+  const cityFactionSel = document.getElementById('cityFaction');
+  cityFactionSel.innerHTML = '<option value="">全部势力</option>' +
+    Object.keys(owners).map(id => `<option value="${id}">${FACTION[id]||id}</option>`).join('');
+
+  function renderCities(){
+    const q = document.getElementById('citySearch').value.trim();
+    const f = cityFactionSel.value;
+    const s = document.getElementById('citySize').value;
+    const list = CITY.filter(c =>
+      (!f || c.owner === f) && (!s || c.size === s) &&
+      (!q || c.name.includes(q) || (c.skill && c.skill.name.includes(q)))
+    );
+    document.getElementById('cityTable').tBodies[0].innerHTML = list.map(c => {
+      const tag = c.skill
+        ? `<span class="tag skill" title="${esc(c.skill.description || '')}">${esc(c.skill.name)}</span>`
+        : `<span class="dim">—</span>`;
+      return `<tr>
+        <td><b>${c.name}</b></td>
+        <td>${FACTION[c.owner]||'—'}</td>
+        <td>${SIZE[c.size]}</td>
+        <td>${TERRAIN[c.terrain]||c.terrain}${c.water?' <span class="tag water">水城</span>':''}</td>
+        <td class="num">${c.fort}</td>
+        <td class="num">${c.agri}</td>
+        <td class="num">${c.com}</td>
+        <td class="num">${c.loy}</td>
+        <td class="num">${c.def}</td>
+        <td class="num">${num(c.gold)}</td>
+        <td class="num">${num(c.food)}</td>
+        <td class="num">${num(c.pop)}</td>
+        <td>${tag}</td>
+      </tr>`;
+    }).join('');
+    document.getElementById('cityCount').textContent = `${list.length} / ${CITY.length} 城`;
+  }
+  document.getElementById('citySearch').addEventListener('input', renderCities);
+  cityFactionSel.addEventListener('change', renderCities);
+  document.getElementById('citySize').addEventListener('change', renderCities);
+  renderCities();
+
+  // 城池数值缓存用于排序
+  sortable(document.getElementById('cityTable'), (tr, idx) => {
+    const c = CITY.find(x => x.name === tr.cells[0].textContent);
+    if (!c) return '';
+    const keys = ['name','owner','size','terrain','fort','agri','com','loy','def','gold','food','pop'];
+    return keys[idx] === 'size' ? SIZE_RANK[c.size] : c[keys[idx]];
+  });
+
+  // ── 关港 ──
+  document.getElementById('gateCards').innerHTML = [
+    ['关隘', GATES.filter(g=>g.kind==='pass').length, '跨山锁路'],
+    ['渡口', GATES.filter(g=>g.kind==='port').length, '跨江强制水战'],
+    ['小路', GATES.filter(g=>g.kind==='trail').length, '绕关 · 不可驻守'],
+    ['守军合计', num(GATES.reduce((a,g)=>a+g.garrison,0)), '满编'],
+    ['月解送金', num(GATES.reduce((a,g)=>a+g.gold,0)), '金 / 月'],
+    ['月解送粮', num(GATES.reduce((a,g)=>a+g.food,0)), '粮 / 月'],
+  ].map(([k,v,n]) => `<div class="card"><div class="k">${k}</div><div class="v">${v}</div><div class="n">${n}</div></div>`).join('');
+
+  function renderGates(){
+    const q = document.getElementById('gateSearch').value.trim();
+    const k = document.getElementById('gateKind').value;
+    const list = GATES.filter(g =>
+      (!k || g.kind === k) &&
+      (!q || g.name.includes(q) || (g.guardName && g.guardName.includes(q)))
+    );
+    document.getElementById('gateTable').tBodies[0].innerHTML = list.map(g => `<tr>
+      <td><b>${g.name}</b></td>
+      <td>${KIND[g.kind]}${g.water ? ' <span class="tag water">水战</span>' : ''}</td>
+      <td class="num">${g.tier}</td>
+      <td>${g.guardName || '<span class="dim">无主</span>'}</td>
+      <td class="dim">${g.roads}</td>
+      <td class="num">${g.extraDays}</td>
+      <td class="num">${g.fort}</td>
+      <td class="num">${g.gold}</td>
+      <td class="num">${g.food}</td>
+      <td class="num">${num(g.garrison)}</td>
+      <td class="dim" style="min-width:220px">${esc(g.note)}</td>
+    </tr>`).join('');
+    document.getElementById('gateCount').textContent = `${list.length} / ${GATES.length} 处`;
+  }
+  document.getElementById('gateSearch').addEventListener('input', renderGates);
+  document.getElementById('gateKind').addEventListener('change', renderGates);
+  renderGates();
+
+  sortable(document.getElementById('gateTable'), (tr, idx) => {
+    const g = GATES.find(x => x.name === tr.cells[0].textContent);
+    if (!g) return '';
+    const keys = ['name','kind','tier','guard','roads','extraDays','fort','gold','food','garrison','note'];
+    return g[keys[idx]];
+  });
+
+  // ── 武将 ──
+  const activeG = GEN.filter(g => g.status === 'active');
+  const clsCount = {};
+  GEN.forEach(g => { (clsCount[g.cls] = clsCount[g.cls] || []).push(g); });
+
+  document.getElementById('generalCards').innerHTML = [
+    ['武将总数', GEN.length, '人', '名册收录'],
+    ['登场', activeG.length, '人', '208 赤壁'],
+    ['未登场', GEN.filter(g=>g.status==='inactive').length, '人', '189/200/220 专属'],
+    ['在野', GEN.filter(g=>g.status==='wild').length, '人', '可搜索招募'],
+    ['武均值', (GEN.reduce((a,g)=>a+g.force,0)/GEN.length).toFixed(1), '', '武力'],
+    ['智均值', (GEN.reduce((a,g)=>a+g.int,0)/GEN.length).toFixed(1), '', '智力'],
+    ['统均值', (GEN.reduce((a,g)=>a+g.lead,0)/GEN.length).toFixed(1), '', '统率'],
+  ].map(([k,v,u,n]) => `<div class="card"><div class="k">${k}</div><div class="v">${v}${u?`<small>${u}</small>`:''}</div><div class="n">${n}</div></div>`).join('');
+
+  const topN = (key, n=10) => [...GEN].sort((a,b)=>b[key]-a[key]).slice(0,n);
+  const fillTop = (id, rows, cols) => {
+    document.getElementById(id).innerHTML = rows.map((g,i) =>
+      `<tr><td class="num dim">${i+1}</td><td>${g.name}${g.egg?'<span class="sup">彩蛋</span>':''}</td>${cols.map(c=>`<td class="num">${g[c]}</td>`).join('')}</tr>`
+    ).join('');
+  };
+  fillTop('topLead', topN('lead'), ['lead']);
+  fillTop('topForce', topN('force'), ['force']);
+  fillTop('topInt', topN('int'), ['int']);
+  fillTop('topPol', topN('pol'), ['pol','charm']);
+
+  document.getElementById('classRows').innerHTML = Object.keys(CLS).map(k => {
+    const list = clsCount[k] || [];
+    return `<tr><td>${CLS[k]}</td><td class="num">${list.length}</td><td class="num">${num(list.reduce((a,g)=>a+g.troops,0))}</td></tr>`;
+  }).join('');
+
+  function factionOf(g){
+    if (g.status === 'wild') return '在野';
+    if (g.status === 'inactive') return '未登场';
+    const c = cityOf[g.loc];
+    return c && c.owner ? (FACTION[c.owner] || c.owner) : '在野';
+  }
+  function renderGens(){
+    const q = document.getElementById('genSearch').value.trim();
+    const st = document.getElementById('genStatus').value;
+    const cl = document.getElementById('genClass').value;
+    const list = GEN.filter(g =>
+      (!q || g.name.includes(q)) && (!st || g.status === st) && (!cl || g.cls === cl)
+    );
+    document.getElementById('generalTable').tBodies[0].innerHTML = list.map(g => {
+      const c = cityOf[g.loc];
+      return `<tr>
+        <td><b>${g.name}</b>${g.ruler?'<span class="tag" style="margin-left:4px">君主</span>':''}${g.egg?'<span class="sup">彩蛋</span>':''}</td>
+        <td class="num">${g.lead}</td>
+        <td class="num">${g.force}</td>
+        <td class="num">${g.int}</td>
+        <td class="num">${g.pol}</td>
+        <td class="num">${g.charm}</td>
+        <td class="num">${g.loy}</td>
+        <td>${CLS[g.cls]||g.cls}</td>
+        <td>${g.skill ? `<span class="tag skill" title="${esc(`${g.skillCat}·${g.skillText}`)}">${esc(g.skill)}</span>` : '<span class="dim">—</span>'}</td>
+        <td class="num">${num(g.troops)}</td>
+        <td>${STATUS[g.status]||g.status}</td>
+        <td>${c ? c.name : g.loc}</td>
+        <td class="dim">${factionOf(g)}</td>
+      </tr>`;
+    }).join('');
+    document.getElementById('genCount').textContent = `${list.length} / ${GEN.length} 人`;
+  }
+  document.getElementById('genSearch').addEventListener('input', renderGens);
+  document.getElementById('genStatus').addEventListener('change', renderGens);
+  document.getElementById('genClass').addEventListener('change', renderGens);
+  renderGens();
+
+  sortable(document.getElementById('generalTable'), (tr, idx) => {
+    const name = tr.cells[0].querySelector('b').textContent;
+    const g = GEN.find(x => x.name === name);
+    if (!g) return '';
+    const keys = ['name','lead','force','int','pol','charm','loy','cls','skill','troops','status','loc','faction'];
+    if (keys[idx] === 'loc') return (cityOf[g.loc]?.name || g.loc);
+    if (keys[idx] === 'faction') return factionOf(g);
+    return g[keys[idx]];
+  });
+
+  // ── 剧本 ──
+  document.getElementById('scenarioRows').innerHTML = SCEN.map(s => `
+    <tr>
+      <td><b>${s.name}</b><div class="dim" style="font-size:11.5px">${esc(s.desc)}…</div></td>
+      <td class="num">${s.year} 年 ${s.month} 月</td>
+      <td>${esc(s.difficulty)}</td>
+      <td class="num">${s.edges}</td>
+      <td>${s.factions.map(f => `${f.name} <span class="dim">${f.cities}城/${f.roster}将</span>`).join(' · ')}</td>
+    </tr>`).join('');
+
+  // ── 导航高亮 ──
+  const links = [...document.querySelectorAll('#tabs a')];
+  const secs = links.map(a => document.querySelector(a.getAttribute('href')));
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        links.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + e.target.id));
+      }
+    });
+  }, { rootMargin: '-45% 0px -50% 0px' });
+  secs.forEach(s => s && io.observe(s));
+})();
+</script>
+</body>
+</html>

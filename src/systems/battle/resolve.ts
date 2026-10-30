@@ -464,7 +464,7 @@ export function resolveBattle(
     state.report = {
       kind: 'battle',
       title,
-      subtitle: `${b.day} 天 · ${from?.name} → ${target?.name} · ${WEATHER_LABEL[b.weather]}`,
+      subtitle: `${b.day} 回合 · ${from?.name} → ${target?.name} · ${WEATHER_LABEL[b.weather]}`,
       result: playerWon ? 'victory' : outcome === 'retreat' ? 'retreat' : 'defeat',
       lines,
     };

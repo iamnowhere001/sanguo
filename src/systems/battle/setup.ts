@@ -1,4 +1,5 @@
 import { BALANCE } from '../../data/tables/balance';
+import { aptitudeOf } from '../../data/tables/unitClasses';
 import { nextFloat, streamFor, type RngState } from '../../core/rng';
 import { done, fail, type OpResult } from '../../core/result';
 import type {
@@ -10,6 +11,7 @@ import type {
   GameState,
   General,
   ReportLine,
+  SiegeWeaponId,
   Weather,
 } from '../../core/state';
 import {
@@ -42,6 +44,11 @@ import { durabilityMaxOf } from '../logistics';
 import { towerFortificationOf } from '../facilities';
 import { topUpFromPool } from '../troops';
 import { buildSquads, squadMembers, squadShares, type SquadConfig, type SquadSpec } from '../squads';
+import {
+  generalSkillOf,
+  skillMoveBonus,
+  skillNameOf,
+} from '../../data/tables/generalTraits';
 
 /** 从指定战斗流掷天气；返回新流状态，避免偷用其它系统的随机数 */
 function rollWeather(rng: RngState): { weather: Weather; rng: RngState } {
@@ -57,7 +64,9 @@ function makeUnit(
   x: number,
   y: number,
   isCommander: boolean,
+  siegeWeapon?: SiegeWeaponId,
 ): BattleUnit {
+  const skill = generalSkillOf(g);
   return {
     id: `${side}:${g.id}`,
     generalId: g.id,
@@ -71,10 +80,16 @@ function makeUnit(
     intellect: g.intellect,
     level: g.level,
     unitClass: g.unitClass,
-    move: moveRangeOf(g.unitClass),
+    move: moveRangeOf(g.unitClass) + skillMoveBonus(skill),
     training: 0,
     stamina: g.stamina,
     stunned: 0,
+    // 适性按武将 + 驻城派生（南船北马由 locationId 决定），气力开局满
+    aptitude: aptitudeOf(g),
+    morale: BALANCE.MORALE.start,
+    siegeWeapon,
+    skill,
+    skillName: skillNameOf(skill),
     isCommander,
     hasMoved: false,
     hasActed: false,
@@ -91,7 +106,8 @@ function unitFromGeneral(
   y: number,
   isCommander: boolean,
 ): BattleUnit {
-  const u = makeUnit(g, side, x, y, isCommander);
+  const army = (state.armies ?? []).find((a) => a.generalIds.includes(g.id));
+  const u = makeUnit(g, side, x, y, isCommander, army?.siegeWeapon);
   u.force = effForce(state, g);
   u.intellect = effIntellect(state, g);
   u.training = state.cities[g.locationId]?.training ?? 0;

@@ -1,6 +1,6 @@
-import type { GameState } from '../core/state';
+import type { GameState, SiegeWeaponId } from '../core/state';
 import {
-  MARCH_DAYS_PER_XUN,
+  MARCH_MP_PER_XUN,
   destLabelOf,
   firstLegEndOf,
   pickSortieGenerals,
@@ -8,15 +8,16 @@ import {
   type DispatchPlan,
 } from '../systems/army';
 import { gatesOf } from '../systems/cityGrid';
-import { TILE_KIND_LABEL, marchDaysOfTile } from '../data/tables/marchCost';
+import { TILE_KIND_LABEL, marchCostOfTile } from '../data/tables/marchCost';
 import { tileKindAt } from '../render/terrainGrid';
 import { UNIT_CLASS_LABEL } from '../data/tables/unitClasses';
+import { SIEGE_WEAPONS, SIEGE_WEAPON_LIST } from '../data/tables/siegeWeapons';
 import { fmt } from './common';
 
 /**
  * 出征确认条。
  *
- * 显示「出哪座门、带谁去、去哪、多少天、本旬走多少」——
+ * 显示「出哪座门、带谁去、去哪、需要多少 MP、本旬走多少」——
  * 确认之前玩家应当能一眼判断这次出征是否值得，而不是点完才发现要走八旬。
  *
  * `plan` 为 null 表示当前指向的格不可作为目的地，此时用 `reason` 说明原因。
@@ -27,6 +28,8 @@ export function DispatchBar({
   plan,
   reason,
   df,
+  siegeWeapon,
+  onSiegeChange,
   onCancel,
   onConfirm,
 }: {
@@ -35,6 +38,8 @@ export function DispatchBar({
   plan: DispatchPlan | null;
   reason?: string;
   df: DispatchField | null;
+  siegeWeapon?: SiegeWeaponId;
+  onSiegeChange: (w: SiegeWeaponId | undefined) => void;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
@@ -57,15 +62,18 @@ export function DispatchBar({
     .join(' · ');
 
   const speed = df?.speed ?? 1;
-  const mp = df?.mp ?? MARCH_DAYS_PER_XUN;
-  const days = plan ? Math.max(1, Math.ceil(plan.days / speed)) : 0;
-  const xun = plan ? Math.max(1, Math.ceil(plan.days / (MARCH_DAYS_PER_XUN * speed))) : 0;
+  const mp = df?.mp ?? MARCH_MP_PER_XUN;
+  /** 部队兵种 = 主将兵种（与 sortieArmy 同口径） */
+  const mainClass = gens[0]?.unitClass;
+  /** 全程要扣的移动力（MP）；plan.days 的单位是 MP */
+  const totalMp = plan ? Math.max(1, Math.ceil(plan.days / speed)) : 0;
+  const xun = plan ? Math.max(1, Math.ceil(plan.days / mp)) : 0;
   const legEnd = plan ? firstLegEndOf(plan, mp) : null;
-  const remainDays = plan ? Math.max(0, Math.ceil(plan.days - mp)) : 0;
+  const remainMp = plan ? Math.max(0, Math.ceil(plan.days - mp)) : 0;
 
   const destText = plan ? destLabelOf(state, plan) : '未选目的地';
   const terrain = plan ? TILE_KIND_LABEL[tileKindAt(plan.dest.col, plan.dest.row)] : null;
-  const tileCost = plan ? marchDaysOfTile(plan.dest.col, plan.dest.row) : 0;
+  const tileCost = plan ? marchCostOfTile(plan.dest.col, plan.dest.row, mainClass) : 0;
 
   return (
     <div className={`dispatch-bar${plan ? '' : ' is-invalid'}`} role="status">
@@ -101,11 +109,11 @@ export function DispatchBar({
           </span>
           <span className="db-meta">
             {terrain}
-            {Number.isFinite(tileCost) && tileCost > 1 ? `（入格 ${tileCost} 日）` : ''}
+            {Number.isFinite(tileCost) && tileCost > 1 ? `（入格 ${tileCost} MP）` : ''}
             {' · 全程 '}
-            {days} 日 · 约 {xun} 旬
+            {totalMp} MP · 约 {xun} 旬
             {legEnd
-              ? ` · 本旬走 ${mp} 日，余 ${remainDays} 日续行`
+              ? ` · 本旬 ${mp} MP，余 ${remainMp} MP 下旬续行`
               : ' · 本旬即可抵达'}
           </span>
           {plan.siegeCityId ? (
@@ -120,10 +128,36 @@ export function DispatchBar({
           ) : null}
           {plan.ferry ? (
             <span className="db-note">
-              经 {plan.ferry.name} 摆渡过江：渡河 {plan.ferry.days} 日，一次登岸，不在江面停留
+              经 {plan.ferry.name} 摆渡过江：渡河 {plan.ferry.days} MP，一次登岸，不在江面停留
             </span>
           ) : null}
           {plan.ferry ? <span className="db-note">渡江接战按水战计算</span> : null}
+          <span className="db-weapons">
+            <span className="db-wlabel">器械</span>
+            <button
+              type="button"
+              className={`db-wchip${siegeWeapon ? '' : ' is-on'}`}
+              onClick={() => onSiegeChange(undefined)}
+              disabled={!plan}
+            >
+              不带
+            </button>
+            {SIEGE_WEAPON_LIST.map((w) => (
+              <button
+                key={w.id}
+                type="button"
+                className={`db-wchip${siegeWeapon === w.id ? ' is-on' : ''}`}
+                disabled={!plan || (city?.gold ?? 0) < w.gold}
+                title={`${w.text}（采购价 ${w.gold} 金，出发城扣）`}
+                onClick={() => onSiegeChange(w.id)}
+              >
+                {w.name} <i>{w.gold}金</i>
+              </button>
+            ))}
+            {siegeWeapon ? (
+              <span className="db-wnote">{SIEGE_WEAPONS[siegeWeapon].text}</span>
+            ) : null}
+          </span>
         </div>
       ) : (
         <div className="db-body">

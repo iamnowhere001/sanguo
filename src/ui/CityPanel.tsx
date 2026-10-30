@@ -47,6 +47,7 @@ import {
   policyUpkeepMult,
 } from '../systems/policy';
 import { prisonerRecruitRate, prisonersIn } from '../systems/prisoners';
+import { isDelegated } from '../systems/delegation';
 import { gameStore } from '../store/gameStore';
 import { DiplomacyDialog } from './DiplomacyDialog';
 import { ExplorePanel } from './ExplorePanel';
@@ -600,6 +601,16 @@ export function CityPanel({
                 <div className="section-title">
                   <span>内政</span>
                   <span className="muted small">每项 1 政令</span>
+                  <button
+                    type="button"
+                    className={`cp-delegate${isDelegated(state, cityId) ? ' on' : ''}`}
+                    onClick={() =>
+                      gameStore.dispatch({ t: 'TOGGLE_DELEGATION', cityId })
+                    }
+                    title="委任后每月自动排内政，省掉逐城点开；出征 / 运输 / 征兵仍需手动"
+                  >
+                    {isDelegated(state, cityId) ? '已委任 · 自动施政' : '委任'}
+                  </button>
                 </div>
 
                 <div className="cmd-grid">

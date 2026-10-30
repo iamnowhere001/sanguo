@@ -5,6 +5,7 @@ import type { BattleCommand, BattleSide, BattleState } from '../../core/state';
 import { activeUnits, battleTerrainAt } from './grid';
 import { assaultWalls } from './siege';
 import { rollWeather } from './setup';
+import { chance } from '../../core/rng';
 
 /** 一个 side 开始行动：混乱单位跳过本回合并消耗 1 天 */
 export function beginSideTurn(b: BattleState, side: BattleSide): void {
@@ -52,28 +53,28 @@ export function useBattleCommand(
     const u = unitId ? b.units[unitId] : undefined;
     if (!u || u.side !== side || u.routed) return fail('请选择我方部队');
     if (u.hasActed) return fail('该部队本回合已行动');
-    if (u.hasMoved) return fail('该部队本日已移动，无法急袭');
-    if ((u.bonusMove ?? 0) > 0) return fail('该部队本日已急袭');
+    if (u.hasMoved) return fail('该部队本回合已移动，无法急袭');
+    if ((u.bonusMove ?? 0) > 0) return fail('该部队本回合已急袭');
     const bonus = BALANCE.MODERN.COMMAND.march.moveBonus;
     spendCommandPoint(b, side);
     u.bonusMove = (u.bonusMove ?? 0) + bonus;
-    b.log.push(`${u.name} 急袭：本日移动 +${bonus}`);
+    b.log.push(`${u.name} 急袭：本回合移动 +${bonus}`);
     return done(`急袭：${u.name} 移动 +${bonus}`);
   }
 
   if (command === 'inspire') {
-    if (b.inspireSide === side) return fail('本日已鼓舞');
+    if (b.inspireSide === side) return fail('本回合已鼓舞');
     spendCommandPoint(b, side);
     b.inspireSide = side;
-    b.log.push(`${side === b.playerSide ? '我军' : '敌军'}鼓舞，本日伤害 +20%`);
-    return done('全军鼓舞：本日伤害 +20%');
+    b.log.push(`${side === b.playerSide ? '我军' : '敌军'}鼓舞，本回合伤害 +20%`);
+    return done('全军鼓舞：本回合伤害 +20%');
   }
 
-  if (b.guardSide === side) return fail('本日已固守');
+  if (b.guardSide === side) return fail('本回合已固守');
   spendCommandPoint(b, side);
   b.guardSide = side;
-  b.log.push(`${side === b.playerSide ? '我军' : '敌军'}固守，本日受到伤害 −30%`);
-  return done('全军固守：本日受到伤害 −30%');
+  b.log.push(`${side === b.playerSide ? '我军' : '敌军'}固守，本回合受到伤害 −30%`);
+  return done('全军固守：本回合受到伤害 −30%');
 }
 
 /** 推进一天：攻城磨损 → 天气每 5 天重掷，混乱倒计时，行动重置 */
@@ -101,6 +102,25 @@ export function advanceBattleDay(
     const heal = Math.floor(u.maxTroops * BALANCE.DEFENDER_REGEN_RATE);
     if (heal > 0 && u.troops < u.maxTroops) {
       u.troops = Math.min(u.maxTroops, u.troops + heal);
+    }
+  }
+
+  // 【新增】气力结算：损失越重掉得越多，每回合小幅自然恢复；低于阈值有溃散判定
+  for (const u of Object.values(b.units)) {
+    if (u.routed) continue;
+    const M = BALANCE.MORALE;
+    const lossRatio = 1 - u.troops / Math.max(1, u.maxTroops);
+    const target = M.start - lossRatio * 10 * M.lossPer10PctTroops + M.regenPerTurn;
+    u.morale = Math.max(0, Math.min(M.max, Math.round(target)));
+    if (u.morale < M.routThreshold) {
+      const p = (M.routThreshold - u.morale) / M.routChanceDivisor;
+      const [rout, next] = chance(b.rng, p);
+      b.rng = next;
+      if (rout) {
+        u.routed = true;
+        u.troops = Math.max(0, Math.floor(u.troops * 0.5));
+        b.log.push(`${u.name} 气力崩溃，部众溃散`);
+      }
     }
   }
 

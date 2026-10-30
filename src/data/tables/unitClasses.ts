@@ -86,3 +86,98 @@ export function terrainModifier(
 export function affinityOf(atk: UnitClass, def: UnitClass): number {
   return AFFINITY[atk][def];
 }
+
+// ── 兵种适性 S/A/B/C 【新增】三11 口径 ─────────────────────
+/**
+ * 适性：每将每兵种一档。
+ *
+ * 三11 里适性决定「这个将带这个兵种能不能打」，比 6×6 相性矩阵更直接：
+ * 相性表达"兵种克制"，适性表达"人岗匹配"。两者叠加会让乘数失控
+ * （1.6 武力 × 1.25 相性 × 1.5 地形 × 1.25 训练 ≈ 3.75×），
+ * 因此本作给「克制类乘数」设 2.0 上限，见 `BALANCE.MULT_CAP`。
+ *
+ * 数值取温和档（S +12% / A +6% / B 0 / C −8%）：适性是长期养成线，
+ * 不该在第一版就盖过武力与地形。
+ */
+export type AptGrade = 'S' | 'A' | 'B' | 'C';
+
+export const APT_MULT: Record<AptGrade, number> = {
+  S: 1.12,
+  A: 1.06,
+  B: 1,
+  C: 0.92,
+};
+
+/** 南方水网城：水军适性按统率评估，其余地区按智力-10 折算 */
+const RIVER_CITIES = new Set([
+  'jiangxia', 'jiangling', 'jiangzhou', 'chaisang', 'lujiang', 'jianye', 'wu',
+  'kuaiji', 'danyang', 'changsha', 'guiyang', 'lingling', 'wuling', 'gongan',
+  'yiling', 'badong', 'yuzhang', 'poyang', 'hefei', 'shouchun', 'guangling',
+  'xiangyang',
+]);
+
+/** 北方产马区：骑兵适性 +1 档 */
+const HORSE_CITIES = new Set([
+  'wuwei', 'jincheng', 'tianshui', 'anding', 'changan', 'hanzhong', 'shangyong',
+  'jinyang', 'shangdang', 'ye', 'zhuo', 'ji', 'beiping', 'xiangping', 'nanpi',
+  'pingyuan', 'nanpi',
+]);
+
+function gradeOf(value: number, bonus = 0): AptGrade {
+  const v = value + bonus;
+  if (v >= 90) return 'S';
+  if (v >= 75) return 'A';
+  if (v >= 55) return 'B';
+  return 'C';
+}
+
+export interface AptInput {
+  id?: string;
+  force: number;
+  intellect: number;
+  leadership: number;
+  unitClass: UnitClass;
+  locationId: string;
+}
+
+/**
+ * 派生一名武将的六兵种适性。
+ *
+ * 规则（可预测、可复算，不做随机）：
+ * 1. 本行兵种 +1 档（人岗匹配）；
+ * 2. 步/骑/极按武力，弓/玄按智力，水按统率；
+ * 3. 北方产马区骑兵 +1 档；南方水网城水军 +1 档，非水乡水军 −1 档。
+ */
+export function aptitudeOf(g: AptInput): Record<UnitClass, AptGrade> {
+  const north = HORSE_CITIES.has(g.locationId);
+  const river = RIVER_CITIES.has(g.locationId);
+  const bump = (grade: AptGrade, steps: number): AptGrade => {
+    const order: AptGrade[] = ['C', 'B', 'A', 'S'];
+    const i = Math.max(0, Math.min(3, order.indexOf(grade) + steps));
+    return order[i]!;
+  };
+
+  const out: Record<UnitClass, AptGrade> = {
+    infantry: gradeOf(g.force * 0.7 + g.leadership * 0.3),
+    cavalry: gradeOf(g.force, north ? 6 : 0),
+    archer: gradeOf(g.intellect),
+    navy: river
+      ? gradeOf(g.leadership, 6)
+      : bump(gradeOf(g.leadership), -1),
+    elite: gradeOf(g.force),
+    mystic: gradeOf(g.intellect),
+  };
+
+  // 本行 +1 档
+  out[g.unitClass] = bump(out[g.unitClass], 1);
+  return out;
+}
+
+/** 取某将某兵种的适性倍率；不传武将时按 B（1.0），旧调用不受影响 */
+export function aptitudeMultOf(
+  aptitude: Record<UnitClass, AptGrade> | undefined,
+  unitClass: UnitClass,
+): number {
+  if (!aptitude) return 1;
+  return APT_MULT[aptitude[unitClass]];
+}

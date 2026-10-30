@@ -2,6 +2,9 @@ import type { RandomStream, RngState } from './rng';
 
 // ── 基础枚举 ────────────────────────────────────────────────
 export type UnitClass = 'infantry' | 'cavalry' | 'archer' | 'navy' | 'elite' | 'mystic';
+
+/** 兵种适性档位（三11 口径）；定义在 `data/tables/unitClasses`，此处仅为类型复用 */
+export type AptGrade = 'S' | 'A' | 'B' | 'C';
 export type Terrain = 'plain' | 'mountain' | 'forest' | 'water';
 export type BattleTerrain = Terrain | 'city';
 /** 城池规模：决定可驻扎的兵力上限，并作为地图节点大小与面板标签 */
@@ -14,6 +17,8 @@ export type ProjectKind = 'farm' | 'market' | 'wall' | 'barracks';
 export type GamePhase = 'map' | 'battle' | 'gameover';
 export type Difficulty = 'easy' | 'normal' | 'hard';
 export type BattleSide = 'attacker' | 'defender';
+/** 战斗类型：攻城战 / 野外遭遇战（含江面水战） */
+export type BattleKind = 'city' | 'field';
 export type BattleStatus = 'ongoing' | 'victory' | 'defeat' | 'retreat';
 export type Weather = 'clear' | 'rain' | 'fog';
 export type SearchResultKind = 'general' | 'item' | 'gold' | 'food';
@@ -43,6 +48,29 @@ export interface Item {
   /** 【裁决】② 彩蛋道具/武将默认不进入任何搜索池 */
   isEasterEgg?: boolean;
 }
+
+/**
+ * 武将特技标识。
+ *
+ * 特技不落存档：按五维 + 兵种 + 少量名将覆盖**派生出唯一一条**（`generalSkillOf`），
+ * 这样 338 将无需逐条配表，新旧存档也不会缺字段。
+ */
+export type GeneralSkillId =
+  | 'warGod'
+  | 'ironWall'
+  | 'divineTactic'
+  | 'swift'
+  | 'bowGod'
+  | 'navyGod'
+  | 'siegeMaster'
+  | 'administrator'
+  | 'charmer'
+  | 'fierce'
+  | 'stalwart'
+  | 'insight';
+
+/** 随军攻城器械（三11 兵器） */
+export type SiegeWeaponId = 'ram' | 'tower' | 'catapult' | 'beast';
 
 export interface General {
   id: string;
@@ -271,11 +299,26 @@ export interface PendingDiplomacy {
   turn: number;
 }
 
-/** 大地图道路：cost = 行军天数 【裁决】③ 节点图 */
+/**
+ * 大地图道路（节点图）。
+ *
+ * 【口径】`cost` 是**旧 M 档的抽象行军代价**，与网格层的 MP 不是同一套单位：
+ * 网格里相邻城 40 格 ≈ 4 旬，这里却写 2，差一个量级。
+ *
+ * 现在这张图只用于**邻接判定**（外交、援军、AI 的邻城威胁），
+ * 精确行军一律走 `systems/army.ts` 的网格 Dijkstra。
+ * 因此 `cost` 只保留排序语义，不再参与任何实际行程计算。
+ */
 export interface MapEdge {
   a: string;
   b: string;
+  /** 抽象代价，仅用于排序；不作为行军 MP */
   cost: number;
+  /**
+   * 险道：史实存在但极远的通道（牂牁道、越嶲道、三峡水路）。
+   * 可行军，但**不算邻城**——AI 的邻城威胁与战机建议会跳过这类边。
+   */
+  wild?: boolean;
 }
 
 /** 大地图格坐标 */
@@ -290,7 +333,7 @@ export interface GridPoint {
  * 部队在网格上自由行军：`at` 为当前格，`path` 为后续要走的格子。
  * **目的地是格，不是城** —— `dest` 才是真值源；`targetCityId` 只是
  * 「目的地恰好落在某座敌城门外」时派生出来的字段，供文案与旧逻辑读取。
- * 山岭与水域不可通行，其余地形按格计天数，每旬推进 10 天。
+ * 山岭与水域不可通行，其余地形按格计 MP，每旬推进 10 MP。
  * 站在敌城门外只是围城，攻城要另下 `ASSAULT`；经过己方城池格不会解散。
  * 武将仍保留 `locationId`（出发城 / 最近己方城），用 `armyId` 标记为在途。
  */
@@ -318,18 +361,33 @@ export interface Army {
    * 真实路线已烘焙进 `path`，读档丢失也不影响行军。
    */
   waypoints?: GridPoint[];
-  /** 走向下一格已走的天数（0 ≤ legDays < 下一格耗时） */
+  /** 走向下一格已累积的 MP（0 ≤ legDays < 下一格耗时；历史上的「天」字段已统一为 MP） */
   legDays: number;
   /**
-   * 本旬剩余移动力（天）。玩家手动逐格移动时扣减，`END_TURN` 时清零并补满。
+   * 本旬剩余移动力（MP）。玩家手动逐格移动时扣减，`END_TURN` 时清零并补满。
    * 旧存档缺省视为满额（`armyMaxMp()`）。
    */
   mp?: number;
-  /** 行军速度倍率：烽燧提速等加成，缺省为 1 */
+  /** 行军速度倍率：烽燧提速等加成，缺省为 1。兵种差异不走这里，见 `MARCH_MP_BY_CLASS` */
   speed?: number;
+  /**
+   * 部队兵种 = 主将兵种（三11 同制）。决定每旬 MP 与能否走水路。
+   * 旧档缺省时按步兵处理（`armyClassOf`）。
+   */
+  unitClass?: UnitClass;
+  /** 随军攻城器械：ram / tower / catapult / beast；无则空 */
+  siegeWeapon?: SiegeWeaponId;
+  /** 主将特技快照：行军 MP 与地图标记直接读这里，避免每次反查武将 */
+  skill?: GeneralSkillId;
   /** 行经关隘 / 渡口时累积的攻城城防加成与水战标记 */
   fortificationBonus?: number;
   waterCrossing?: boolean;
+  /**
+   * 驻扎在关隘 / 港口内。
+   * 有值时该纵队不再在地图上移动，也不占格；兵力计入 `gateGarrisonOf`，
+   * 攻关时作为真实守军参战。撤回时清除。
+   */
+  garrisonGateId?: string;
   /** 建队时的兵力快照，供地图标记展示 */
   troops: number;
   /**
@@ -526,8 +584,24 @@ export interface BattleUnit {
   training?: number;
   /** 战棋内体力：施放计策消耗，战后回写武将 */
   stamina: number;
-  /** 混乱剩余天数 */
+  /** 混乱剩余回合数（战棋内部 1 回合 = 1 日） */
   stunned: number;
+  /**
+   * 部队气力 0–100（三11 口径）。与 `stamina`（武将体力）是两套资源：
+   * 气力随伤亡与连续作战下降，归零有溃散风险；体力只影响计策。
+   */
+  morale?: number;
+  /** 该将六兵种适性（setup 时派生）；缺省时伤害按 B 处理 */
+  aptitude?: Record<UnitClass, AptGrade>;
+  /**
+   * 携带的攻城器械（三11 兵器）：ram 冲车 / tower 井阑 / catapult 投石 / beast 木兽。
+   * 只影响城墙耐久伤害（见 `BALANCE.DURABILITY.siegeWeaponMult`），不改兵种。
+   */
+  siegeWeapon?: SiegeWeaponId;
+  /** 武将特技（开战派生）；缺省视为无特技，旧存档与沙盒口径不变 */
+  skill?: GeneralSkillId;
+  /** 特技名，供单位卡直接展示（避免渲染层反查表） */
+  skillName?: string;
   isCommander: boolean;
   hasMoved: boolean;
   hasActed: boolean;
@@ -596,9 +670,34 @@ export interface BattlefieldInfo {
   features?: BattlefieldFeature[];
 }
 
+/**
+ * 野战元数据。
+ *
+ * 双方在图上相遇时不进独立场景：战斗单位仍用 576×432 绝对坐标，
+ * 这里只记录接战位置与两支纵队的 id，战后据此恢复胜方、遣散败方。
+ */
+export interface FieldBattleInfo {
+  /** 接战中心（世界格坐标，供相机与战报使用） */
+  x: number;
+  y: number;
+  attackerArmyId: string;
+  defenderArmyId: string;
+  /** 接战前双方所在格；败军从这里寻找撤退方向 */
+  attackerAt: GridPoint;
+  defenderAt: GridPoint;
+  /** 江面 / 湖面接战：所有单位按船只移动，非水兵会晕船减员 */
+  water: boolean;
+}
+
 export interface BattleState {
   fromCityId: string;
   targetCityId: string;
+  /**
+   * 战斗类型。旧存档缺省视为攻城战；`field` 时不会发生城池易主。
+   */
+  kind?: BattleKind;
+  /** 野战专用：双方行军纵队与接战位置 */
+  field?: FieldBattleInfo;
   attackerFactionId: string;
   defenderFactionId: string;
   /** 玩家控制哪一边：进攻方被 AI 发起时，玩家是防守方 */
@@ -677,6 +776,15 @@ export interface Report {
   subtitle?: string;
   lines: ReportLine[];
   result?: 'victory' | 'defeat' | 'retreat';
+}
+
+/** 旬报：每旬结束后的 5 行摘要，非阻塞展示，不打断操作 */
+export interface XunBrief {
+  /** 年 / 月 / 旬，用于标题 */
+  year: number;
+  month: number;
+  xun: number;
+  lines: ReportLine[];
 }
 
 /** 月结开始时拍下的我方快照，用于 AI 行动结束后统一出月报 */
@@ -779,10 +887,19 @@ export interface GameState {
   log: LogEntry[];
   battle?: BattleState;
   report?: Report;
+  /** 本旬摘要：每旬推进后生成，玩家可关闭；旧档缺省视为无 */
+  xunBrief?: XunBrief;
   /** AI 势力月度行动队列：玩家防守战会暂停，战报关闭后继续 */
   aiQueue?: string[];
   /** 月结快照：AI 队列全部跑完后统一出月报 */
   pendingMonth?: PendingMonth;
+  /**
+   * 委任（都督制）：这些城在跨月时由系统自动排内政，玩家不必逐城点开。
+   * 只托管内政，出征 / 运输 / 征兵仍需手动——那些是战略决策。
+   */
+  delegatedCities?: string[];
+  /** 各委任城的施政倾向；缺省 balanced */
+  delegationProfiles?: Record<string, string>;
   gameOver?: {
     result: 'victory' | 'defeat';
     reason: string;

@@ -10,6 +10,7 @@ import { chance } from '../../core/rng';
 import { type OpResult } from '../../core/result';
 import type { BattleState, BattleUnit, GameState } from '../../core/state';
 import { clamp, tacticSuccess } from '../formulas';
+import { skillTacticBonus, skillTacticTaken } from '../../data/tables/generalTraits';
 import { grantExp, markRouted } from './combat';
 import { activeUnits, battleTerrainAt, distanceBetween, otherSide } from './grid';
 
@@ -79,6 +80,7 @@ export function tacticRate(
     base -
       (b.weather === 'fog' ? 10 : 0) -
       repeat +
+      skillTacticBonus(caster.skill) +
       (caster.side === b.playerSide ? (b.tacticBonus ?? 0) : 0),
     5,
     95,
@@ -90,7 +92,10 @@ export interface TacticOutcome extends OpResult {
   damage?: number;
 }
 
-/** 计策伤害 / 治疗量（不含成功率），供战斗与 UI 预览共用 */
+/**
+ * 计策伤害 / 治疗量（不含成功率），供战斗与 UI 预览共用。
+ * 受击方「洞察」的计策减伤在返回前统一乘算，治疗不吃减伤。
+ */
 export function tacticDamageValue(
   b: BattleState,
   caster: BattleUnit,
@@ -98,17 +103,22 @@ export function tacticDamageValue(
   tacticId: TacticId,
 ): number {
   if (tacticId === 'heal') return Math.max(1, Math.floor(caster.intellect * 2));
+  const taken = skillTacticTaken(target.skill);
   if (tacticId === 'fire') {
     return Math.max(
       1,
-      Math.floor(caster.intellect * 3 * (1 + (caster.intellect - target.intellect) / 200)),
+      Math.floor(
+        caster.intellect * 3 * (1 + (caster.intellect - target.intellect) / 200) * taken,
+      ),
     );
   }
   if (tacticId === 'water') {
     const bonus = b.weather === 'rain' || nearWater(b, target) ? 1.5 : 1;
-    return Math.max(1, Math.floor(caster.intellect * 2.5 * bonus));
+    return Math.max(1, Math.floor(caster.intellect * 2.5 * bonus * taken));
   }
-  if (tacticId === 'rock') return Math.max(1, Math.floor(caster.intellect * 3.5));
+  if (tacticId === 'rock') {
+    return Math.max(1, Math.floor(caster.intellect * 3.5 * taken));
+  }
   return 0;
 }
 
@@ -168,9 +178,9 @@ export function castTactic(
   if (def.id === 'confuse') {
     const days = clamp(1 + Math.floor((u.intellect - target.intellect) / 40), 1, 3);
     target.stunned = Math.max(target.stunned, days);
-    b.log.push(`${u.name} 混乱 ${target.name}（${days} 天）`);
+    b.log.push(`${u.name} 混乱 ${target.name}（${days} 回合）`);
     if (g) grantExp(g, BALANCE.EXP.tactic);
-    return { ok: true, message: `混乱 ${days} 天`, success: true };
+    return { ok: true, message: `混乱 ${days} 回合`, success: true };
   }
 
   if (def.id === 'heal') {

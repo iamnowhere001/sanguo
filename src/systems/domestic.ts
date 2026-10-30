@@ -16,6 +16,7 @@ import {
   policySearchRareMult,
   policyTradeLimit,
 } from './policy';
+import { generalSkillOf, skillDomesticMult } from '../data/tables/generalTraits';
 
 export type { OpResult };
 
@@ -67,23 +68,26 @@ export function domesticGain(
   city: City,
   cmd: DomesticCmd,
   beforeOverride?: number,
+  general?: General,
 ): number {
   const cfg = BALANCE.DOMESTIC[cmd];
   const cap = BALANCE.STAT_CAP[cfg.field];
   const before = beforeOverride ?? city[cfg.field] ?? 0;
   // 城池专属技能：演武额外训练度（如幽州骑训 / 西凉铁骑）
   const drillBonus = cmd === 'drill' ? (city.skill?.drillBonus ?? 0) : 0;
-  const rawDelta = statGain(cfg.field, before) + drillBonus;
+  // 【特技】能吏：主持武将的内政加成只乘在增量上，不改变上限口径
+  const skillMult = general ? skillDomesticMult(generalSkillOf(general)) : 1;
+  const gained = Math.max(1, Math.floor((statGain(cfg.field, before) + drillBonus) * skillMult));
   const delta =
     cfg.field === 'commerce'
       ? Math.max(
           1,
           Math.floor(
-            rawDelta *
+            gained *
               (city.ownerId === s.playerFactionId ? policyCommerceMult(s) : 1),
           ),
         )
-      : rawDelta;
+      : gained;
   return Math.max(0, Math.min(cap, before + delta) - before);
 }
 
@@ -119,7 +123,7 @@ export function doDomestic(
   city.domesticUsed = (city.domesticUsed ?? 0) + 1;
 
   const before = city[cfg.field] ?? 0;
-  const actual = domesticGain(s, city, cmd, before);
+  const actual = domesticGain(s, city, cmd, before, g);
   city[cfg.field] = Math.min(BALANCE.STAT_CAP[cfg.field], before + actual);
 
   if (!silent) {
@@ -141,6 +145,69 @@ function fieldLabel(field: string): string {
     training: '训练',
   };
   return map[field] ?? field;
+}
+
+/** 一括指令的择将权重：开垦 / 招商 / 出巡 / 治理看政治，演武看统率 */
+function batchKeyOf(g: General, cmd: DomesticCmd): number {
+  if (cmd === 'drill') return g.leadership;
+  if (cmd === 'patrol') return g.charm;
+  return g.politics;
+}
+
+/**
+ * 一括指令：对所有己方城池（或指定城池）统一下达同一内政。
+ *
+ * 截断规则与单击一致：每城各自按政令余额 / 金币 / 体力判定，
+ * 任一城不足就跳过该城并继续下一城，不整体失败。
+ * 返回一条汇总日志，避免几十条「某将开垦」刷屏。
+ */
+export function doBatchDomestic(
+  s: GameState,
+  cmd: DomesticCmd,
+  cityIds?: string[],
+): OpResult {
+  const cfg = BALANCE.DOMESTIC[cmd];
+  const ids = cityIds?.length
+    ? cityIds
+    : Object.values(s.cities)
+        .filter((c) => c.ownerId === s.playerFactionId)
+        .map((c) => c.id);
+  let ok = 0;
+  let skipped = 0;
+
+  for (const cityId of ids) {
+    const city = s.cities[cityId];
+    if (!city || city.ownerId !== s.playerFactionId) {
+      skipped += 1;
+      continue;
+    }
+    if (edictLeftOf(s, cityId) <= 0 || city.gold < cfg.gold) {
+      skipped += 1;
+      continue;
+    }
+    const general = Object.values(s.generals)
+      .filter(
+        (g) =>
+          g.status === 'active' &&
+          g.locationId === cityId &&
+          !g.armyId &&
+          g.stamina >= cfg.stamina,
+      )
+      .sort((a, b) => batchKeyOf(b, cmd) - batchKeyOf(a, cmd))[0];
+    if (!general) {
+      skipped += 1;
+      continue;
+    }
+    const r = doDomestic(s, cityId, cmd, general.id, true);
+    if (r.ok) ok += 1;
+    else skipped += 1;
+  }
+
+  if (ok === 0) {
+    return fail(`一括${cfg.label}：没有可执行的城（政令 / 金钱 / 武将体力不足）`);
+  }
+  log(s, 'info', `一括${cfg.label}：${ok} 城执行，${skipped} 城跳过（政令 / 金钱 / 体力不足）`);
+  return done(`一括${cfg.label}：${ok} 城执行${skipped > 0 ? `，${skipped} 城跳过` : ''}`);
 }
 
 /**

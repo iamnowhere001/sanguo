@@ -6596,6 +6596,46 @@ input[type='number'] {
   font-size: 10px !important;
 }
 
+/* ── 全国小地图 ───────────────────────────────────────────── */
+/* 右下角常驻：地形总览 + 势力色城池 / 关港 / 部队 + 当前视野框，点击跳转 */
+.map-minimap {
+  position: absolute;
+  right: calc(var(--sp-3) + var(--hud-inset-r));
+  bottom: var(--sp-3);
+  z-index: 4;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(20, 18, 14, 0.88);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(6px);
+  transition: right 0.26s var(--ease-overlay);
+}
+.map-minimap-title {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  z-index: 1;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  color: rgba(246, 232, 196, 0.72);
+  pointer-events: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+.map-minimap-canvas {
+  display: block;
+  border-radius: 5px;
+  cursor: pointer;
+  touch-action: none;
+}
+/* 战斗画布顶部有行动顺序条：图例让位，小地图抬高避开操作提示 */
+.map-battle .map-legends {
+  display: none;
+}
+.map-battle .map-minimap {
+  bottom: 52px;
+}
+
 @media (max-width: 720px) {
   .map-zoom {
     top: var(--sp-2);
@@ -6604,6 +6644,15 @@ input[type='number'] {
   .map-zoom button {
     min-width: 30px;
     height: 30px;
+  }
+  .map-minimap {
+    right: var(--sp-2);
+    bottom: var(--sp-2);
+    transform: scale(0.82);
+    transform-origin: bottom right;
+  }
+  .map-battle .map-minimap {
+    bottom: 48px;
   }
   .game-grid {
     /* 手机上浮层接近满宽抽屉，展开即专注一侧 */
@@ -6723,3 +6772,194 @@ input[type='number'] {
 .cp-gates.locked {
   background: rgba(96, 32, 24, 0.22);
 }
+
+/* 委任开关：三11 都督制的入口，放在内政标题右侧 */
+.cp-delegate {
+  margin-left: auto;
+  padding: 2px 9px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--line2);
+  border-radius: 9px;
+  cursor: pointer;
+  transition: color .12s, border-color .12s, background .12s;
+  font-family: inherit;
+}
+.cp-delegate:hover {
+  color: var(--ink);
+  border-color: var(--gold);
+}
+.cp-delegate.on {
+  color: #1f1a12;
+  background: var(--gold);
+  border-color: var(--gold);
+  font-weight: 600;
+}
+
+/* 兵种适性 S/A/B/C：只在本行兵种旁显示一档，避免名册行过宽 */
+.roster-stat.apt {
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+.apt-S { color: #d4a23a; }
+.apt-A { color: #6f9b52; }
+.apt-B { color: var(--muted); }
+.apt-C { color: #b26a5c; }
+
+/* ── 出征器械选购 ─────────────────────────────────────────── */
+.db-weapons {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding-top: 4px;
+  border-top: 1px dashed rgba(214, 178, 96, 0.22);
+}
+.db-wlabel {
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  color: #a8956d;
+}
+.db-wchip {
+  padding: 2px 8px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #e4d6b7;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(214, 178, 96, 0.28);
+  border-radius: 10px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.db-wchip i {
+  font-style: normal;
+  margin-left: 3px;
+  font-size: 10px;
+  color: #a8956d;
+}
+.db-wchip:hover:not(:disabled) {
+  border-color: var(--gold);
+  color: #f6ecd4;
+}
+.db-wchip.is-on {
+  color: #1f1a12;
+  background: var(--gold);
+  border-color: var(--gold);
+  font-weight: 600;
+}
+.db-wchip.is-on i { color: #4c3d1c; }
+.db-wchip:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.db-wnote {
+  flex-basis: 100%;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: #c9a45e;
+}
+
+/* ── 旬报：非阻塞卡片，贴在左下角，不挡地图中央操作 ────────── */
+.xun-brief {
+  position: absolute;
+  left: calc(var(--sp-4) + var(--hud-inset-l));
+  bottom: calc(var(--sp-4) + 42px);
+  z-index: 3;
+  width: min(320px, calc(100vw - 32px));
+  padding: 8px 10px 9px;
+  background: linear-gradient(180deg, rgba(46, 37, 21, 0.95), rgba(26, 21, 13, 0.96));
+  border: 1px solid rgba(214, 178, 96, 0.42);
+  border-radius: 8px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  color: #ecdfc2;
+  font-size: 11.5px;
+  animation: march-banner-in 160ms ease-out;
+}
+.xb-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid rgba(214, 178, 96, 0.22);
+}
+.xb-head b {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: #e8c46e;
+}
+.xb-close {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  color: #a8956d;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.xb-close:hover { color: #f6ecd4; background: rgba(255, 255, 255, 0.06); }
+.xun-brief ul {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.xb-line {
+  display: flex;
+  gap: 7px;
+  line-height: 1.45;
+}
+.xb-line em {
+  flex: 0 0 28px;
+  font-style: normal;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  color: #a8956d;
+}
+.xb-line span { flex: 1; }
+.xb-warn span { color: #e8c46e; }
+.xb-danger span { color: #e9a48f; }
+.xb-good span { color: #8fc0a4; }
+
+/* ── 一括内政浮层 ─────────────────────────────────────────── */
+.tb-batch-pop {
+  right: calc(var(--panel-pad) + 88px);
+  width: min(248px, calc(100vw - 24px));
+}
+.tb-batch-foot {
+  padding: 6px 2px 2px;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+}
+
+/* ── 武将特技：名册与战棋单位卡 ───────────────────────────── */
+.roster-skill {
+  padding: 1px 7px;
+  font-size: 10.5px;
+  line-height: 1.6;
+  border-radius: 9px;
+  border: 1px solid var(--line2);
+  color: var(--gold);
+  background: rgba(214, 178, 96, 0.08);
+}
+.sk-cat-战 { color: #d9966b; border-color: rgba(217, 150, 107, 0.5); }
+.sk-cat-计 { color: #8fb0d9; border-color: rgba(143, 176, 217, 0.5); }
+.sk-cat-行 { color: #9cc08a; border-color: rgba(156, 192, 138, 0.5); }
+.sk-cat-政 { color: #cfa96c; border-color: rgba(207, 169, 108, 0.5); }
+.uc-skill {
+  color: #8fb0d9;
+  border-color: rgba(143, 176, 217, 0.45);
+}
+.army-hud-weapon { color: #e8c46e; }
+.army-hud-skill { color: #8fb0d9; }
+

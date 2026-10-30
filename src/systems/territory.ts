@@ -8,7 +8,7 @@ import type { TileKind } from '../render/terrainGrid';
  * 势力版图场（P0-1）。
  *
  * 语义采用「**道路可达**」：每格归属 = 从各城出发、按真实行军代价扩张时最先到达的势力。
- * 代价直接复用 `marchDaysForArmy`，因此版图边界与部队实际能走的路**同源**——
+ * 代价直接复用 `marchCostForArmy`，因此版图边界与部队实际能走的路**同源**——
  * 山脉是墙、江面是墙、只有关隘的山道与港口的摆渡是缺口，版图会自然地在那里收拢成一条细颈。
  *
  * 为什么不是 Voronoi：Voronoi 不考虑地形，会把城池的领地从秦岭上翻过去；
@@ -21,13 +21,13 @@ import type { TileKind } from '../render/terrainGrid';
 export const NO_OWNER = 0;
 
 /**
- * 版图专用地形代价（十分之一天，整数便于桶队列）。
+ * 版图专用地形代价（十分之一 MP，整数便于桶队列）。
  *
- * 与 `TILE_MARCH_DAYS` 的差异只有一条：**山地从 Infinity 放宽到 12 天**。
+ * 与 `TILE_MARCH_COST` 的差异只有一条：**山地从 Infinity 放宽到 12 MP**。
  * 原因是版图要"贴着山脚收边"——完全不可通行会在每条山脊内侧留下一圈
- * 突兀的空洞；12 天意味着山脉只能被啃进 2–3 格，翻不过去，但边缘是连续的。
+ * 突兀的空洞；12 MP 意味着山脉只能被啃进 2–3 格，翻不过去，但边缘是连续的。
  */
-const TERRITORY_DAYS: Record<TileKind, number> = {
+const TERRITORY_COST_MP: Record<TileKind, number> = {
   plain: 1,
   forest: 2,
   hill: 2,
@@ -39,11 +39,11 @@ const TERRITORY_DAYS: Record<TileKind, number> = {
   river: Number.POSITIVE_INFINITY,
 };
 
-/** 天 → 内部整数代价（×10；关隘的 +2.5 天也能落在整数上） */
-const DAY_SCALE = 10;
+/** MP → 内部整数代价（×10；关隘的 +2.5 MP 也能落在整数上） */
+const MP_SCALE = 10;
 
-/** 扩张上限（天）。超出即视为化外之地，不涂色 */
-export const TERRITORY_MAX_DAYS = 90;
+/** 扩张上限（MP）。超出即视为化外之地，不涂色 */
+const TERRITORY_MAX_MP = 90;
 
 const UNREACHED = 0xffff;
 
@@ -54,7 +54,7 @@ export interface TerritoryField {
   owner: Uint8Array;
   /** 势力 id，顺序固定（按 id 排序），保证同一份存档永远得到同一张图 */
   factionIds: string[];
-  /** 累计行军代价（×10 天），`UNREACHED` 表示未覆盖 */
+  /** 累计行军代价（×10 MP），`UNREACHED` 表示未覆盖 */
   cost: Uint16Array;
   /** 各势力领内格数 */
   area: Record<string, number>;
@@ -62,7 +62,7 @@ export interface TerritoryField {
   neutral: number;
 }
 
-/** 进入某格的版图代价（×10 天）；Infinity 表示版图不跨越 */
+/** 进入某格的版图代价（×10 MP）；Infinity 表示版图不跨越 */
 export function territoryEntryCost(col: number, row: number): number {
   const site = gateSiteAt(col, row);
   if (site) {
@@ -70,10 +70,10 @@ export function territoryEntryCost(col: number, row: number): number {
     // 版图因此也只会在真渡口处收成一条细颈，而不是顺着整条渡线铺过去。
     if (site.water) return Number.POSITIVE_INFINITY;
     const atCenter = col === site.center.col && row === site.center.row;
-    return Math.round((1 + (atCenter ? site.gate.extraDays : 0)) * DAY_SCALE);
+    return Math.round((1 + (atCenter ? site.gate.extraDays : 0)) * MP_SCALE);
   }
-  const days = TERRITORY_DAYS[tileKindAt(col, row)];
-  return Number.isFinite(days) ? days * DAY_SCALE : Number.POSITIVE_INFINITY;
+  const cost = TERRITORY_COST_MP[tileKindAt(col, row)];
+  return Number.isFinite(cost) ? cost * MP_SCALE : Number.POSITIVE_INFINITY;
 }
 
 /** 渡口跳跃边（下标 → 对岸滩头），版图扩张时和四邻一起松弛 */
@@ -89,7 +89,7 @@ function territoryFerries(): Map<number, { to: number; cost: number }> {
     const b = site.approaches[1]!;
     const ia = a.row * cols + a.col;
     const ib = b.row * cols + b.col;
-    const cost = site.crossDays * DAY_SCALE;
+    const cost = site.crossDays * MP_SCALE;
     out.set(ia, { to: ib, cost });
     out.set(ib, { to: ia, cost });
   }
@@ -129,7 +129,7 @@ export function resetTerritoryCaches(): void {
 /**
  * 多源 Dijkstra（桶队列）。
  *
- * 桶队列而非二叉堆：代价是小整数且上界已知（`TERRITORY_MAX_DAYS × 10`），
+ * 桶队列而非二叉堆：代价是小整数且上界已知（`TERRITORY_MAX_MP × 10`），
  * 每个桶只 push 一次，O(V+E) 且没有堆的常数开销。248,832 格实测在 20ms 量级。
  */
 export function computeTerritory(state: GameState): TerritoryField {
@@ -145,7 +145,7 @@ export function computeTerritory(state: GameState): TerritoryField {
   const area: Record<string, number> = {};
   for (const id of factionIds) area[id] = 0;
 
-  const maxCost = TERRITORY_MAX_DAYS * DAY_SCALE;
+  const maxCost = TERRITORY_MAX_MP * MP_SCALE;
   const buckets: number[][] = Array.from({ length: maxCost + 1 }, () => []);
   const lut = territoryCostLut();
 

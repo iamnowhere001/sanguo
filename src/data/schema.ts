@@ -114,7 +114,9 @@ const ScenarioSchema = z.object({
   cityOwners: z.record(z.string(), z.string().nullable()).optional(),
   rosters: z.record(z.string(), z.array(z.string())).optional(),
   placements: z.record(z.string(), z.string()).optional(),
-  edges: z.array(z.object({ a: z.string(), b: z.string(), cost: z.number().min(1) })),
+  edges: z.array(
+    z.object({ a: z.string(), b: z.string(), cost: z.number().min(1), wild: z.boolean().optional() }),
+  ),
 });
 
 export interface ScenarioTable {

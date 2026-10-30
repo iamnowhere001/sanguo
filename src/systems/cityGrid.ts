@@ -1,4 +1,4 @@
-import { marchDaysOfTile } from '../data/tables/marchCost';
+import { marchCostOfTile } from '../data/tables/marchCost';
 import type { Army, GameState, GridPoint } from '../core/state';
 import { isWaterKind } from '../render/terrainGrid';
 import {
@@ -69,7 +69,7 @@ export function gatesOf(s: GameState, cityId: string): GateInfo[] {
     const water = isWaterKind(tileKindAt(approach.col, approach.row));
     const sealed = block.sealed.includes(side);
     // 门外若是山岭 / 水域，陆军一样出不去：统一按「地形不可走」处理
-    const walkable = Number.isFinite(marchDaysOfTile(approach.col, approach.row));
+    const walkable = Number.isFinite(marchCostOfTile(approach.col, approach.row));
     const occupant = armyAtTile(s, approach.col, approach.row);
     // 自家部队站在门外不算堵门（那只是列阵），敌方部队才算
     const blockedBy =

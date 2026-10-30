@@ -26,8 +26,8 @@ export interface Layout {
 }
 
 export const MIN_ZOOM = 0.2;
-/** 100% = 州郡视角 */
-export const DEFAULT_ZOOM = 1;
+/** 300% = 城池与野战单位的默认作战视角 */
+export const DEFAULT_ZOOM = 3;
 export const MAX_ZOOM = 7.2;
 
 /**
@@ -42,7 +42,7 @@ export const MAX_ZOOM = 7.2;
  * 档位只能保证"构图稳定"，不能保证"一个源像素对整数个屏幕像素"。
  */
 export const ZOOM_STOPS: readonly number[] = [
-  0.2, 0.3, 0.45, 0.65, 0.85, 1, 1.25, 1.6, 2, 2.5, 3.2, 4, 5, 6, MAX_ZOOM,
+  0.2, 0.3, 0.45, 0.65, 0.85, 1, 1.25, 1.6, 2, 2.5, 3, 3.2, 4, 5, 6, MAX_ZOOM,
 ];
 
 const CAMERA_BASE = 5;
@@ -75,6 +75,44 @@ export function clampPan(view: MapView, w: number, h: number): MapView {
     x: clamp(view.x, -maxX, maxX),
     y: clamp(view.y, -maxY, maxY),
   };
+}
+
+/**
+ * 把世界坐标放到视口中心。
+ * 大地图战斗、点击小地图、以及「选中部队后跟随」共用这一套换算。
+ */
+export function centerOnWorld(
+  wx: number,
+  wy: number,
+  zoom: number,
+  w: number,
+  h: number,
+): MapView {
+  const layout = layoutOf(w, h);
+  const z = clamp(zoom, MIN_ZOOM, MAX_ZOOM);
+  const bx = layout.ox + wx * layout.scale;
+  const by = layout.oy + wy * layout.scale;
+  return clampPan(
+    {
+      zoom: z,
+      x: -(bx - w / 2) * z,
+      y: -(by - h / 2) * z,
+    },
+    w,
+    h,
+  );
+}
+
+/** 视口在世界坐标中的可见矩形（小地图画视野框用） */
+export function visibleWorldRect(
+  w: number,
+  h: number,
+  view: MapView,
+  layout: Layout,
+): { x: number; y: number; w: number; h: number } {
+  const a = screenToWorld(0, 0, w, h, view, layout);
+  const b = screenToWorld(w, h, w, h, view, layout);
+  return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
 }
 
 export function worldToScreen(

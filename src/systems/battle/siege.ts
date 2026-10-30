@@ -1,3 +1,5 @@
+import { BALANCE } from '../../data/tables/balance';
+import { skillSiegeMult } from '../../data/tables/generalTraits';
 import { assaultDurabilityDamage } from '../formulas';
 import type { BattleState } from '../../core/state';
 import { BATTLE_H, BATTLE_W, activeUnits, battleTerrainAt } from './grid';
@@ -44,9 +46,14 @@ export function assaultWalls(b: BattleState): number {
 
   let total = 0;
   for (const u of besiegers(b)) {
-    const dmg = assaultDurabilityDamage(u.troops, u.force);
-    if (dmg <= 0) continue;
-    total += dmg;
+    const base = assaultDurabilityDamage(u.troops, u.force);
+    if (base <= 0) continue;
+    // 三11 的攻城器械：带冲车才谈得上快速破门，裸兵只能慢慢磨
+    const mult = u.siegeWeapon
+      ? (BALANCE.DURABILITY.siegeWeaponMult[u.siegeWeapon] ?? 1)
+      : 1;
+    // 【特技】攻城 +25%：与器械相乘，专门放大「带器械 + 攻城将」的组合
+    total += Math.round(base * mult * skillSiegeMult(u.skill));
   }
   if (total <= 0) return 0;
 

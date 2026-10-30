@@ -87,7 +87,7 @@ export const BALANCE = {
     },
     /** 对岸配对的港口，两处锚点经纬度距离下限：低于此值视作“同格渡线” */
     PAIR_MIN_OFFSET: 0.25,
-    /** 小路绕关的额外行军天数区间（不可驻守，故无工事与守军） */
+    /** 小路绕关的额外行军 MP 区间（不可驻守，故无工事与守军） */
     TRAIL_EXTRA_DAYS: [4, 7] as [number, number],
   },
 
@@ -103,11 +103,35 @@ export const BALANCE = {
     wallLandmarkBonus: 260,
     /** 每月修复：上限 × 该比例 */
     repairPerMonth: 0.12,
-    /** 攻城磨损：每兵每日 = assaultPerTroop × (1 + 武力 / forceDivisor) */
-    assaultPerTroop: 0.12,
+    /**
+     * 攻城磨损：每兵每回合 = assaultPerTroop × (1 + 武力 / forceDivisor)。
+     *
+     * 【口径】「回合」= 战斗内 1 日，不是大地图的「旬」。
+     *
+     * 【推导】见 docs/核心数值口径审核与修改方案-v2.md §5.2：
+     * 许昌（都城，城防 80）耐久上限 1200 + 80×6 = 1,680，开局按 80% 起算 = 1,344。
+     * 目标「2,000 兵裸攻都城 2–3 旬（20–30 日）」→ 需 56–84/日 → 每兵 0.020–0.030。
+     * 取 0.025：2,000 兵 × 武力 80 → 70/日 → 开局 1,344 ÷ 70 ≈ 19 日（1.9 旬）。
+     *
+     * 【旧值】0.12 会让同一支部队 4 日破都城，30 回合上限形同虚设。
+     * 【配套】兵器部队按 SIEGE_WEAPON_MULT 乘算，冲车 ×4 才能五天破门。
+     */
+    assaultPerTroop: 0.025,
     forceDivisor: 200,
     /** 城池易主后残留的耐久比例 */
     capturedReset: 0.3,
+    /**
+     * 兵器部队对耐久的伤害倍率（三11：冲车破门、井阑/投石压制）。
+     * 无兵器 = 1。数值待 playtest 校准，先给一个能形成「带不带兵器差 4 倍」的档位。
+     */
+    siegeWeaponMult: {
+      ram: 4,
+      tower: 3,
+      catapult: 3,
+      beast: 2,
+    } as Record<string, number>,
+    /** 兵器部队对守军的伤害折减：攻城器械不是用来打人的 */
+    siegeWeaponVsTroops: 0.5,
   },
 
   // ── 驻军与行军 【新增】兵力池 / 每月行军次数 ──────────────
@@ -249,6 +273,32 @@ export const BALANCE = {
     flood: { share: 0.45, label: '水灾', foodLoss: 0.25, popLoss: 0.08, loyaltyLoss: 6 },
   },
 
+  // ── 部队气力 【新增】三11 的士气线 ─────────────────────────
+  /**
+   * 部队气力 0–100。与武将 `stamina`（体力，战法消耗）是两套资源：
+   * 气力归部队，随伤亡 / 断粮 / 连续作战下降，归零溃散。
+   *
+   * 【区分】`stamina` 管「这个将能不能放计策」，`morale` 管「这支部队还愿不愿意打」。
+   */
+  MORALE: {
+    max: 100,
+    /** 初始气力 */
+    start: 100,
+    /** 每回合每损失 10% 兵力扣的气力 */
+    lossPer10PctTroops: 6,
+    /** 每回合自然恢复（在己方城 / 有军乐台时翻倍） */
+    regenPerTurn: 2,
+    /** 气力对伤害的乘数区间：0 → ×0.7，100 → ×1.1 */
+    damageMin: 0.7,
+    damageMax: 1.1,
+    /** 低于此值每回合有溃散判定 */
+    routThreshold: 20,
+    /** 溃散判定概率 = (threshold - morale) / 100 */
+    routChanceDivisor: 100,
+    /** 歼灭战胜利后攻方气力加成 */
+    winBonus: 8,
+  },
+
   // ── 武将 【GDD】4.4 / 【裁决】经验曲线 ─────────────────────
   STAMINA_MAX: 100,
   STAMINA_MONTHLY: 20,
@@ -263,6 +313,13 @@ export const BALANCE = {
   // ── 战斗 【GDD】4.8 / 【优化】03 公式 v2 ───────────────────
   DAMAGE_BASE_RATE: 0.1,
   DAMAGE_RNG: [0.9, 1.1] as [number, number],
+  /**
+   * 克制类乘数上限：相性 × 地形 × 适性 三者相乘后夹到 2.0。
+   *
+   * 三件套各自最大 1.25 / 1.5 / 1.12，理论可到 2.1，实际常见 1.3–1.7。
+   * 设上限是为了让「武力/兵力」这类主项继续主导战果，而不是被地形叠乘吃掉。
+   */
+  MULT_CAP: 2.0,
   /** 武力系数钳制：clamp(1 + 武力差/200, 0.60, 1.60) */
   FORCE_COEF: { base: 1, slope: 200, min: 0.6, max: 1.6 },
   /** 守方兵力项：0.85 + 0.30 × 守/攻，限幅 0.85–1.15 */
@@ -313,7 +370,7 @@ export const BALANCE = {
   CAPTURE_RATE_SUBORDINATE: 0.3,
 
   // ── 兵种代价 【优化】E07 / E08 ─────────────────────────────
-  /** 极兵：每战 1 次突击（1.5× 伤害 + 混乱 1 天） */
+  /** 极兵：每战 1 次突击（1.5× 伤害 + 混乱 1 回合） */
   ELITE_CHARGE: { mult: 1.5, stunDays: 1, perBattle: 1 },
   /** 玄兵：普攻 ×0.6、体力消耗 ×1.5 */
   MYSTIC: { attackMult: 0.6, staminaMult: 1.5 },

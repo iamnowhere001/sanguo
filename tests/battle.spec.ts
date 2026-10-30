@@ -209,6 +209,8 @@ describe('伤害与战棋规则', () => {
     d.x = 7;
     d.y = 3;
     d.unitClass = 'mystic';
+    // 本用例只测兵种倍率：关掉适性，否则同一份 aptitude 会随 unitClass 变档
+    a.aptitude = undefined;
     a.unitClass = 'infantry';
     const normal = computeDamage(b, a, d, 1);
     a.unitClass = 'mystic';

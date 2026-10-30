@@ -168,9 +168,9 @@ function hoverInfo(
     const title = `${u.name} · ${UNIT_CLASS_LABEL[u.unitClass]}`;
     if (u.side === b.playerSide) {
       const stateText = u.stunned > 0
-        ? `混乱 ${u.stunned} 天`
+        ? `混乱 ${u.stunned} 回合`
         : u.hasActed
-          ? '本日已行动'
+          ? '本回合已行动'
           : u.hasMoved
             ? '已移动 · 可攻击或待机'
             : '待命';

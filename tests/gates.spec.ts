@@ -7,7 +7,7 @@ import type { Army, GameState } from '../src/core/state';
 import { ferryBetween, gateAtCenter, gateSiteById, isGateLane } from '../src/render/gateGrid';
 import { routeForArmy } from '../src/systems/army';
 import { isWaterKind, tileKindAt, wallTileAt } from '../src/render/terrainGrid';
-import { marchDaysForArmy, marchStepDays } from '../src/data/tables/marchCost';
+import { marchCostForArmy, marchStepCost } from '../src/data/tables/marchCost';
 import {
   armyAtGate,
   assaultGate,
@@ -68,7 +68,7 @@ describe('关防 · 地图落位', () => {
       for (const p of site!.lane) {
         expect(isGateLane(p.col, p.row), `${gate.id} 通行线断格`).toBe(true);
         // 陆地关隘的山道可以逐格走；港口渡线是水面，一格都不能站
-        const walkable = Number.isFinite(marchDaysForArmy(p.col, p.row));
+        const walkable = Number.isFinite(marchCostForArmy(p.col, p.row));
         expect(walkable, `${gate.id} 通行线可通行性与地形不符`).toBe(!site!.water);
         if (prev) {
           // 行军是 4 邻接：纯斜线在规则层走不通
@@ -97,7 +97,7 @@ describe('关防 · 地图落位', () => {
       expect(site.lane.some((p) => isWaterKind(tileKindAt(p.col, p.row)))).toBe(true);
       // 渡线上的水面一格都不能站
       for (const p of site.lane) {
-        expect(Number.isFinite(marchDaysForArmy(p.col, p.row)), `${gate.name} 水面可站`).toBe(false);
+        expect(Number.isFinite(marchCostForArmy(p.col, p.row)), `${gate.name} 水面可站`).toBe(false);
       }
       // 但两岸滩头之间必须能一次摆渡过去
       expect(site.approaches).toHaveLength(2);
@@ -105,7 +105,7 @@ describe('关防 · 地图落位', () => {
       const b = site.approaches[1]!;
       expect(ferryBetween(a, b)?.gate.id, `${gate.name} 缺少摆渡边`).toBe(gate.id);
       expect(ferryBetween(b, a)?.gate.id, `${gate.name} 摆渡边不是双向`).toBe(gate.id);
-      expect(marchStepDays(a, b), `${gate.name} 渡河天数没走摆渡口径`).toBe(site.crossDays);
+      expect(marchStepCost(a, b), `${gate.name} 渡河天数没走摆渡口径`).toBe(site.crossDays);
     }
   });
 

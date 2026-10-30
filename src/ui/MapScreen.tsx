@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BALANCE } from '../data/tables/balance';
 import { difficultyOf } from '../data/tables/difficulty';
-import type { GameState, GridPoint } from '../core/state';
+import type { DomesticCmd, GameState, GridPoint, SiegeWeaponId } from '../core/state';
 import { gameStore, useGameStore } from '../store/gameStore';
 import { MapCanvas } from '../render/MapCanvas';
 import { audio } from '../audio';
@@ -24,6 +24,7 @@ import {
   armyMaxMp,
   dispatchField,
   dispatchReachOf,
+  pickSortieGenerals,
   openGateCount,
   plainDestLabel,
   planDispatch,
@@ -41,8 +42,12 @@ import {
   gateSummary,
 } from '../systems/gates';
 import { GATE_KIND_LABEL } from '../data/tables/gates';
+import { SIEGE_WEAPONS } from '../data/tables/siegeWeapons';
+import { skillNameOf } from '../data/tables/generalTraits';
 
 const XUN_LABEL = ['上旬', '中旬', '下旬'];
+/** 一括菜单顺序与城池面板一致：先内政，后军务 */
+const BATCH_CMDS: DomesticCmd[] = ['reclaim', 'commerce', 'patrol', 'govern', 'drill'];
 
 /**
  * 浮层侧栏的初始折叠状态。
@@ -95,6 +100,8 @@ export function MapScreen() {
     null,
   );
   const [dispatchHover, setDispatchHover] = useState<GridPoint | null>(null);
+  /** 出征时选购的器械：只对这一次出征生效，关闭派遣条即清空 */
+  const [dispatchSiege, setDispatchSiege] = useState<SiegeWeaponId | undefined>(undefined);
   const [selectedArmyId, setSelectedArmyId] = useState<string | null>(null);
   const [selectedGateId, setSelectedGateId] = useState<string | null>(null);
   const [saveOpen, setSaveOpen] = useState(false);
@@ -108,6 +115,8 @@ export function MapScreen() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [councilOpen, setCouncilOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  /** 一括内政浮层：全城统一下达同类命令 */
+  const [batchOpen, setBatchOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -151,12 +160,17 @@ export function MapScreen() {
     [attackRoutes],
   );
 
-  /** 派遣模式的行军场：进入模式算一次，hover 只做路径回溯 */
-  const dispatchDf = useMemo(
-    () =>
-      dispatch ? dispatchField(state, state.playerFactionId, dispatch.fromCityId) : null,
-    [state, dispatch],
-  );
+  /**
+   * 派遣模式的行军场：进入模式算一次，hover 只做路径回溯。
+   *
+   * 兵种取「该城当前会被派出」的主将（`pickSortieGenerals` 与 `sortieArmy` 同源），
+   * 否则水军出征会按陆军的不可通行图算出一条绕远路的路线。
+   */
+  const dispatchDf = useMemo(() => {
+    if (!dispatch) return null;
+    const mainClass = pickSortieGenerals(state, dispatch.fromCityId)[0]?.unitClass;
+    return dispatchField(state, state.playerFactionId, dispatch.fromCityId, mainClass);
+  }, [state, dispatch]);
 
   /** 两档可达范围：本旬实色，后续只画虚线边界 */
   const dispatchReach = useMemo(
@@ -180,6 +194,7 @@ export function MapScreen() {
       dispatch.fromCityId,
       resolved.target,
       dispatchDf.field,
+      dispatchDf.unitClass,
     );
     if (!plan) return { plan: null, reason: '此处没有可用的行军路线' };
     return { plan };
@@ -302,6 +317,7 @@ export function MapScreen() {
   const openDispatch = (cityId: string) => {
     setDispatch({ fromCityId: cityId, dest: null });
     setDispatchHover(null);
+    setDispatchSiege(undefined);
     setSelectedArmyId(null);
     setSelectedGateId(null);
     setSelectedCityId(cityId);
@@ -310,6 +326,7 @@ export function MapScreen() {
   const closeDispatch = () => {
     setDispatch(null);
     setDispatchHover(null);
+    setDispatchSiege(undefined);
   };
 
   /** 确认出征：目的地已在 `dispatchView.plan` 里算好，这里只负责下单 */
@@ -320,7 +337,12 @@ export function MapScreen() {
       gameStore.notify(dispatchView?.reason ?? '先在地图上选一个目的地', 'warn');
       return;
     }
-    const res = store.dispatch({ t: 'SORTIE', fromCityId: dispatch.fromCityId, dest: plan.dest });
+    const res = store.dispatch({
+      t: 'SORTIE',
+      fromCityId: dispatch.fromCityId,
+      dest: plan.dest,
+      siegeWeapon: dispatchSiege,
+    });
     if (!res.ok) {
       gameStore.notify(res.message, 'warn');
       return;
@@ -493,6 +515,14 @@ export function MapScreen() {
             </button>
           </div>
           <span className="tb-sep" />
+          <button
+            className="btn sm tb-batch"
+            aria-expanded={batchOpen}
+            onClick={() => setBatchOpen((v) => !v)}
+            title="对所有己方城池统一下达同类内政（按政令余额自动截断）"
+          >
+            一括
+          </button>
           {modern && councilBrief ? (
             <button
               className="btn accent sm tb-council"
@@ -515,6 +545,35 @@ export function MapScreen() {
             更多
           </button>
         </div>
+
+        {batchOpen ? (
+          <>
+            <div className="tb-more-scrim" onClick={() => setBatchOpen(false)} />
+            <div className="tb-more-pop tb-batch-pop" role="menu" aria-label="一括指令">
+              <div className="tb-more-meta">
+                <span>一括内政</span>
+                <em>每城自动择将，按政令余额截断</em>
+              </div>
+              {BATCH_CMDS.map((cmd) => (
+                <button
+                  role="menuitem"
+                  key={cmd}
+                  onClick={() => {
+                    setBatchOpen(false);
+                    const res = store.dispatch({ t: 'BATCH_DOMESTIC', cmd });
+                    gameStore.notify(res.message, res.ok ? 'good' : 'warn');
+                  }}
+                >
+                  {BALANCE.DOMESTIC[cmd].label}
+                  <b>{BALANCE.DOMESTIC[cmd].gold} 金 / 城</b>
+                </button>
+              ))}
+              <div className="tb-batch-foot">
+                跳过城不中断：政令、金币或武将体力不足的城会被自动略过。
+              </div>
+            </div>
+          </>
+        ) : null}
 
         {moreOpen ? (
           <>
@@ -818,6 +877,16 @@ export function MapScreen() {
               ) : (
                 <span className="army-hud-meta">待命</span>
               )}
+              {selectedArmy.siegeWeapon ? (
+                <span className="army-hud-meta army-hud-weapon">
+                  器械 {SIEGE_WEAPONS[selectedArmy.siegeWeapon]?.name}
+                </span>
+              ) : null}
+              {skillNameOf(selectedArmy.skill) ? (
+                <span className="army-hud-meta army-hud-skill">
+                  特技 {skillNameOf(selectedArmy.skill)}
+                </span>
+              ) : null}
               {armySiegeCityId ? (
                 <button
                   type="button"
@@ -839,9 +908,37 @@ export function MapScreen() {
               plan={dispatchView?.plan ?? null}
               reason={dispatchView?.reason}
               df={dispatchDf}
+              siegeWeapon={dispatchSiege}
+              onSiegeChange={setDispatchSiege}
               onCancel={closeDispatch}
               onConfirm={confirmDispatch}
             />
+          ) : null}
+          {state.xunBrief && state.phase === 'map' && !state.report && !state.battle ? (
+            <div className="xun-brief" role="status" aria-label="旬报">
+              <div className="xb-head">
+                <b>
+                  旬报 · {state.xunBrief.year} 年 {state.xunBrief.month} 月{' '}
+                  {XUN_LABEL[(state.xunBrief.xun ?? 1) - 1]}
+                </b>
+                <button
+                  type="button"
+                  className="xb-close"
+                  title="关闭旬报（不推进时间）"
+                  onClick={() => store.dispatch({ t: 'DISMISS_XUN_BRIEF' })}
+                >
+                  ×
+                </button>
+              </div>
+              <ul>
+                {state.xunBrief.lines.map((line) => (
+                  <li key={line.label} className={`xb-line xb-${line.tone}`}>
+                    <em>{line.label}</em>
+                    <span>{line.text}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           ) : null}
           <div
             className={`map-hint${

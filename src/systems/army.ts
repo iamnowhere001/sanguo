@@ -1,8 +1,10 @@
 import { BALANCE } from '../data/tables/balance';
 import { MAP } from '../data/tables/geography';
-import { inMap, marchDaysForArmy, marchDaysOfTile, marchStepDays, TILE_MARCH_DAYS } from '../data/tables/marchCost';
-import type { Army, GameState, General, GridPoint } from '../core/state';
+import { inMap, marchCostForArmy, marchCostOfTile, marchStepCost } from '../data/tables/marchCost';
+import type { Army, GameState, General, GridPoint, GeneralSkillId, SiegeWeaponId, UnitClass } from '../core/state';
 import { defendersOf } from '../core/state';
+import { generalSkillOf, skillMarchMpBonus } from '../data/tables/generalTraits';
+import { SIEGE_WEAPONS } from '../data/tables/siegeWeapons';
 import { done, fail, type OpResult } from '../core/result';
 import { canAttackFactions } from './factionDiplomacy';
 import { createBattle } from './battle/setup';
@@ -38,24 +40,47 @@ import {
  *
  * 与 M 档的区别有三处，都在这一个文件里：
  *
- * 1. **手动逐格移动**：每支部队每旬有 `MARCH_DAYS_PER_XUN` 天移动力，
+ * 1. **手动逐格移动**：每支部队每旬有 `MARCH_MP_BY_CLASS` 点移动力（MP），
  *    玩家点一格走一格；点到远处则留下一张「行军令」，每旬自动续走。
  * 2. **城墙不可穿越**：城池占 3×3，只有城主自己的部队能进城；
  *    敌军只能停在门外（门外格 = 围城位）。
  * 3. **围城而不是自动开战**：站在敌城门外只是围住，攻城要单独下令；
  *    四门全被堵死时，城内守军出不来（见 `cityGrid.sortieBlocked`）。
  *
- * 地形代价仍是硬约束：山岭 / 水域不可通行，平原 1 天、林地丘陵 2 天、沼泽 3 天。
+ * 地形代价仍是硬约束：山岭 / 水域对陆军不可通行，平原 1 MP、林地丘陵 2 MP、沼泽 3 MP。
+ * 水军例外：江 / 湖 / 海按 `NAVY_WATER_COST` 可直接航行（三11 的水路即战略通道）。
  */
 
-/** 每旬移动力（天）。地形按天计费，所以这等于「平原最多走 10 格」 */
-export const MARCH_DAYS_PER_XUN = 10;
+/**
+ * 每旬移动力基线（MP）。地形按 MP 计费，所以这等于「平原最多走 10 格」。
+ *
+ * 兵种分档见 `MARCH_MP_BY_CLASS`，本常量只作为缺省值与 UI 折算基数。
+ */
+export const MARCH_MP_PER_XUN = 10;
 
-export { TILE_MARCH_DAYS, marchDaysOfTile };
+/**
+ * 兵种每旬移动力（MP）。比例参照三11：枪/戟/弩 5、骑 7、兵器 4。
+ * 极兵等同骑兵，玄兵等同兵器。
+ */
+export const MARCH_MP_BY_CLASS: Record<UnitClass, number> = {
+  infantry: 10,
+  archer: 10,
+  navy: 10,
+  cavalry: 14,
+  elite: 14,
+  mystic: 8,
+};
 
-export function isMarchable(col: number, row: number): boolean {
+/** 水军在水面航行时的每旬移动力由 `MARCH_MP_BY_CLASS.navy` 统一给出，不再单列常量 */
+
+/** 部队兵种：主将兵种即部队兵种（三11 同制）；旧档缺省按步兵 */
+export function armyClassOf(army: Army): UnitClass {
+  return army.unitClass ?? 'infantry';
+}
+
+export function isMarchable(col: number, row: number, unitClass?: UnitClass): boolean {
   return (
-    Number.isFinite(marchDaysOfTile(col, row)) &&
+    Number.isFinite(marchCostOfTile(col, row, unitClass)) &&
     col >= 0 &&
     row >= 0 &&
     col < MAP.cols &&
@@ -66,9 +91,17 @@ export function isMarchable(col: number, row: number): boolean {
 const keyOf = (col: number, row: number) => `${col},${row}`;
 
 // ── 移动力 ─────────────────────────────────────────────────
-/** 部队本旬移动力上限 */
+/**
+ * 部队本旬移动力上限（MP）。
+ *
+ * `speed` 只承载烽燧 / 士气这类**临时倍率**，兵种差异走 `MARCH_MP_BY_CLASS`。
+ * 两者分工，避免烽燧与兵种档各乘一次、叠成 1.5 倍兵种差。
+ */
 export function armyMaxMp(army: Army): number {
-  return Math.round(MARCH_DAYS_PER_XUN * (army.speed ?? 1));
+  return Math.round(
+    (MARCH_MP_BY_CLASS[armyClassOf(army)] + skillMarchMpBonus(army.skill)) *
+      (army.speed ?? 1),
+  );
 }
 
 /** 部队本旬剩余移动力（旧存档缺省视为满额） */
@@ -175,7 +208,7 @@ export interface MarchField {
 interface MarchGrid {
   cols: number;
   rows: number;
-  /** 进入该格的天数；Infinity = 不可通行（关防通行线已覆盖地形） */
+  /** 进入该格要扣的 MP；Infinity = 该兵种不可通行（关防通行线已覆盖地形） */
   cost: Float64Array;
   /** 关防序号（1 起）；0 = 普通格 */
   gateIndex: Int16Array;
@@ -189,16 +222,23 @@ interface MarchGrid {
   cityIds: string[];
 }
 
-let marchGridCache: MarchGrid | null = null;
+/**
+ * 缓存键只分两类：陆军（含一切不能下水的兵种）与水军。
+ * 576×432 的 Float64Array 约 2 MB，两张图常驻可接受。
+ */
+type MarchGridKey = 'land' | 'navy';
+const marchGridCache = new Map<MarchGridKey, MarchGrid>();
 
-function marchGrid(): MarchGrid {
-  if (marchGridCache) return marchGridCache;
+function marchGrid(unitClass?: UnitClass): MarchGrid {
+  const key: MarchGridKey = unitClass === 'navy' ? 'navy' : 'land';
+  const cached = marchGridCache.get(key);
+  if (cached) return cached;
   const { cols, rows } = MAP;
   const N = cols * rows;
   const cost = new Float64Array(N);
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
-      cost[row * cols + col] = TILE_MARCH_DAYS[tileKindAt(col, row)] ?? Infinity;
+      cost[row * cols + col] = marchCostOfTile(col, row, unitClass);
     }
   }
 
@@ -247,8 +287,11 @@ function marchGrid(): MarchGrid {
     }
   }
 
-  marchGridCache = { cols, rows, cost, gateIndex, gateIds, hops, wallCity, wallCorner, cityIds };
-  return marchGridCache;
+  const grid: MarchGrid = {
+    cols, rows, cost, gateIndex, gateIds, hops, wallCity, wallCorner, cityIds,
+  };
+  marchGridCache.set(key, grid);
+  return grid;
 }
 
 /**
@@ -267,6 +310,7 @@ function marchField(
   start: GridPoint,
   extraBlocked?: Set<number>,
   goals?: GridPoint[],
+  unitClass?: UnitClass,
 ): MarchField {
   const { cols, rows } = MAP;
   const N = cols * rows;
@@ -285,7 +329,7 @@ function marchField(
     }
   }
 
-  const grid = marchGrid();
+  const grid = marchGrid(unitClass);
   const heap = new TileHeap();
   heap.push(startIndex, 0);
   const dirs = [
@@ -470,7 +514,7 @@ export function resolveDispatchDest(
     }
     return { ok: true, target: { kind: 'city', cityId: city.id } };
   }
-  if (!Number.isFinite(marchDaysForArmy(tile.col, tile.row))) {
+  if (!Number.isFinite(marchCostForArmy(tile.col, tile.row))) {
     return { ok: false, reason: impassableReason(tile.col, tile.row) };
   }
   const occupant = armyAtTile(s, tile.col, tile.row);
@@ -483,7 +527,7 @@ export function resolveDispatchDest(
   return { ok: true, target: { kind: 'tile', tile: { col: tile.col, row: tile.row } } };
 }
 
-/** 一次出征的完整方案：出哪个门、走哪条路、几天到、到了算什么 */
+/** 一次出征的完整方案：出哪个门、走哪条路、需要多少 MP、到了算什么 */
 export interface DispatchPlan {
   /** 目的地格（城郭已吸附到门外格） */
   dest: GridPoint;
@@ -491,7 +535,7 @@ export interface DispatchPlan {
   exit: GridPoint;
   /** 从 exit 之后开始，最后一项是 dest；一定非空 */
   path: GridPoint[];
-  /** exit → dest 的天数 */
+  /** exit → dest 的 MP 消耗 */
   days: number;
   /** 目的地贴着敌城门外格：抵达即可围城，攻城仍需另下指令 */
   siegeCityId: string | null;
@@ -499,7 +543,7 @@ export interface DispatchPlan {
   homeCityId: string | null;
   fortificationBonus: number;
   waterCrossing: boolean;
-  /** 途经的渡口（过江时才非空），供确认条写明「经夏口渡过河 8 日」 */
+  /** 途经的渡口（过江时才非空），供确认条写明「经夏口渡过河 8 MP」 */
   ferry: { name: string; days: number } | null;
   gate: GateSide | null;
 }
@@ -518,6 +562,8 @@ export function planDispatch(
   target: DispatchTarget,
   /** 复用 `dispatchField` 算好的场，省掉 hover 时的重复全图 Dijkstra */
   cached?: MarchField,
+  /** 出兵兵种（主将兵种）；水军会走水路 */
+  unitClass: UnitClass = 'infantry',
 ): DispatchPlan | null {
   if (s.cities[fromCityId]?.ownerId !== factionId) return null;
   const fromBlock = blockOf(fromCityId);
@@ -550,6 +596,7 @@ export function planDispatch(
       { col: fromBlock.col, row: fromBlock.row },
       blockedExitKeys(s, fromCityId),
       goals,
+      unitClass,
     );
 
   let best: { goal: GridPoint; days: number } | null = null;
@@ -675,13 +722,13 @@ export function reachableTargets(
 }
 
 // ── 移动力与行军 ────────────────────────────────────────────
-/** 剩余路程（天）：含当前这一步已走的零头 */
+/** 剩余路程（MP）：含当前这一步已走的零头 */
 export function armyDaysRemaining(_s: GameState, army: Army): number {
   let prev: GridPoint | null = army.at;
   let total = 0;
   for (let i = 0; i < army.path.length; i++) {
     const p = army.path[i]!;
-    const cost = marchStepDays(prev, p);
+    const cost = marchStepCost(prev, p);
     total += i === 0 ? Math.max(0, cost - army.legDays) : cost;
     prev = p;
   }
@@ -700,15 +747,15 @@ export function armyWorldPos(_s: GameState, army: Army): { x: number; y: number 
   if (!next) return from;
   // 摆渡未完成前停在滩头：部队不下水，只有付清船程才整体移到对岸
   if (ferryBetween(army.at, next)) return from;
-  const cost = marchStepDays(army.at, next);
+  const cost = marchStepCost(army.at, next);
   const t = Number.isFinite(cost) && cost > 0 ? Math.min(1, Math.max(0, army.legDays / cost)) : 1;
   const to = tileCenter(next.col, next.row);
   return { x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t };
 }
 
 /**
- * 沿 `path` 走，最多消耗 `budget` 天。
- * 返回实际消耗的天数；同时维护 `legDays`（跨旬的半步进度）与 `fromCityId`。
+ * 沿 `path` 走，最多消耗 `budget` MP。
+ * 返回实际消耗的 MP；同时维护 `legDays`（跨旬的半步进度）与 `fromCityId`。
  */
 function advanceAlongPath(s: GameState, army: Army, budget: number): number {
   let left = budget;
@@ -720,7 +767,7 @@ function advanceAlongPath(s: GameState, army: Army, budget: number): number {
     if (ferry && gateBlockedFor(s, ferry.gate.id, army.factionId)) break;
     const site = ferry ? null : gateSiteAt(next.col, next.row);
     if (site && gateBlockedFor(s, site.gate.id, army.factionId)) break;
-    const cost = marchStepDays(army.at, next);
+    const cost = marchStepCost(army.at, next);
     if (!Number.isFinite(cost)) break;
     // 前路被占 / 被城墙挡住：原地待命，等下一旬重新下令（不硬穿）
     const wall = wallTileAt(next.col, next.row);
@@ -742,7 +789,7 @@ function advanceAlongPath(s: GameState, army: Army, budget: number): number {
       log(
         s,
         'info',
-        `${s.factions[army.factionId]?.name ?? army.factionId} 军自 ${ferry.gate.name} 摆渡过江，${ferry.crossDays} 日登岸`,
+        `${s.factions[army.factionId]?.name ?? army.factionId} 军自 ${ferry.gate.name} 摆渡过江，${ferry.crossDays} MP 登岸`,
         army.factionId === s.playerFactionId ? undefined : 'ai',
       );
     }
@@ -778,9 +825,9 @@ function ownCityUnderArmy(s: GameState, army: Army): string | null {
 export interface MoveOutcome {
   ok: boolean;
   message: string;
-  /** 本次实际行军天数 */
+  /** 本次实际消耗的 MP */
   days: number;
-  /** 剩余路程（天） */
+  /** 剩余路程（MP） */
   remaining: number;
   /** 抵达终点 */
   arrived: boolean;
@@ -795,7 +842,7 @@ export interface MoveOutcome {
 export function moveArmyTo(s: GameState, armyId: string, to: GridPoint): MoveOutcome {
   const army = (s.armies ?? []).find((a) => a.id === armyId);
   if (!army) return { ok: false, message: '部队不存在', days: 0, remaining: 0, arrived: false };
-  if (!Number.isFinite(marchDaysForArmy(to.col, to.row))) {
+  if (!Number.isFinite(marchCostForArmy(to.col, to.row))) {
     return {
       ok: false,
       message: impassableReason(to.col, to.row),
@@ -820,7 +867,7 @@ export function moveArmyTo(s: GameState, armyId: string, to: GridPoint): MoveOut
   }
 
   // 从当前位置出发重新寻路：已走的路线一律作废，避免指令堆积
-  const field = marchField(s, army.factionId, army.at, undefined, [to]);
+  const field = marchField(s, army.factionId, army.at, undefined, [to], armyClassOf(army));
   const path = tracePath(field, to);
   if (!path) {
     return { ok: false, message: '没有可用的行军路线', days: 0, remaining: 0, arrived: false };
@@ -882,12 +929,12 @@ export function moveArmyTo(s: GameState, armyId: string, to: GridPoint): MoveOut
  * （576×432 = 24.8 万格），近景拖动会明显掉帧。
  */
 export function armyFieldOf(s: GameState, army: Army): MarchField {
-  return marchField(s, army.factionId, army.at);
+  return marchField(s, army.factionId, army.at, undefined, undefined, armyClassOf(army));
 }
 
 /** 部队本旬还能走到的格子（移动力高亮用） */
 export function armyReach(s: GameState, army: Army, cached?: MarchField): Map<string, number> {
-  const field = cached ?? marchField(s, army.factionId, army.at);
+  const field = cached ?? marchField(s, army.factionId, army.at, undefined, undefined, armyClassOf(army));
   const budget = armyMp(army);
   const out = new Map<string, number>();
   for (let row = 0; row < MAP.rows; row++) {
@@ -908,7 +955,7 @@ export function armyPreviewPath(
   to: GridPoint,
   cached?: MarchField,
 ): GridPoint[] {
-  const field = cached ?? marchField(s, army.factionId, army.at, undefined, [to]);
+  const field = cached ?? marchField(s, army.factionId, army.at, undefined, [to], armyClassOf(army));
   return tracePath(field, to) ?? [];
 }
 
@@ -921,15 +968,18 @@ export function armyPreviewPath(
  */
 export interface DispatchField {
   field: MarchField;
-  /** 本旬移动力（天），按出发城烽燧加成算 */
+  /** 本旬移动力（MP），按兵种分档 × 出发城烽燧加成 */
   mp: number;
   speed: number;
+  /** 本场按哪种兵种算路；水军会走水路 */
+  unitClass: UnitClass;
 }
 
 export function dispatchField(
   s: GameState,
   factionId: string,
   fromCityId: string,
+  unitClass: UnitClass = 'infantry',
 ): DispatchField | null {
   if (s.cities[fromCityId]?.ownerId !== factionId) return null;
   const fromBlock = blockOf(fromCityId);
@@ -941,9 +991,12 @@ export function dispatchField(
       factionId,
       { col: fromBlock.col, row: fromBlock.row },
       blockedExitKeys(s, fromCityId),
+      undefined,
+      unitClass,
     ),
-    mp: Math.round(MARCH_DAYS_PER_XUN * speed),
+    mp: Math.round(MARCH_MP_BY_CLASS[unitClass] * speed),
     speed,
+    unitClass,
   };
 }
 
@@ -1010,7 +1063,7 @@ export function firstLegEndOf(plan: DispatchPlan, mp: number): GridPoint | null 
   let last: GridPoint | null = null;
   let prev: GridPoint = plan.exit;
   for (const p of plan.path) {
-    const cost = marchStepDays(prev, p);
+    const cost = marchStepCost(prev, p);
     if (!Number.isFinite(cost) || used + cost > mp) break;
     used += cost;
     last = p;
@@ -1079,6 +1132,7 @@ export function sortieArmy(
   generalIds?: string[],
   factionId: string = s.playerFactionId,
   squads?: SquadConfig,
+  siegeWeapon?: SiegeWeaponId,
 ): OpResult {
   const from = s.cities[fromCityId];
   if (!from) return fail('出发城池不存在');
@@ -1103,9 +1157,6 @@ export function sortieArmy(
   // ① 城门：四门全被堵死就出不了城
   if (sortieBlocked(s, fromCityId)) return fail(sortieBlockedReason(s, fromCityId));
 
-  const plan = planDispatch(s, factionId, fromCityId, dispatchTarget);
-  if (!plan) return fail('没有可用的行军路线（山岭与水域不可通行）');
-
   const ids = generalIds?.length
     ? generalIds
     : pickSortieGenerals(s, fromCityId).map((g) => g.id);
@@ -1124,13 +1175,48 @@ export function sortieArmy(
     gens.push(g);
   }
 
-  topUpFromPool(s, fromCityId, gens);
-  const empty = gens.find((g) => g.troops <= 0);
-  if (empty) return fail(`${empty.name} 无兵可战`);
+  /**
+   * 参军位：0 兵武将可以随军（三11 的军师不单独领兵），
+   * 只贡献智力与计策，不占出战名额。补兵时排除他们。
+   */
+  const adjutants = new Set(gens.filter((g) => g.troops <= 0).map((g) => g.id));
+  topUpFromPool(s, fromCityId, gens, adjutants);
+
+  // 主将必须有兵；若点将列表首位是参军，把第一个有兵的将提为主将
+  const leadIdx = gens.findIndex((g) => g.troops > 0);
+  if (leadIdx < 0) return fail('随行武将皆无兵，无法出征');
+  if (leadIdx > 0) {
+    const [lead] = gens.splice(leadIdx, 1);
+    gens.unshift(lead!);
+  }
+  if (adjutants.has(gens[0]!.id)) adjutants.delete(gens[0]!.id);
+
+  // 部队兵种 = 主将兵种（三11 同制）。寻路要在知道兵种之后才算，
+  // 否则水军出海会被陆军的「水面不可通行」挡回来。
+  const unitClass = gens[0]!.unitClass;
+  const plan = planDispatch(s, factionId, fromCityId, dispatchTarget, undefined, unitClass);
+  if (!plan) return fail('没有可用的行军路线（山岭与水域不可通行）');
+
+  // 【器械采购】出征时一次买断：从出发城金币扣，器械随军、不占政令。
+  // 放在寻路成功后扣费，避免「路线不通却先扣钱」。
+  let weaponCost = 0;
+  if (siegeWeapon) {
+    const def = SIEGE_WEAPONS[siegeWeapon];
+    if (!def) return fail('未知器械');
+    weaponCost = def.gold;
+    if (from.gold < weaponCost) {
+      return fail(`金币不足：${def.name}需 ${weaponCost}，本城仅 ${Math.floor(from.gold)}`);
+    }
+    from.gold -= weaponCost;
+  }
 
   const serial = (s.armySerial ?? 0) + 1;
   s.armySerial = serial;
   const speed = 1 + beaconMarchBonusOf(s, fromCityId);
+  const leadSkill: GeneralSkillId = generalSkillOf(gens[0]!);
+  const leadMp = Math.round(
+    (MARCH_MP_BY_CLASS[unitClass] + skillMarchMpBonus(leadSkill)) * speed,
+  );
   const army: Army = {
     id: `army-${serial}`,
     factionId,
@@ -1145,8 +1231,11 @@ export function sortieArmy(
     at: { col: plan.exit.col, row: plan.exit.row },
     path: plan.path,
     legDays: 0,
-    mp: Math.round(MARCH_DAYS_PER_XUN * speed),
+    mp: leadMp,
     speed,
+    unitClass,
+    siegeWeapon,
+    skill: leadSkill,
     fortificationBonus: plan.fortificationBonus,
     waterCrossing: plan.waterCrossing,
     troops: gens.reduce((n, g) => n + g.troops, 0),
@@ -1168,13 +1257,16 @@ export function sortieArmy(
     ? `自${gatesOf(s, fromCityId).find((g) => g.side === plan.gate)?.label ?? ''}出城，`
     : '';
   const destName = destLabelOf(s, plan);
+  const weaponHint = siegeWeapon
+    ? `，携 ${SIEGE_WEAPONS[siegeWeapon].name}（−${weaponCost} 金）`
+    : '';
   log(
     s,
     'info',
-    `${from.name} ${gateName}出征：${gens.map((g) => g.name).join('、')} 率 ${army.troops} 兵，目的地 ${destName}，行程 ${Math.ceil(plan.days / speed)} 日${speedHint}${gateHint}`,
+    `${from.name} ${gateName}出征：${gens.map((g) => g.name).join('、')} 率 ${army.troops} 兵，目的地 ${destName}，行程 ${Math.ceil(plan.days / speed)} MP${weaponHint}${speedHint}${gateHint}`,
   );
   return done(
-    `已出征：${from.name} → ${destName}，约 ${Math.ceil(plan.days / (MARCH_DAYS_PER_XUN * speed))} 旬`,
+    `已出征：${from.name} → ${destName}，约 ${Math.ceil(plan.days / (MARCH_MP_BY_CLASS[unitClass] * speed))} 旬`,
   );
 }
 
