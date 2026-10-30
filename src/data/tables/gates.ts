@@ -198,6 +198,7 @@ export const GATES: GateFeature[] = [
     tier: 2,
     edges: [['langzhong', 'zhangtong']],
     guardCityId: 'langzhong',
+    anchor: [105.9, 32.3],
     extraDays: 2,
     fortification: 10,
     gold: 26,
@@ -251,6 +252,7 @@ export const GATES: GateFeature[] = [
     garrison: 1800,
     waterBattle: true,
     pairId: 'heyang',
+    anchor: [112.35, 34.85],
     note: '黄河渡口，洛阳北岸；八百诸侯会孟津',
   },
   {

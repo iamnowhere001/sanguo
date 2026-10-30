@@ -468,10 +468,17 @@ function isRealPortLine(line: { lane: GridPoint[]; approaches: [] | [GridPoint, 
  *
  * 这样 576×432 的大地图上，港口才是真正的路网节点，而不是地图装饰。
  */
-function buildPortSite(gate: GateFeature, mid: { col: number; row: number }, taken: Uint8Array): GateSite | null {
+function buildPortSite(
+  gate: GateFeature,
+  mid: { col: number; row: number },
+  taken: Uint8Array,
+  placed: Record<string, GateSite>,
+): GateSite | null {
   const m = masks();
   const cols = MAP.cols;
-  const radius = 16;
+  const pair = gate.pairId ? placed[gate.pairId] : undefined;
+  // 成对港口的第二座要跨到对岸：对岸可能在锚点 20 格开外，放宽搜索半径。
+  const radius = pair ? 24 : 16;
   const centers = findAllNear(
     mid,
     (c, r) => on(m.inland, c, r) && !taken[r * cols + c],
@@ -515,8 +522,12 @@ function buildPortSite(gate: GateFeature, mid: { col: number; row: number }, tak
   }
 
   candidates.sort((a, b) => a.score - b.score);
-  for (const candidate of candidates.slice(0, 12)) {
-    if (isRealPortLine(candidate.site)) return candidate.site;
+  const sameBank = (site: GateSite): boolean =>
+    pair ? landDetour(site.icon, pair.icon, 96) >= 0 : false;
+  for (const candidate of candidates.slice(0, 16)) {
+    if (!isRealPortLine(candidate.site)) continue;
+    if (sameBank(candidate.site)) continue;
+    return candidate.site;
   }
 
   // 兜底：仍按最近的江 / 湖面放一条最短渡线，避免配表里的港口凭空消失。
@@ -537,6 +548,7 @@ function buildPortSite(gate: GateFeature, mid: { col: number; row: number }, tak
   }
 
   let fallback: Candidate | null = null;
+  let fallbackSame: Candidate | null = null;
   for (const dir of DIRS) {
     const line = lineThrough(center, dir, m.water, 40);
     if (!line) continue;
@@ -546,22 +558,25 @@ function buildPortSite(gate: GateFeature, mid: { col: number; row: number }, tak
       line.lane.length +
       Math.hypot(center.col - mid.col, center.row - mid.row) * 0.55 +
       (dir[0] !== 0 && dir[1] !== 0 ? 0.15 : 0);
-    if (!fallback || score < fallback.score) {
-      fallback = {
-        score,
-        site: {
-          gate,
-          icon: portIconOf(line.approaches, mid, center),
-          center,
-          lane: line.lane,
-          approaches: line.approaches,
-          water: true,
-          crossDays: crossDaysOf(gate, line.lane),
-        },
-      };
+    const candidate: Candidate = {
+      score,
+      site: {
+        gate,
+        icon: portIconOf(line.approaches, mid, center),
+        center,
+        lane: line.lane,
+        approaches: line.approaches,
+        water: true,
+        crossDays: crossDaysOf(gate, line.lane),
+      },
+    };
+    if (sameBank(candidate.site)) {
+      if (!fallbackSame || score < fallbackSame.score) fallbackSame = candidate;
+      continue;
     }
+    if (!fallback || score < fallback.score) fallback = candidate;
   }
-  return fallback?.site ?? null;
+  return fallback?.site ?? fallbackSame?.site ?? null;
 }
 
 /** 半径内所有满足条件的格，由近到远 */
@@ -658,12 +673,29 @@ export function gateSites(): Record<string, GateSite> {
     if (!mid) continue;
     const site =
       gate.kind === 'port'
-        ? buildPortSite(gate, mid, taken)
+        ? buildPortSite(gate, mid, taken, out)
         : buildPassSite(gate, mid, taken);
     if (!site) continue;
     for (const p of site.lane) taken[p.row * cols + p.col] = 1;
     out[gate.id] = site;
   }
+
+  // 成对港口最终落在同一岸时，把后一座的图标翻到另一岸的滩头。
+  // 渡线本身仍然同时连接两岸，翻转的只是“图标 / 点击落点”，
+  // 这样地图上两港一眼就能看出是一对跨江渡口，而不是并排挤在岸边。
+  for (const gate of GATES) {
+    if (!gate.pairId || gate.id > gate.pairId) continue;
+    const a = out[gate.id];
+    const b = out[gate.pairId];
+    if (!a || !b || a.approaches.length < 2 || b.approaches.length < 2) continue;
+    if (landDetour(a.icon, b.icon, 96) < 0) continue;
+    const alt = b.approaches.find(
+      (p) =>
+        (p.col !== b.icon.col || p.row !== b.icon.row) && landDetour(p, a.icon, 96) < 0,
+    );
+    if (alt) b.icon = { col: alt.col, row: alt.row };
+  }
+
   cache = out;
   return out;
 }

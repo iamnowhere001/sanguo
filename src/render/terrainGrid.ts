@@ -439,46 +439,77 @@ function approachesOf(col: number, row: number): Array<{ col: number; row: numbe
 const inBounds = (t: { col: number; row: number }): boolean =>
   t.col >= 0 && t.row >= 0 && t.col < MAP.cols && t.row < MAP.rows;
 
+/** 落城候选评分：越小越好；`null` 表示硬性不可用 */
+interface FootprintCost {
+  score: number;
+  sealed: number;
+}
+
 /**
- * 能否落城：城墙 9 格不得与他人城墙重叠。
- * 门外格压到他人城墙时不阻止落城，而是把那一门记为「封死」（`sealed`）——
- * 中原 / 江东几座城挨得太近，强行外推会把它们推到地理上完全错误的位置。
+ * 城池 3×3 落位评分。
+ *
+ * 旧版只要求「城心不在水里」，结果长江 / 汉水 / 湘水沿岸多座城的城墙直接压进江面：
+ * 渲染上像水淹七军，规则上还会出现「四面水门、陆军永远出不了城」的死城。
+ *
+ * 现在的硬条件：
+ * - 9 格城墙全部在图内、互不压其他城墙，且**不得是水面或山岭**；
+ * - 四座门外至少有一格是可走的陆地门（水面 = 水门，山岭 = 封死）。
+ *
+ * 软条件按权重排序：离真实经纬落点越近越好，水门 / 山门 / 被邻城封门越少越好。
+ * 这样江陵、江夏这类临江城会落在岸上并保留 1 座水门，而不会为了「贴江」把城墙泡进水里。
  */
-function footprintFits(
+function footprintCost(
   col: number,
   row: number,
+  projected: { col: number; row: number },
   walls: Map<string, string>,
-): boolean {
-  if (isWaterKind(tileKindAt(col, row))) return false;
+): FootprintCost | null {
+  let sealed = 0;
   for (const t of wallOf(col, row)) {
-    if (!inBounds(t)) return false;
-    if (walls.has(keyOfTile(t.col, t.row))) return false;
+    if (!inBounds(t)) return null;
+    if (walls.has(keyOfTile(t.col, t.row))) return null;
+    const kind = tileKindAt(t.col, t.row);
+    if (isWaterKind(kind) || kind === 'mountain') return null;
   }
-  for (const t of approachesOf(col, row)) {
-    if (!inBounds(t)) return false;
-  }
-  return true;
-}
 
-/** 有几座门被邻城城墙压死 */
-function sealedCount(
-  col: number,
-  row: number,
-  walls: Map<string, string>,
-): number {
-  let n = 0;
+  let waterGates = 0;
+  let blockedGates = 0;
+  let landGates = 0;
   for (const t of approachesOf(col, row)) {
-    if (walls.has(keyOfTile(t.col, t.row))) n += 1;
+    if (!inBounds(t)) return null;
+    if (walls.has(keyOfTile(t.col, t.row))) {
+      sealed += 1;
+      continue;
+    }
+    const kind = tileKindAt(t.col, t.row);
+    if (isWaterKind(kind)) waterGates += 1;
+    else if (kind === 'mountain') blockedGates += 1;
+    else landGates += 1;
   }
-  return n;
+  if (landGates === 0) return null;
+
+  const dist = Math.hypot(col - projected.col, row - projected.row);
+  const center = tileKindAt(col, row);
+  const centerPenalty = center === 'marsh' ? 1.2 : center === 'desert' ? 0.8 : 0;
+  return {
+    sealed,
+    score:
+      dist * 2.2 +
+      waterGates * 2.4 +
+      blockedGates * 2.8 +
+      sealed * 4 +
+      centerPenalty,
+  };
 }
 
 /**
- * 61 座城的落格结果。
+ * 59 座城的落格结果。
  * 顺序固定（按 CITY_COORDS 的书写顺序），保证同一配表永远得到同一布局。
  *
  * L 档改动：每城占 3×3 城墙 + 4 个门外格，落点冲突时按固定顺序把后来的城
  * 推向最近的可容纳位置（螺旋搜索，同半径按固定扫描顺序），避免城墙互相压住。
+ * 2026-10 调整：候选不再只避开城心水域，而是要求整座 3×3 城墙都在陆地上，
+ * 并按「离真实坐标的距离 + 水门 / 山门 / 封门惩罚」评分，解决沿岸城池泡水问题。
  */
 export function cityBlocks(): Record<string, CityBlock> {
   if (blockCache) return blockCache;
@@ -488,32 +519,35 @@ export function cityBlocks(): Record<string, CityBlock> {
 
   for (const [cityId, [lon, lat]] of Object.entries(CITY_COORDS)) {
     const projected = lonLatToTile(lon, lat);
-    const seed = nearestLandTile(Math.round(projected.col), Math.round(projected.row));
-    let { col, row } = seed;
+    const originCol = Math.round(projected.col);
+    const originRow = Math.round(projected.row);
+    let col = originCol;
+    let row = originRow;
 
-    // 候选打分：距离 + 封死门数 × 3。让「原地封一门」胜过「外推五格」。
-    if (sealedCount(col, row, used) > 0 || !footprintFits(col, row, used)) {
-      const best = { col: seed.col, row: seed.row, score: Number.POSITIVE_INFINITY };
-      for (let radius = 0; radius <= 7; radius++) {
-        for (let dy = -radius; dy <= radius; dy++) {
-          for (let dx = -radius; dx <= radius; dx++) {
-            if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
-            const c = seed.col + dx;
-            const r = seed.row + dy;
-            if (!footprintFits(c, r, used)) continue;
-            const score = radius + sealedCount(c, r, used) * 3;
-            if (score < best.score) {
-              best.col = c;
-              best.row = r;
-              best.score = score;
-            }
-          }
+    // 在真实落点周围找评分最高的 3×3；半径 16 格足够把贴江 / 贴山的城推上岸，
+    // 又不会把城搬到另一个地理区域。
+    let best: (FootprintCost & { col: number; row: number }) | null = null;
+    for (let radius = 0; radius <= 16; radius++) {
+      for (let dy = -radius; dy <= radius; dy++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
+          const c = originCol + dx;
+          const r = originRow + dy;
+          const cost = footprintCost(c, r, projected, used);
+          if (!cost) continue;
+          if (!best || cost.score < best.score) best = { ...cost, col: c, row: r };
         }
-        // 已找到的解不可能被更外圈以「封死 0 门」反超（每圈至少 +1，封门罚 3）
-        if (best.score <= radius) break;
       }
+    }
+
+    if (best) {
       col = best.col;
       row = best.row;
+    } else {
+      // 极端兜底：全图搜索失败时退回最近的可落城格（正常配表不会走到这里）
+      const seed = nearestLandTile(col, row, 24);
+      col = seed.col;
+      row = seed.row;
     }
 
     // 封死门必须在写入本城城墙之前判定，否则会把自己算成邻城
