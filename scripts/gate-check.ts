@@ -105,6 +105,45 @@ for (const gate of GATES) {
   }
 }
 
+/** 两格之间是否存在短陆路（不走渡口、不穿山）；成对港口应分居两岸 */
+function sameBank(a: GridPoint, b: GridPoint, cap = 60): boolean {
+  const seen = new Set<string>([key(a)]);
+  let frontier: GridPoint[] = [a];
+  for (let d = 0; d < cap; d++) {
+    const next: GridPoint[] = [];
+    for (const p of frontier) {
+      for (const [dx, dy] of [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ] as const) {
+        const n = { col: p.col + dx, row: p.row + dy };
+        const k = key(n);
+        if (seen.has(k)) continue;
+        if (wall.has(k)) continue;
+        const kind = tileKindAt(n.col, n.row);
+        if (isWaterKind(kind) || kind === 'mountain') continue;
+        if (n.col === b.col && n.row === b.row) return true;
+        seen.add(k);
+        next.push(n);
+      }
+    }
+    frontier = next;
+  }
+  return false;
+}
+
+for (const gate of GATES) {
+  if (!gate.pairId || gate.id > gate.pairId) continue;
+  const a = sites[gate.id];
+  const b = sites[gate.pairId];
+  if (!a || !b) continue;
+  if (sameBank(a.icon, b.icon)) {
+    problems.push(`${gate.name} 与 ${b.gate.name} 的图标落在同一岸`);
+  }
+}
+
 const line = (s: string) => console.log(s);
 line(`关防 ${GATES.length} 处 · 已落位 ${Object.keys(sites).length} 处`);
 for (const gate of GATES) {

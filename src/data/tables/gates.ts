@@ -262,7 +262,7 @@ export const GATES: GateFeature[] = [
     tier: 2,
     edges: [['jinyang', 'luoyang']],
     guardCityId: null,
-    anchor: [112.35, 35.02],
+    anchor: [112.68, 34.95],
     extraDays: 2,
     fortification: 6,
     gold: 20,

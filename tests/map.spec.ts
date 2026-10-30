@@ -10,6 +10,7 @@ import {
 import { CITY_TABLE } from '../src/data/tables/cities';
 import {
   cityAnchors,
+  cityBlocks,
   cityWorldPos,
   isWaterKind,
   nearestLandTile,
@@ -42,6 +43,15 @@ describe('地形栅格', () => {
     expect(stats.sea / total).toBeGreaterThan(0.1);
     expect(stats.sea / total).toBeLessThan(0.5);
     expect(stats.plain / total).toBeGreaterThan(0.3);
+  });
+
+  it('山岭成片且不可通行，山地与丘陵合计形成战略阻隔', () => {
+    const stats = terrainGrid().stats;
+    const total = MAP.cols * MAP.rows;
+    // 2026-10 地形补强后：山岭约 4.7%，丘陵约 8.4%，合计 > 12%
+    expect(stats.mountain / total, '山岭太少，地图缺少不可通行阻隔').toBeGreaterThan(0.04);
+    expect(stats.mountain / total, '山岭过多，城池与路网会被切碎').toBeLessThan(0.12);
+    expect((stats.mountain + stats.hill) / total).toBeGreaterThan(0.12);
   });
 
   it('越界按海域处理，水域判定覆盖海 / 湖 / 河', () => {
@@ -81,6 +91,24 @@ describe('城池落位', () => {
         false,
       );
       seen.set(key, id);
+    }
+  });
+
+  it('每座城的 3×3 城墙全在陆地，且至少保留一座可走的陆门', () => {
+    for (const [id, block] of Object.entries(cityBlocks())) {
+      const name = CITY_TABLE[id]?.name ?? id;
+      for (const t of block.tiles) {
+        const kind = tileKindAt(t.col, t.row);
+        expect(
+          isWaterKind(kind) || kind === 'mountain',
+          `${name} 的城墙压在${kind}上 (${t.col},${t.row})`,
+        ).toBe(false);
+      }
+      const landGates = Object.values(block.approaches).filter((p) => {
+        const kind = tileKindAt(p.col, p.row);
+        return !isWaterKind(kind) && kind !== 'mountain';
+      });
+      expect(landGates.length, `${name} 没有可走的陆门`).toBeGreaterThan(0);
     }
   });
 

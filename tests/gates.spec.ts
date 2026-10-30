@@ -22,6 +22,43 @@ function fresh(): GameState {
   return createGame({ scenarioId: 'sanguo', playerFactionId: 'liubei', aiEnabled: false });
 }
 
+/**
+ * 纯陆路可达（不走渡口、不穿山）。用来判断两座港口的图标是否落在同一岸：
+ * 同岸通常几十步内就能沿岸走到，对岸之间则被江面隔开。
+ */
+function landReachable(
+  a: { col: number; row: number },
+  b: { col: number; row: number },
+  cap = 60,
+): boolean {
+  const key = (p: { col: number; row: number }): string => `${p.col},${p.row}`;
+  const seen = new Set<string>([key(a)]);
+  let frontier = [a];
+  for (let d = 0; d < cap; d++) {
+    const next: Array<{ col: number; row: number }> = [];
+    for (const p of frontier) {
+      for (const [dx, dy] of [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ] as const) {
+        const n = { col: p.col + dx, row: p.row + dy };
+        const k = key(n);
+        if (seen.has(k)) continue;
+        if (wallTileAt(n.col, n.row)) continue;
+        const kind = tileKindAt(n.col, n.row);
+        if (isWaterKind(kind) || kind === 'mountain') continue;
+        if (n.col === b.col && n.row === b.row) return true;
+        seen.add(k);
+        next.push(n);
+      }
+    }
+    frontier = next;
+  }
+  return false;
+}
+
 function armyAt(s: GameState, at: { col: number; row: number }, factionId: string): Army {
   const general = Object.values(s.generals).find((g) => g.status === 'active')!;
   general.troops = 6000;
@@ -285,6 +322,19 @@ describe('关防 · 数值基准', () => {
         const d = Math.hypot(port.anchor[0] - peer!.anchor[0], port.anchor[1] - peer!.anchor[1]);
         expect(d, `${port.name} 与 ${peer!.name} 落点过近`).toBeGreaterThan(0.25);
       }
+    }
+  });
+
+  it('成对港口分居两岸，图标不会并排挤在同一岸', () => {
+    for (const port of GATES.filter((g) => g.kind === 'port')) {
+      if (!port.pairId || port.id > port.pairId) continue;
+      const a = gateSiteById(port.id)!;
+      const b = gateSiteById(port.pairId)!;
+      expect(a.icon).not.toEqual(b.icon);
+      expect(
+        landReachable(a.icon, b.icon),
+        `${port.name} 与 ${gateById(port.pairId)!.name} 的图标落在同一岸`,
+      ).toBe(false);
     }
   });
 
