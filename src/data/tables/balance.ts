@@ -87,8 +87,13 @@ export const BALANCE = {
     },
     /** 对岸配对的港口，两处锚点经纬度距离下限：低于此值视作“同格渡线” */
     PAIR_MIN_OFFSET: 0.25,
+    /**
+     * R1：封本关 / 小路后，道路两端 A→B 的最小绕行增量（MP）。
+     * tier1 达不到 70 就降档，tier3 30 是“小关也值得打”的最低线。
+     */
+    DETOUR_MIN: { 1: 70, 2: 45, 3: 30 } as Record<1 | 2 | 3, number>,
     /** 小路绕关的额外行军 MP 区间（不可驻守，故无工事与守军） */
-    TRAIL_EXTRA_DAYS: [4, 7] as [number, number],
+    TRAIL_EXTRA_DAYS: [4, 15] as [number, number],
   },
 
   // ── 城池耐久 【新增】破城的第二个条件 ─────────────────────

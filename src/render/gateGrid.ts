@@ -2,7 +2,6 @@ import {
   CITY_COORDS,
   MAP,
   inMap,
-  lonLatToTile,
   projectLonLat,
   tileKey,
   type Pt,
@@ -12,9 +11,17 @@ import {
   TILE_KINDS,
   cityAnchors,
   cityBlocks,
+  invalidateCityLayout,
+  refreshStats,
   terrainGrid,
   type TileKind,
 } from './terrainGrid';
+import {
+  buildGateWalls,
+  validateWalls,
+  type GateWall,
+  type GateWallBuild,
+} from './gateWall';
 import type { GridPoint } from '../core/state';
 
 /**
@@ -59,14 +66,6 @@ export interface GateSite {
    * 江面越宽船程越长，但始终是一次位移，部队不会出现在水面上。
    */
   crossDays: number;
-  /**
-   * 弱关：地形没有形成屏障，山道两端可以绕过去。
-   *
-   * 这种关**拦不住人**，敌人从旁边的空地就过去了 —— 它不该被当成"封锁线"，
-   * 而应该由 `map:gates` 体检报出来，回去补地形（加宽山体 / 延长山脉）。
-   * 标记出来是为了让问题显式存在，而不是伪装成一座能封锁的关。
-   */
-  weak?: boolean;
 }
 
 const DIRS: Array<[number, number]> = [
@@ -263,338 +262,16 @@ interface Candidate {
   score: number;
 }
 
-function buildPassSite(gate: GateFeature, mid: { col: number; row: number }, taken: Uint8Array): GateSite | null {
-  const m = masks();
-  const cols = MAP.cols;
-  // 不要只看最近的一格：同一道山脊可能有更薄的山口。
-  // 扫描周边所有山体格，按「山道短 + 离道路中点近」挑一条真正能穿过去的口子。
-  const centers = findAllNear(
-    mid,
-    (c, r) => on(m.pass, c, r) && !taken[r * cols + c],
-    24,
-  );
-
-  let best: Candidate | null = null;
-  for (const center of centers) {
-    for (const dir of DIRS) {
-      const line = lineThrough(center, dir, m.pass, 36);
-      if (!line) continue;
-      if (line.lane.some((p) => taken[p.row * cols + p.col])) continue;
-      const score =
-        line.lane.length * 0.35 +
-        Math.hypot(center.col - mid.col, center.row - mid.row) +
-        (dir[0] !== 0 && dir[1] !== 0 ? 0.2 : 0);
-      if (!best || score < best.score) {
-        best = {
-          score,
-          site: {
-            gate,
-            icon: center,
-            center,
-            lane: line.lane,
-            approaches: line.approaches,
-            water: false,
-            crossDays: 0,
-          },
-        };
-      }
-    }
-    // 最近的中心已经找到可用山口时，再往外找收益很小
-    if (best && centers.indexOf(center) >= 3) break;
-  }
-  if (best) return { ...best.site, weak: isWeakPass(best.site) };
-
-  const land = findNearest(
-    mid,
-    (c, r) => on(m.land, c, r) && !taken[r * cols + c],
-    14,
-  );
-  if (!land) return null;
-  return {
-    gate,
-    icon: land,
-    center: land,
-    lane: [land],
-    approaches: [],
-    water: false,
-    crossDays: 0,
-    weak: true,
-  };
-}
-
-/**
- * 弱关判定：山道两端的滩头之间，**线外能不能绕过去**。
- *
- * 这是"一夫当关"的唯一定义。能绕过去，就说明这座关只是插在山坡上的一块牌子 ——
- * 敌人从旁边的空地就走了（武关此前正是如此）。
- *
- * 判定半径随山道长度自适应：短口子只容几十步绕行，长山道放宽。
- *
- * 注意：这只做**诊断**，不参与落位。试过拿它当落位判据 —— 把关隘推到离道路
- * 更远的"薄口"上，结果更糟（潼关的绕行惩罚从 +17 掉到 +0）。地形没有屏障
- * 这件事只能靠改地形解决，不能靠挪关卡。
- */
-function isWeakPass(site: GateSite): boolean {
-  const [a, b] = site.approaches;
-  if (!a || !b) return true;
-  return landDetour(a, b, site.lane.length * 4 + 24) >= 0;
-}
-
 /** 摆渡 MP：过关耗时 + 每 4 格江面折 1 MP 船程（一次跳过去，不在水面停留） */
 function crossDaysOf(gate: GateFeature, lane: GridPoint[]): number {
   return Math.max(2, gate.extraDays + Math.ceil(lane.length / 4));
 }
 
-// ── 凿山谷 ─────────────────────────────────────────────────
-/**
- * 关隘山谷：**为每座关隘凿出唯一通路**。
- *
- * 这是"三国志11 式关隘"的根基。三11 的地图是手绘的，关隘画在两山之间唯一的通道上；
- * 本项目的地形是「折线 + 半宽」程序生成的，山脉之间到处是缺口，关隘只能落在
- * 山体边缘的窄脊上 —— 线在山上，线外却是可走的丘陵，敌军从旁边就绕过去了。
- *
- * 修法不是「挪关卡」（试过，潼关从 +17 掉到 +0），也不是「补山」
- * （试过：补到能堵住缺口就切断地图，补到不切断就堵不住）。
- * 而是**把那条山谷本身凿出来**：
- *
- * - 沿「A 城 → 关隘锚点 → B 城」的直线，找出穿过山体的连续段；
- * - 把这段的山岭凿成丘陵（可通行），成为一条 1 格宽的谷地；
- * - 谷地就是关卡通行线，关卡落在谷中最窄处（山体段的中点）。
- *
- * 谷地两侧仍是山，所以封锁 = 断路；要绕行只能绕到山脉尽头。
- * 视觉上是一条丘陵带穿过山地，和「山间古道」的观感一致。
- */
-function carveCorridors(): Map<string, GridPoint[]> {
-  const grid = terrainGrid();
-  const cells = grid.cells;
-  const cols = MAP.cols;
-  const anchors = cityAnchors();
-  const wall = masks().wall;
-  const MOUNTAIN = KIND.mountain;
-  const HILL = KIND.hill;
-  const PLAIN = KIND.plain;
-  const out = new Map<string, GridPoint[]>();
-
-  for (const gate of GATES) {
-    // 港口两侧本来就是水面，不需要凿
-    if (gate.kind === 'port') continue;
-    const [aId, bId] = gate.edges[0] ?? [];
-    if (!aId || !bId) continue;
-    const a = anchors[aId];
-    const b = anchors[bId];
-    if (!a || !b) continue;
-
-    // 折线：A → 关隘锚点（无锚点取中点）→ B。
-    // 同一道路上的两座关（如阳平关与剑阁）靠锚点各凿一条，互不重叠。
-    const via = gate.anchor
-      ? (() => {
-          const t = lonLatToTile(gate.anchor![0], gate.anchor![1]);
-          return { col: Math.floor(t.col), row: Math.floor(t.row) };
-        })()
-      : { col: Math.round((a.col + b.col) / 2), row: Math.round((a.row + b.row) / 2) };
-
-    const line = [...bresenham(a, via), ...bresenham(via, b).slice(1)];
-
-    // 把直线切成若干**连续山体段**。一条路可能连着穿两道山（如秦岭 + 伏牛山），
-    // 中间夹一段平原；两道山都要凿通，否则谷是断的。
-    const segments: GridPoint[][] = [];
-    let cur: GridPoint[] = [];
-    const flush = (): void => {
-      if (cur.length >= 2) segments.push(cur);
-      cur = [];
-    };
-    for (const p of line) {
-      if (!inMap(p.col, p.row)) {
-        flush();
-        continue;
-      }
-      const idx = p.row * cols + p.col;
-      const k = cells[idx]!;
-      if ((k === MOUNTAIN || k === HILL) && wall[idx] !== 1) cur.push(p);
-      else flush();
-    }
-    flush();
-    if (segments.length === 0) continue;
-
-    // 凿成**平原**而不是丘陵：谷底是平地，走起来 1 MP/格。
-    // 凿成丘陵（2 MP/格）的话，一条 40 格的谷要 80 MP，比绕行还慢，等于白凿。
-    // 通行线取「离关隘锚点最近」的那一段：关卡就卡在这一段上
-    let bestSeg = segments[0]!;
-    let bestD = Infinity;
-    for (const seg of segments) {
-      let d = Infinity;
-      for (const p of seg) {
-        const dd = Math.hypot(p.col - via.col, p.row - via.row);
-        if (dd < d) d = dd;
-      }
-      if (d < bestD) {
-        bestD = d;
-        bestSeg = seg;
-      }
-    }
-
-    const lane = toOrthogonal(bestSeg, (c, r) => inMap(c, r) && wall[r * cols + c] !== 1);
-    if (!lane || lane.length < 2) continue;
-
-    // 凿的是 **lane 本身**，不是 Bresenham 的原始点。
-    // 只凿原始点的话，4 邻接补出来的阶梯拐角仍是山岭 —— 谷在规则层是断的
-    // （第一版就是这样：地图上看着有条缝，实际走不通）。
-    const dig = (c: number, r: number): void => {
-      if (!inMap(c, r)) return;
-      const idx = r * cols + c;
-      if (wall[idx] === 1) return;
-      const k = cells[idx]!;
-      if (k === MOUNTAIN || k === HILL) cells[idx] = PLAIN;
-    };
-    for (const p of lane) dig(p.col, p.row);
-
-    // 两端各向外多凿 3 格：谷必须**连到山外**，否则就是一条两头顶着山的死胡同
-    const extend = (from: GridPoint, toward: GridPoint): void => {
-      const dc = Math.sign(from.col - toward.col);
-      const dr = Math.sign(from.row - toward.row);
-      for (let k = 1; k <= 3; k++) dig(from.col + dc * k, from.row + dr * k);
-    };
-    extend(lane[0]!, lane[1]!);
-    extend(lane[lane.length - 1]!, lane[lane.length - 2]!);
-
-    out.set(gate.id, lane);
-  }
-
-  // 第二遍：封住谷两侧的**丘陵走廊**。
-  //
-  // 只凿谷不够 —— 谷旁边常有一条平行的丘陵带（2 MP/格），敌军照样从那里绕。
-  // 三11 的地图里没有这种"多余的平行路"，因为山是手绘的、连成片的。
-  //
-  // 只封**丘陵**、不动平原：平原是主干道，封了会切断路网（试过，潼关/武关直接变 ∞）。
-  // 距离取 2–6 格：贴身的 1 格留着当谷肩，7 格以外是另一条山谷/大道，不能动。
-  const allLane = new Set<number>();
-  for (const lane of out.values()) {
-    for (const p of lane) allLane.add(p.row * cols + p.col);
-  }
-  for (const gate of GATES) {
-    const lane = out.get(gate.id);
-    if (!lane || lane.length < 2) continue;
-    const a = lane[0]!;
-    const b = lane[lane.length - 1]!;
-    // 沿**垂直于谷**的方向封：沿谷方向的那几格是出入口，封了就把自己堵死。
-    const horizontal = Math.abs(b.col - a.col) >= Math.abs(b.row - a.row);
-    const perp: [number, number] = horizontal ? [0, 1] : [1, 0];
-    for (const p of lane) {
-      for (const sign of [-1, 1] as const) {
-        for (let k = 2; k <= 6; k++) {
-          const c = p.col + perp[0] * sign * k;
-          const r = p.row + perp[1] * sign * k;
-          if (!inMap(c, r)) break;
-          const idx = r * cols + c;
-          if (allLane.has(idx)) continue;
-          if (cells[idx] === HILL) cells[idx] = MOUNTAIN;
-        }
-      }
-    }
-  }
-
-  return out;
-}
-
-/** 整数直线（Bresenham），返回逐格路径 */
-function bresenham(a: GridPoint, b: GridPoint): GridPoint[] {
-  const pts: GridPoint[] = [];
-  let x = a.col;
-  let y = a.row;
-  const dx = Math.abs(b.col - x);
-  const dy = Math.abs(b.row - y);
-  const sx = x < b.col ? 1 : -1;
-  const sy = y < b.row ? 1 : -1;
-  let err = dx - dy;
-  for (;;) {
-    pts.push({ col: x, row: y });
-    if (x === b.col && y === b.row) break;
-    const e2 = 2 * err;
-    if (e2 > -dy) {
-      err -= dy;
-      x += sx;
-    }
-    if (e2 < dx) {
-      err += dx;
-      y += sy;
-    }
-  }
-  return pts;
-}
-
-/** 把 8 邻接的斜线补成 4 邻接阶梯（行军只能上下左右走） */
-function toOrthogonal(
-  pts: GridPoint[],
-  passable: (col: number, row: number) => boolean,
-): GridPoint[] | null {
-  const out: GridPoint[] = [pts[0]!];
-  for (let i = 1; i < pts.length; i++) {
-    const a = out[out.length - 1]!;
-    const b = pts[i]!;
-    const dc = b.col - a.col;
-    const dr = b.row - a.row;
-    if (Math.abs(dc) + Math.abs(dr) === 1) {
-      out.push(b);
-      continue;
-    }
-    if (Math.abs(dc) !== 1 || Math.abs(dr) !== 1) return null;
-    const c1 = { col: a.col + dc, row: a.row };
-    const c2 = { col: a.col, row: a.row + dr };
-    if (passable(c1.col, c1.row)) out.push(c1, b);
-    else if (passable(c2.col, c2.row)) out.push(c2, b);
-    else return null;
-  }
-  return out;
-}
-
-/**
- * 由凿好的山谷生成落位：**关卡只占谷中一小段**。
- *
- * 谷是 1 格宽的通道，封住中间任意一段，整条谷就断了 ——
- * 所以关卡不需要覆盖整条谷（那样会出现一条 50 格的红色封锁线，也不像"关"）。
- * 占几格跟 `tier` 挂钩：大关 3 格、中关 2 格、小关 1 格。
- */
-function siteFromCorridor(gate: GateFeature, corridor: GridPoint[]): GateSite | null {
-  if (corridor.length < 3) return null;
-  const cols = MAP.cols;
-  const span = Math.min(corridor.length, gate.tier === 1 ? 3 : gate.tier === 2 ? 2 : 1);
-  const mid = Math.floor(corridor.length / 2);
-  const from = Math.max(0, Math.min(corridor.length - span, mid - Math.floor(span / 2)));
-  const lane = corridor.slice(from, from + span);
-
-  const laneSet = new Set<number>(lane.map((p) => p.row * cols + p.col));
-  const first = lane[0]!;
-  const last = lane[lane.length - 1]!;
-  // 滩头取谷内紧邻关卡的那一格（谷是通道，前后都能站人）
-  const before =
-    from > 0 ? corridor[from - 1]! : bankOf(first, laneSet, [0, 0]);
-  const after =
-    from + span < corridor.length
-      ? corridor[from + span]!
-      : bankOf(last, laneSet, [0, 0]);
-  if (!before || !after) return null;
-
-  const center = lane[Math.floor(lane.length / 2)]!;
-  const site: GateSite = {
-    gate,
-    icon: center,
-    center,
-    lane,
-    approaches: [before, after],
-    water: false,
-    crossDays: 0,
-  };
-  site.weak = isWeakPass(site);
-  return site;
-}
-
-
-
 // ── 渡口有效性 ─────────────────────────────────────────────
 /** 滩头到最近城池的最大陆路步数；超过即视为“渡过去也到不了城” */
 const MAX_APPROACH_CITY_DIST = 120;
-/** 渡口至少要跨过几格水面，避免把一条小水沟当成江面 */
-const MIN_PORT_WATER = 3;
+/** 渡口至少要跨过几格水面；R8 要求 ≥4 格，避免把一条小水沟当成江面 */
+const MIN_PORT_WATER = 4;
 /**
  * 每个港口只看最近的一批水面中心。
  *
@@ -918,34 +595,51 @@ function midpointOf(gate: GateFeature): { col: number; row: number } | null {
 let cache: Record<string, GateSite> | null = null;
 let laneCache: Map<string, GateSite> | null = null;
 let centerCache: Map<string, GateSite> | null = null;
-/** 凿好的山谷（关隘 id → 通行线），只算一次 */
-let corridorCache: Map<string, GridPoint[]> | null = null;
-/** 落位计算本体：不含整形，可被整形前后各调用一次 */
+let wallBuild: GateWallBuild | null = null;
+let ready = false;
+
+/** 落位计算本体：在关墙与最终城池落位都就绪后调用一次 */
 function computeSites(): Record<string, GateSite> {
   const cols = MAP.cols;
   // 先占住城墙：关防通行线不得穿过任何城池的 3×3 城墙
   const taken = new Uint8Array(masks().wall);
   const out: Record<string, GateSite> = {};
-  // 关隘先占山脊，其次小路（同样走山脊，但落位锚点各不相同），最后港口。
+  // 关隘先占门洞，其次小路，最后港口。
   const rank = (kind: GateFeature['kind']): number =>
     kind === 'port' ? 2 : kind === 'trail' ? 1 : 0;
-  const ordered = [...GATES].sort((a, b) => rank(a.kind) - rank(b.kind));
+  const ordered = [...GATES].sort(
+    (a, b) => rank(a.kind) - rank(b.kind) || GATES.indexOf(a) - GATES.indexOf(b),
+  );
 
   for (const gate of ordered) {
-    const mid = midpointOf(gate);
-    if (!mid) continue;
-    // 凿好的山谷优先：谷就是通行线，关卡必然卡在谷上。
-    // 没有谷（港口 / 直线未穿山）才退回"找山脊"的老逻辑。
-    const carved = corridorCache?.get(gate.id);
-    let site: GateSite | null =
-      carved && carved.length >= 2 ? siteFromCorridor(gate, carved) : null;
-    if (!site) {
-      site =
-        gate.kind === 'port'
-          ? buildPortSite(gate, mid, taken, out)
-          : buildPassSite(gate, mid, taken);
+    if (gate.kind !== 'port') {
+      const wall = wallBuild?.walls.get(gate.id);
+      if (!wall) {
+        throw new Error(`关墙缺失：${gate.name}（${gate.id}）`);
+      }
+      for (const p of [...wall.lane, ...wall.approaches]) {
+        if (taken[p.row * cols + p.col]) {
+          throw new Error(`${gate.name} 的通行线压到城墙 / 其他关港（${p.col},${p.row}）`);
+        }
+      }
+      const site: GateSite = {
+        gate,
+        icon: wall.door,
+        center: wall.door,
+        lane: [...wall.lane],
+        approaches: [...wall.approaches],
+        water: false,
+        crossDays: 0,
+      };
+      for (const p of site.lane) taken[p.row * cols + p.col] = 1;
+      out[gate.id] = site;
+      continue;
     }
-    if (!site) continue;
+
+    const mid = midpointOf(gate);
+    if (!mid) throw new Error(`港口 ${gate.name}（${gate.id}）缺少道路中点`);
+    const site = buildPortSite(gate, mid, taken, out);
+    if (!site) throw new Error(`港口 ${gate.name}（${gate.id}）找不到可渡水面`);
     for (const p of site.lane) taken[p.row * cols + p.col] = 1;
     out[gate.id] = site;
   }
@@ -953,47 +647,77 @@ function computeSites(): Record<string, GateSite> {
   // 成对港口最终落在同一岸时，把后一座的图标翻到另一岸的滩头。
   // 渡线本身仍然同时连接两岸，翻转的只是“图标 / 点击落点”，
   // 这样地图上两港一眼就能看出是一对跨江渡口，而不是并排挤在岸边。
+  //
+  // 判据不能用 `landDetour`：湖泊 / 江口两岸常常沿湖岸绕得通，
+  // 绕 96 步以内不等于"同一岸"。改为几何判据 —— 本港两个滩头里，
+  // 离对岸港图标更远的那个，才属于对岸。
   for (const gate of GATES) {
     if (!gate.pairId || gate.id > gate.pairId) continue;
     const a = out[gate.id];
     const b = out[gate.pairId];
     if (!a || !b || a.approaches.length < 2 || b.approaches.length < 2) continue;
-    if (landDetour(a.icon, b.icon, 96) < 0) continue;
-    const alt = b.approaches.find(
-      (p) =>
-        (p.col !== b.icon.col || p.row !== b.icon.row) && landDetour(p, a.icon, 96) < 0,
-    );
-    if (alt) b.icon = { col: alt.col, row: alt.row };
+    const dist = (p: GridPoint): number => Math.hypot(p.col - a.icon.col, p.row - a.icon.row);
+    const other = b.approaches.find((p) => p.col !== b.icon.col || p.row !== b.icon.row);
+    if (other && dist(other) > dist(b.icon) + 1) {
+      b.icon = { col: other.col, row: other.row };
+    }
   }
 
   return out;
 }
 
 /**
- * 全部关隘 / 港口的落位。
+ * 地图生成管线（唯一入口）：底图 → 关墙 → 城池落位 → 关港落位。
  *
- * 先放关隘，再放港口：关隘需要占住山口，港口只要有一段可渡水面；
- * 冲突时按固定顺序尝试替代落点，保证结果确定。
- *
- * 第一次调用会先**凿山谷**（见 `carveCorridors`），再按凿好的地形落位 ——
- * 所以「关卡位置」与「两侧是不是山」始终一致，不会出现关在山上、旁边能走。
+ * 顺序不能反：先落城会把 3×3 缓存下来，随后关墙改写地形，
+ * 城池中心就可能变成山岭（武都的旧问题）。这里每次地形变化后都失效城池缓存。
  */
-export function gateSites(): Record<string, GateSite> {
-  if (cache) return cache;
-  if (!corridorCache) {
-    corridorCache = carveCorridors();
-    // 地形被凿过了，掩码必须重建
-    if (corridorCache.size > 0) maskCache = null;
+export function ensureMapReady(): void {
+  if (ready) return;
+  terrainGrid();
+  wallBuild = buildGateWalls();
+  invalidateCityLayout();
+  refreshStats();
+
+  if (wallBuild.failures.length > 0) {
+    const lines = wallBuild.failures.map((f) => `  - ${f.name}（${f.gateId}）：${f.reason}`);
+    throw new Error(`关墙生成失败 ${wallBuild.failures.length} 处：\n${lines.join('\n')}`);
   }
+
+  // 关墙改写地形后重新落城；关港 lane 必须避开新的城墙与城门。
+  cityBlocks();
+  const issues = validateWalls(wallBuild.walls);
+  if (issues.length > 0) {
+    throw new Error(`关墙校验失败 ${issues.length} 处：\n${issues.map((s) => `  - ${s}`).join('\n')}`);
+  }
+
+  maskCache = null;
+  cityDistanceCache = null;
+  laneCache = null;
+  centerCache = null;
+  hopCache = null;
   cache = computeSites();
-  return cache;
+  ready = true;
+}
+
+/** 全部关隘 / 港口的落位（首次调用会先跑完整地图管线） */
+export function gateSites(): Record<string, GateSite> {
+  ensureMapReady();
+  return cache!;
+}
+
+/** 关墙结果（体检 / 测试用） */
+export function gateWalls(): Map<string, GateWall> {
+  ensureMapReady();
+  return wallBuild!.walls;
 }
 
 /** 格 → 关港落位（山道 / 渡线 / 关门都算） */
 export function gateSiteAt(col: number, row: number): GateSite | null {
+  const sites = gateSites();
   if (!laneCache) {
     laneCache = new Map();
-    for (const site of Object.values(gateSites())) {
+    for (const site of Object.values(sites)) {
       for (const p of site.lane) {
         laneCache.set(tileKey(p.col, p.row), site);
       }
@@ -1013,9 +737,10 @@ export function gateSiteById(gateId: string): GateSite | null {
 
 /** 关港中心格索引（只匹配图标所在格，供点击与标签使用） */
 export function gateAtCenter(col: number, row: number): GateSite | null {
+  const sites = gateSites();
   if (!centerCache) {
     centerCache = new Map();
-    for (const site of Object.values(gateSites())) {
+    for (const site of Object.values(sites)) {
       // 图标已移到岸上时，图标格与通行线中心格都算“点到了关港”
       centerCache.set(tileKey(site.icon.col, site.icon.row), site);
       centerCache.set(tileKey(site.center.col, site.center.row), site);
@@ -1047,9 +772,10 @@ let hopCache: Map<string, { to: GridPoint; site: GateSite }> | null = null;
  * 这样部队既不会站在江心，也不会因为一条 20 格宽的江面走掉三旬。
  */
 export function ferryHopFrom(col: number, row: number): { to: GridPoint; site: GateSite } | null {
+  const sites = gateSites();
   if (!hopCache) {
     hopCache = new Map();
-    for (const site of Object.values(gateSites())) {
+    for (const site of Object.values(sites)) {
       if (!site.water || site.approaches.length !== 2) continue;
       const a = site.approaches[0]!;
       const b = site.approaches[1]!;

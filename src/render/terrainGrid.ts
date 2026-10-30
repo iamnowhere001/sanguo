@@ -322,6 +322,23 @@ export function terrainGrid(): TerrainGrid {
   return cached;
 }
 
+/**
+ * 重新统计地形占比。
+ *
+ * 关墙 / 凿谷会就地改写 `cells`，生成时算好的 `stats` 会变成"凿谷前快照"。
+ * 每次地形变化后调用本函数，保证 `map.spec` 读到的山岭占比与逐格统计一致。
+ */
+export function refreshStats(): void {
+  if (!cached) return;
+  const counts = new Int32Array(TILE_KINDS.length);
+  for (let i = 0; i < cached.cells.length; i++) {
+    counts[cached.cells[i]!]! += 1;
+  }
+  for (let i = 0; i < TILE_KINDS.length; i++) {
+    cached.stats[TILE_KINDS[i]!] = counts[i]!;
+  }
+}
+
 /** 取某一格的类型；越界按海域处理 */
 export function tileKindAt(col: number, row: number): TileKind {
   const grid = terrainGrid();
@@ -413,6 +430,20 @@ export interface CityBlock extends CityAnchor {
 
 let blockCache: Record<string, CityBlock> | null = null;
 let anchorCache: Record<string, CityAnchor> | null = null;
+
+/**
+ * 地形被凿改后，城池落位必须重算。
+ *
+ * `cityBlocks()` 会按当前地形评分选位；一旦关墙 / 凿谷改写了 `cells`，
+ * 旧缓存就不再代表真实地形（武都中心曾因此在凿谷后变成山岭却没人发现）。
+ * 所有改写地形的管线都要在改完后调用本函数。
+ */
+export function invalidateCityLayout(): void {
+  blockCache = null;
+  anchorCache = null;
+  cityTileCache = null;
+  centerIndexCache = null;
+}
 
 
 /** 城墙 9 格 */
@@ -538,10 +569,10 @@ export function cityBlocks(): Record<string, CityBlock> {
       col = best.col;
       row = best.row;
     } else {
-      // 极端兜底：全图搜索失败时退回最近的可落城格（正常配表不会走到这里）
-      const seed = nearestLandTile(col, row, 24);
-      col = seed.col;
-      row = seed.row;
+      // 全图搜索失败说明配表把城放进了死地（整片水域 / 山岭）。
+      // 以前会静默退回"最近陆地"，把问题藏起来；现在直接失败，
+      // 让 `map:check` / 启动流程立刻暴露。
+      throw new Error(`城池 ${cityId} 找不到可容纳 3×3 城墙的位置`);
     }
 
     // 封死门必须在写入本城城墙之前判定，否则会把自己算成邻城

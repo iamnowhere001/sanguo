@@ -222,6 +222,8 @@ function marchGrid(unitClass?: UnitClass): MarchGrid {
   const key: MarchGridKey = unitClass === 'navy' ? 'navy' : 'land';
   const cached = marchGridCache.get(key);
   if (cached) return cached;
+  // 先跑完整地图管线（关墙会改写地形），再烘代价图；顺序反了会把墙当成可走平地
+  const sites = gateSites();
   const { cols, rows } = MAP;
   const N = cols * rows;
   const cost = new Float64Array(N);
@@ -234,7 +236,7 @@ function marchGrid(unitClass?: UnitClass): MarchGrid {
   const gateIndex = new Int16Array(N);
   const gateIds: string[] = [];
   const hops = new Map<number, { to: number; cost: number; gateId: string }>();
-  for (const site of Object.values(gateSites())) {
+  for (const site of Object.values(sites)) {
     gateIds.push(site.gate.id);
     const gi = gateIds.length;
     // 港口：江面是墙，渡线不铺可走格，只在两岸滩头之间拉一条跳跃边。

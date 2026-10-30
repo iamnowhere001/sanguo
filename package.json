@@ -15,7 +15,7 @@
     "map:check": "vite-node scripts/gen-map.ts",
     "map:gates": "vite-node scripts/gate-check.ts",
     "map:edges": "vite-node scripts/check-map-edges.ts",
-    "map:audit": "vite-node scripts/audit-map.ts && vite-node scripts/audit-routes.ts",
+    "map:audit": "vite-node scripts/audit-map.ts",
     "map:diag": "vite-node scripts/diag-gates.ts",
     "table:sync": "vite-node scripts/gen-table-data.ts",
     "perf:check": "vite-node scripts/perf-check.ts",

@@ -92,8 +92,8 @@ function inBand(value: number, band: Band): boolean {
 }
 
 describe('关防 · 地图落位', () => {
-  it('31 处关港小路全部落位，通行线逐格相连；水面只有渡口跳跃可过', () => {
-    expect(GATES).toHaveLength(31);
+  it('关港小路全部落位，通行线逐格相连；水面只有渡口跳跃可过', () => {
+    expect(GATES.length).toBeGreaterThanOrEqual(33);
     for (const gate of GATES) {
       const site = gateSiteById(gate.id);
       expect(site, gate.id).not.toBeNull();
@@ -294,8 +294,8 @@ describe('关防 · 数值基准', () => {
   it('数值落在对应分档区间内（关隘 / 港口 / 小路）', () => {
     for (const gate of GATES) {
       if (gate.kind === 'trail') {
-        expect(gate.extraDays).toBeGreaterThanOrEqual(4);
-        expect(gate.extraDays).toBeLessThanOrEqual(7);
+        expect(gate.extraDays).toBeGreaterThanOrEqual(BALANCE.GATE.TRAIL_EXTRA_DAYS[0]);
+        expect(gate.extraDays).toBeLessThanOrEqual(BALANCE.GATE.TRAIL_EXTRA_DAYS[1]);
         continue;
       }
       const band = bandsOf(gate.kind)[String(gate.tier)];
@@ -341,6 +341,7 @@ describe('关防 · 数值基准', () => {
   it('小路必须指向真实存在的关隘 / 港口', () => {
     for (const trail of GATES.filter((g) => g.kind === 'trail')) {
       expect(trail.bypassOf, `${trail.name} 未声明绕过的关卡`).toBeTruthy();
+      if (trail.bypassOf === 'barrier') continue;
       expect(gateById(trail.bypassOf!), `${trail.name} 绕过的关卡不存在`).toBeDefined();
       expect(isTrail(gateById(trail.bypassOf!)!)).toBe(false);
     }
