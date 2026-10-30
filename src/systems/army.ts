@@ -7,7 +7,7 @@ import { generalSkillOf, skillMarchMpBonus } from '../data/tables/generalTraits'
 import { SIEGE_WEAPONS } from '../data/tables/siegeWeapons';
 import { done, fail, type OpResult } from '../core/result';
 import { canAttackFactions } from './factionDiplomacy';
-import { createBattle } from './battle/setup';
+import { createBattle, createFieldBattle } from './battle/setup';
 import { topUpFromPool } from './troops';
 import { defaultSquads, type SquadConfig } from './squads';
 import { log } from './economy';
@@ -842,6 +842,9 @@ export interface MoveOutcome {
 export function moveArmyTo(s: GameState, armyId: string, to: GridPoint): MoveOutcome {
   const army = (s.armies ?? []).find((a) => a.id === armyId);
   if (!army) return { ok: false, message: '部队不存在', days: 0, remaining: 0, arrived: false };
+  if (army.garrisonGateId) {
+    return { ok: false, message: '部队正在关港驻守，须先撤出', days: 0, remaining: 0, arrived: false };
+  }
   if (!Number.isFinite(marchCostForArmy(to.col, to.row))) {
     return {
       ok: false,
@@ -1278,6 +1281,111 @@ export function pickSortieGenerals(s: GameState, cityId: string): General[] {
     .slice(0, BALANCE.BATTLE_MAX_ATTACKERS);
 }
 
+// ── 野战遭遇 ──────────────────────────────────────────────
+/** 相邻格上的敌军：不含关港驻军，也不含外交上暂不可战的势力 */
+export function adjacentEnemyArmies(s: GameState, armyId: string): Army[] {
+  const army = (s.armies ?? []).find((a) => a.id === armyId);
+  if (!army || army.garrisonGateId) return [];
+  return (s.armies ?? [])
+    .filter((other) => other.id !== army.id && !other.garrisonGateId)
+    .filter((other) => other.factionId !== army.factionId)
+    .filter((other) => canAttackFactions(s, army.factionId, other.factionId))
+    .filter(
+      (other) =>
+        Math.abs(other.at.col - army.at.col) +
+          Math.abs(other.at.row - army.at.row) ===
+        1,
+    )
+    .sort((a, b) => b.troops - a.troops || a.id.localeCompare(b.id));
+}
+
+/**
+ * 玩家下令攻击相邻敌军：进入大地图野战。
+ * 校验、落位与战斗状态由 `createFieldBattle` 统一负责。
+ */
+export function attackArmy(
+  s: GameState,
+  attackerArmyId: string,
+  defenderArmyId: string,
+): ReturnType<typeof createFieldBattle> {
+  return createFieldBattle(s, attackerArmyId, defenderArmyId);
+}
+
+/** 抽象战力：兵力 × 武将武力修正，仅供 AI 互殴的轻量结算使用 */
+function armyPowerOf(s: GameState, army: Army): number {
+  return army.generalIds.reduce((sum, id) => {
+    const g = s.generals[id];
+    if (!g || g.status !== 'active') return sum;
+    return sum + g.troops * (0.8 + g.force / 220);
+  }, 0);
+}
+
+/** 战败部队退往最近己方城；没有城则武将溃散 */
+function retreatArmyGenerals(s: GameState, army: Army, at: GridPoint): void {
+  let best: { id: string; d: number } | null = null;
+  for (const city of Object.values(s.cities)) {
+    if (city.ownerId !== army.factionId) continue;
+    const anchor = cityAnchors()[city.id];
+    if (!anchor) continue;
+    const d = Math.abs(anchor.col - at.col) + Math.abs(anchor.row - at.row);
+    if (!best || d < best.d || (d === best.d && city.id < best.id)) {
+      best = { id: city.id, d };
+    }
+  }
+  for (const id of army.generalIds) {
+    const g = s.generals[id];
+    if (!g) continue;
+    delete g.armyId;
+    if (best) {
+      g.status = 'active';
+      g.locationId = best.id;
+      g.troops = Math.max(0, Math.floor(g.troops * 0.6));
+    } else {
+      g.status = 'inactive';
+      g.troops = 0;
+    }
+  }
+}
+
+/**
+ * AI 互殴的轻量结算：不弹战棋，只比较战力、按比例折损并移走败军。
+ * 玩家参与的遭遇不走这里，而是由 `createFieldBattle` 正常进入 M 档战棋。
+ */
+function resolveAiSkirmish(s: GameState, a: Army, b: Army): Army {
+  const powerA = armyPowerOf(s, a);
+  const powerB = armyPowerOf(s, b);
+  const winner = powerA >= powerB ? a : b;
+  const loser = winner === a ? b : a;
+  const winnerLoss = 0.12;
+  const loserLoss = 0.55;
+  for (const army of [winner, loser]) {
+    const rate = army === winner ? 1 - winnerLoss : 1 - loserLoss;
+    for (const id of army.generalIds) {
+      const g = s.generals[id];
+      if (g) g.troops = Math.max(0, Math.floor(g.troops * rate));
+    }
+    army.troops = army.generalIds.reduce(
+      (sum, id) => sum + (s.generals[id]?.troops ?? 0),
+      0,
+    );
+    army.path = [];
+    army.dest = { ...army.at };
+    army.legDays = 0;
+    army.mp = 0;
+  }
+  retreatArmyGenerals(s, loser, loser.at);
+  log(
+    s,
+    'info',
+    `${s.factions[winner.factionId]?.name ?? winner.factionId} 军在 ${plainDestLabel(
+      s,
+      winner.at,
+    )} 击退 ${s.factions[loser.factionId]?.name ?? loser.factionId} 军`,
+    'ai',
+  );
+  return winner;
+}
+
 // ── 攻城 ──────────────────────────────────────────────────
 /**
  * 下令攻城：部队必须正站在目标城的门外。
@@ -1349,15 +1457,42 @@ export function assaultCity(s: GameState, armyId: string): OpResult {
  * 4. 收尾时把所有部队移动力补满，供下一旬手动调度。
  */
 export function playArmyTurn(s: GameState): { battleStarted: boolean } {
-  const armies = (s.armies ??= []);
+  const snapshot = [...(s.armies ??= [])];
   const keep: Army[] = [];
+  const removed = new Set<string>();
   let battleStarted = false;
 
-  for (const army of armies) {
+  /**
+   * 中途进战斗时也要提交前面的入城 / 合并结果。
+   * 旧实现直接 return 会把已合并的部队留在 `state.armies`，战后出现幽灵行军。
+   */
+  const commit = () => {
+    const kept = new Set(keep.map((a) => a.id));
+    s.armies = [
+      ...keep,
+      ...snapshot.filter((a) => !removed.has(a.id) && !kept.has(a.id)),
+    ];
+  };
+  const drop = (id: string) => {
+    removed.add(id);
+    const idx = keep.findIndex((a) => a.id === id);
+    if (idx >= 0) keep.splice(idx, 1);
+  };
+
+  for (const army of snapshot) {
+    if (removed.has(army.id)) continue;
+    // 关港驻军不在地图上行动，也不吃旬补给重置
+    if (army.garrisonGateId) {
+      keep.push(army);
+      continue;
+    }
     const gens = army.generalIds
       .map((id) => s.generals[id])
       .filter((g): g is General => Boolean(g) && g!.status === 'active');
-    if (gens.length === 0) continue;
+    if (gens.length === 0) {
+      drop(army.id);
+      continue;
+    }
     army.troops = gens.reduce((n, g) => n + g.troops, 0);
 
     const budget = armyMp(army);
@@ -1369,6 +1504,32 @@ export function playArmyTurn(s: GameState): { battleStarted: boolean } {
       const own = ownCityUnderArmy(s, army);
       if (own) {
         mergeArmy(s, army, own);
+        drop(army.id);
+        continue;
+      }
+    }
+
+    // AI 行军途中撞上敌军：玩家参战则暂停进战棋，AI 互殴则轻量结算
+    if (army.factionId !== s.playerFactionId) {
+      const foes = adjacentEnemyArmies(s, army.id).filter((foe) => !removed.has(foe.id));
+      const playerFoe = foes.find((foe) => foe.factionId === s.playerFactionId);
+      if (playerFoe) {
+        commit();
+        const field = createFieldBattle(s, army.id, playerFoe.id);
+        if (field.result.ok) {
+          battleStarted = true;
+          return { battleStarted };
+        }
+        log(s, 'warn', `野战无法开战：${field.result.message}`);
+      } else if (foes.length > 0) {
+        const foe = foes[0]!;
+        const winner = resolveAiSkirmish(s, army, foe);
+        if (winner.id === army.id) {
+          drop(foe.id);
+          keep.push(army);
+        } else {
+          drop(army.id);
+        }
         continue;
       }
     }
@@ -1404,8 +1565,12 @@ export function playArmyTurn(s: GameState): { battleStarted: boolean } {
       if (battle.result.ok) {
         if (!battle.battle) {
           mergeArmy(s, army, siege);
+          drop(army.id);
           continue;
         }
+        // 攻城部队化为战棋单位：从大地图部队列表中移除，战后由结算回写武将
+        drop(army.id);
+        commit();
         s.phase = 'battle';
         battleStarted = true;
         return { battleStarted };
@@ -1421,8 +1586,10 @@ export function playArmyTurn(s: GameState): { battleStarted: boolean } {
   }
 
   s.armies = keep;
-  // 下一旬的移动力
-  for (const army of s.armies) army.mp = armyMaxMp(army);
+  // 下一旬的移动力；驻军留在关内，不恢复地图移动力
+  for (const army of s.armies) {
+    army.mp = army.garrisonGateId ? 0 : armyMaxMp(army);
+  }
   return { battleStarted };
 }
 

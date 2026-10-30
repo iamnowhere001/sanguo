@@ -58,8 +58,20 @@ import {
 } from '../systems/battle';
 import { continueAiPhase, startAiPhase, aiFactionIds } from '../systems/ai';
 import { tickDiplomacy } from '../systems/factionDiplomacy';
-import { assaultCity, moveArmyTo, playArmyTurn, runSiegeAttrition, sortieArmy } from '../systems/army';
-import { assaultGate, runGateProduction } from '../systems/gates';
+import {
+  assaultCity,
+  attackArmy,
+  moveArmyTo,
+  playArmyTurn,
+  runSiegeAttrition,
+  sortieArmy,
+} from '../systems/army';
+import {
+  assaultGate,
+  garrisonGate,
+  runGateProduction,
+  withdrawGate,
+} from '../systems/gates';
 import { doDiplomacy, doPersuadeCity, type DiplomacyKind } from '../systems/diplomacy';
 import {
   doFactionDiplomacy,
@@ -117,6 +129,12 @@ export type Action =
   | { t: 'MOVE_ARMY'; armyId: string; to: GridPoint }
   | { t: 'ASSAULT'; armyId: string }
   | { t: 'ASSAULT_GATE'; armyId: string; gateId: string }
+  /** 攻击相邻敌军：从大地图直接进入野战 */
+  | { t: 'ATTACK_ARMY'; attackerArmyId: string; defenderArmyId: string }
+  /** 把部队收进我方关隘 / 港口 */
+  | { t: 'GARRISON_GATE'; armyId: string; gateId: string }
+  /** 从关港撤出驻军 */
+  | { t: 'WITHDRAW_GATE'; armyId: string }
   | { t: 'BATTLE_MOVE'; unitId: string; x: number; y: number }
   | { t: 'BATTLE_UNDO_MOVE'; unitId: string }
   | { t: 'BATTLE_ATTACK'; attackerId: string; targetId: string }
@@ -481,6 +499,42 @@ export function reduce(
       const r = assaultGate(s, action.armyId, action.gateId);
       return { state: r.ok ? s : state, result: r };
     }
+    case 'ATTACK_ARMY': {
+      if (s.phase !== 'map') {
+        return { state, result: { ok: false, message: '当前不在大地图阶段' } };
+      }
+      const army = (s.armies ?? []).find((a) => a.id === action.attackerArmyId);
+      if (!army) return { state, result: { ok: false, message: '部队不存在' } };
+      if (army.factionId !== s.playerFactionId) {
+        return { state, result: { ok: false, message: '只能指挥己方部队接战' } };
+      }
+      const r = attackArmy(s, action.attackerArmyId, action.defenderArmyId);
+      return { state: r.result.ok ? s : state, result: r.result };
+    }
+    case 'GARRISON_GATE': {
+      if (s.phase !== 'map') {
+        return { state, result: { ok: false, message: '当前不在大地图阶段' } };
+      }
+      const army = (s.armies ?? []).find((a) => a.id === action.armyId);
+      if (!army) return { state, result: { ok: false, message: '部队不存在' } };
+      if (army.factionId !== s.playerFactionId) {
+        return { state, result: { ok: false, message: '只能调度己方部队驻军' } };
+      }
+      const r = garrisonGate(s, action.armyId, action.gateId);
+      return { state: r.ok ? s : state, result: r };
+    }
+    case 'WITHDRAW_GATE': {
+      if (s.phase !== 'map') {
+        return { state, result: { ok: false, message: '当前不在大地图阶段' } };
+      }
+      const army = (s.armies ?? []).find((a) => a.id === action.armyId);
+      if (!army) return { state, result: { ok: false, message: '部队不存在' } };
+      if (army.factionId !== s.playerFactionId) {
+        return { state, result: { ok: false, message: '只能调度己方驻军' } };
+      }
+      const r = withdrawGate(s, action.armyId);
+      return { state: r.ok ? s : state, result: r };
+    }
     case 'BATTLE_MOVE': {
       if (!s.battle || s.phase !== 'battle') {
         return { state, result: { ok: false, message: '当前无战斗' } };
@@ -642,8 +696,15 @@ export function reduce(
       }
       if (s.battle.playerSide === 'defender') {
         // 守方弃城撤退：按攻方胜利结算，未溃散守军会撤往相邻友城
+        const field = s.battle.kind === 'field';
         resolveBattle(s, s.battle, 'victory');
-        return { state: s, result: { ok: true, message: '弃城撤退，守军退往邻城' } };
+        return {
+          state: s,
+          result: {
+            ok: true,
+            message: field ? '脱离战场，残部退往后方' : '弃城撤退，守军退往邻城',
+          },
+        };
       }
       resolveBattle(s, s.battle, 'retreat');
       return { state: s, result: { ok: true, message: '已撤退' } };

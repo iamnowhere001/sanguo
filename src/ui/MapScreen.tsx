@@ -19,6 +19,7 @@ import { ConfirmDialog, cityTroops, factionColor, factionName, fmt } from './com
 import { activePolicy } from '../systems/policy';
 import { buildCouncilBrief } from '../systems/council';
 import {
+  adjacentEnemyArmies,
   armyEtaXun,
   armyMp,
   armyMaxMp,
@@ -41,7 +42,7 @@ import {
   gatesOfFaction,
   gateSummary,
 } from '../systems/gates';
-import { GATE_KIND_LABEL } from '../data/tables/gates';
+import { GATE_KIND_LABEL, gateById } from '../data/tables/gates';
 import { SIEGE_WEAPONS } from '../data/tables/siegeWeapons';
 import { skillNameOf } from '../data/tables/generalTraits';
 
@@ -241,6 +242,12 @@ export function MapScreen() {
     [state, selectedArmy],
   );
 
+  /** 与选中部队相邻、可即时开战的敌军 */
+  const armyFoes = useMemo(
+    () => (selectedArmy ? adjacentEnemyArmies(state, selectedArmy.id) : []),
+    [state, selectedArmy],
+  );
+
   /** 选中城池的四门状态 */
   const selectedGates = useMemo(
     () => (selectedCityId ? gatesOf(state, selectedCityId) : []),
@@ -283,6 +290,25 @@ export function MapScreen() {
 
   const handleAssaultGate = (armyId: string, gateId: string) => {
     const res = store.dispatch({ t: 'ASSAULT_GATE', armyId, gateId });
+    gameStore.notify(res.message, res.ok ? 'good' : 'warn');
+  };
+
+  const handleAttackArmy = (attackerArmyId: string, defenderArmyId: string) => {
+    const res = store.dispatch({ t: 'ATTACK_ARMY', attackerArmyId, defenderArmyId });
+    if (!res.ok) gameStore.notify(res.message, 'warn');
+    else {
+      gameStore.notify(res.message, 'good');
+      setSelectedArmyId(null);
+    }
+  };
+
+  const handleGarrisonGate = (armyId: string, gateId: string) => {
+    const res = store.dispatch({ t: 'GARRISON_GATE', armyId, gateId });
+    gameStore.notify(res.message, res.ok ? 'good' : 'warn');
+  };
+
+  const handleWithdrawGate = (armyId: string) => {
+    const res = store.dispatch({ t: 'WITHDRAW_GATE', armyId });
     gameStore.notify(res.message, res.ok ? 'good' : 'warn');
   };
 
@@ -870,7 +896,11 @@ export function MapScreen() {
                 {fmt(selectedArmy.troops)} 兵 · 移动力 {Math.round(armyMp(selectedArmy))}/
                 {armyMaxMp(selectedArmy)}
               </span>
-              {selectedArmy.path.length > 0 ? (
+              {selectedArmy.garrisonGateId ? (
+                <span className="army-hud-meta army-hud-garrison">
+                  驻守 {gateById(selectedArmy.garrisonGateId)?.name ?? '关港'}
+                </span>
+              ) : selectedArmy.path.length > 0 ? (
                 <span className="army-hud-meta">
                   余 {Math.ceil(selectedArmy.path.length)} 格 · 约 {armyEtaXun(state, selectedArmy)} 旬
                 </span>
@@ -887,7 +917,7 @@ export function MapScreen() {
                   特技 {skillNameOf(selectedArmy.skill)}
                 </span>
               ) : null}
-              {armySiegeCityId ? (
+              {armySiegeCityId && !selectedArmy.garrisonGateId ? (
                 <button
                   type="button"
                   className="btn accent sm"
@@ -896,6 +926,35 @@ export function MapScreen() {
                   攻城 {state.cities[armySiegeCityId]?.name}
                 </button>
               ) : null}
+              {selectedArmy.garrisonGateId ? (
+                <button
+                  type="button"
+                  className="btn sm"
+                  onClick={() => handleWithdrawGate(selectedArmy.id)}
+                >
+                  撤出关防
+                </button>
+              ) : null}
+              {!selectedArmy.garrisonGateId
+                ? armyFoes.slice(0, 3).map((foe) => (
+                    <button
+                      key={foe.id}
+                      type="button"
+                      className="btn accent sm"
+                      title={`在相邻格直接接战：${foe.generalIds
+                        .map((id) => state.generals[id]?.name)
+                        .filter(Boolean)
+                        .join('、')}`}
+                      onClick={() => handleAttackArmy(selectedArmy.id, foe.id)}
+                    >
+                      攻击 {foe.generalIds
+                        .map((id) => state.generals[id]?.name)
+                        .filter(Boolean)
+                        .join('、') || '敌军'}{' '}
+                      · {fmt(foe.troops)}
+                    </button>
+                  ))
+                : null}
               <button type="button" className="btn ghost sm" onClick={() => setSelectedArmyId(null)}>
                 取消
               </button>
@@ -980,6 +1039,8 @@ export function MapScreen() {
             gateId={selectedGate.gate.id}
             onClose={() => handleSelectGate(null)}
             onAssault={handleAssaultGate}
+            onGarrison={handleGarrisonGate}
+            onWithdraw={handleWithdrawGate}
             onSelectArmy={(armyId) => {
               setSelectedArmyId(armyId);
               closeDispatch();

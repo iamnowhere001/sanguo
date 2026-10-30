@@ -73,7 +73,8 @@ export function battleTerrainAt(b: BattleState, x: number, y: number): BattleTer
   if (b.mapBattle) {
     if (x < 0 || y < 0 || x >= MAP.cols || y >= MAP.rows) return 'water';
     const wall = wallTileAt(x, y);
-    if (wall && wall.cityId === b.targetCityId) return 'city';
+    // 野战借道城郊时，城墙只是障碍，不是本场要攻的目标城
+    if (b.kind !== 'field' && wall && wall.cityId === b.targetCityId) return 'city';
     return KIND_TO_TERRAIN[tileKindAt(x, y)];
   }
   const row = b.grid?.[y];
@@ -150,8 +151,20 @@ export function reachableTiles(b: BattleState, unit: BattleUnit): Map<string, nu
       const ny = cur.y + dy;
       if (!inBattleBounds(b, nx, ny)) continue;
       if (isOccupied(b, nx, ny, unit.id)) continue;
+      // 野战借道城郊时，城墙只是障碍：不参与本场攻城，也不能翻墙占城
+      if (b.mapBattle && b.kind === 'field' && wallTileAt(nx, ny)) continue;
       const terrain = battleTerrainAt(b, nx, ny);
-      const step = terrain === 'city' ? 1 : MOVE_COST[unit.unitClass][terrain];
+      const navy = unit.unitClass === 'navy';
+      // 平时只有水军能走水面；水战里所有兵种都乘船，水军仍保留 1 MP 的机动优势
+      if (terrain === 'water' && !b.waterBattle && !navy) continue;
+      const step =
+        terrain === 'city'
+          ? 1
+          : terrain === 'water' && b.waterBattle
+            ? navy
+              ? 1
+              : 2
+            : MOVE_COST[unit.unitClass][terrain];
       const next = cur.cost + step;
       if (next > max) continue;
       const k = unitKey(nx, ny);

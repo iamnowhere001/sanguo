@@ -48,12 +48,30 @@ export function gateOwnerOf(s: GameState, gateId: string): string | null {
   return gate.guardCityId ? (s.cities[gate.guardCityId]?.ownerId ?? null) : null;
 }
 
-/** 当前守军：缺省按配表满编（小路无常驻守军） */
+/** 当前守军：配表 / 运行期守军 + 真实驻扎在关内的部队（小路无常驻守军） */
 export function gateGarrisonOf(s: GameState, gateId: string): number {
   const gate = gateById(gateId);
   if (!gate || isTrail(gate)) return 0;
   const runtime = s.gates?.[gateId];
-  return Math.max(0, Math.round(runtime?.troops ?? gate.garrison));
+  const base = Math.max(0, Math.round(runtime?.troops ?? gate.garrison));
+  const owner = gateOwnerOf(s, gateId);
+  const stationed = (s.armies ?? [])
+    .filter((army) => army.garrisonGateId === gateId)
+    .filter((army) => !owner || army.factionId === owner)
+    .reduce((sum, army) => sum + Math.max(0, army.troops), 0);
+  return base + stationed;
+}
+
+/** 关内驻军（可按势力筛）：这些部队不占地图格，也不参与关前野战 */
+export function garrisonArmiesAtGate(
+  s: GameState,
+  gateId: string,
+  factionId?: string,
+): Army[] {
+  return (s.armies ?? [])
+    .filter((army) => army.garrisonGateId === gateId)
+    .filter((army) => !factionId || army.factionId === factionId)
+    .sort((a, b) => b.troops - a.troops || a.id.localeCompare(b.id));
 }
 
 /** 关防归属带来的通行判定：同势力 / 无主 / 停战同盟可通行，敌对封锁 */
@@ -169,6 +187,7 @@ export function armiesAtGate(
   const site = gateSiteById(gateId);
   if (!site) return [];
   return (s.armies ?? [])
+    .filter((army) => !army.garrisonGateId)
     .filter((army) => !factionId || army.factionId === factionId)
     .filter((army) => gateDistanceTo(site, army.at) <= 1)
     .sort((a, b) => b.troops - a.troops || a.id.localeCompare(b.id));
@@ -241,6 +260,7 @@ function resolveGateAssault(
       troops: occupationGarrison(gate),
       capturedTurn: s.turn,
     };
+    clearGateGarrison(s, gate.id, factionId);
     log(
       s,
       'good',
@@ -288,6 +308,8 @@ function resolveGateAssault(
     runtime.ownerId = factionId;
     runtime.troops = occupationGarrison(gate);
     runtime.capturedTurn = s.turn;
+    // 败方驻军随关防易手撤退；其兵力已在 gateGarrisonOf 中参与过防守
+    clearGateGarrison(s, gate.id, factionId);
     log(
       s,
       'good',
@@ -316,6 +338,112 @@ function resolveGateAssault(
     attackerLoss,
     defenderLoss,
   };
+}
+
+/** 关防易手时，败方驻军退往最近己方城；无城可退则溃散 */
+function clearGateGarrison(s: GameState, gateId: string, keepFactionId?: string): void {
+  const site = gateSiteById(gateId);
+  const losers = (s.armies ?? []).filter(
+    (army) =>
+      army.garrisonGateId === gateId &&
+      (!keepFactionId || army.factionId !== keepFactionId),
+  );
+  if (losers.length === 0) return;
+  const from = site?.center ?? { col: 0, row: 0 };
+  for (const army of losers) {
+    let best: { id: string; d: number } | null = null;
+    if (site) {
+      for (const city of Object.values(s.cities)) {
+        if (city.ownerId !== army.factionId) continue;
+        const anchor = cityAnchors()[city.id];
+        if (!anchor) continue;
+        const d = Math.abs(anchor.col - from.col) + Math.abs(anchor.row - from.row);
+        if (!best || d < best.d || (d === best.d && city.id < best.id)) {
+          best = { id: city.id, d };
+        }
+      }
+    }
+    for (const id of army.generalIds) {
+      const g = s.generals[id];
+      if (!g) continue;
+      delete g.armyId;
+      if (best) {
+        g.status = 'active';
+        g.locationId = best.id;
+        g.troops = Math.floor(g.troops * 0.7);
+      } else {
+        g.status = 'inactive';
+        g.troops = 0;
+      }
+    }
+    s.armies = (s.armies ?? []).filter((a) => a.id !== army.id);
+  }
+}
+
+/**
+ * 关港驻军：把已抵近的我方部队收进关内。
+ *
+ * 驻军期间部队不在地图上移动、不占格，也不参与关前野战；
+ * 其兵力计入 `gateGarrisonOf`，敌军攻关时一并防守。
+ */
+export function garrisonGate(
+  s: GameState,
+  armyId: string,
+  gateId: string,
+): OpResult {
+  const army = (s.armies ?? []).find((a) => a.id === armyId);
+  if (!army) return fail('部队不存在');
+  if (army.garrisonGateId) return fail('该部队已在驻守关港');
+  const gate = gateById(gateId);
+  const site = gateSiteById(gateId);
+  if (!gate || !site) return fail('关防不存在');
+  if (isTrail(gate)) return fail(`${gate.name}是山间小路，无法驻军`);
+  if (gateOwnerOf(s, gateId) !== army.factionId) return fail('只能驻守我方关防');
+  if (!armyAtGate(army, gateId)) {
+    return fail(`部队须抵近${GATE_KIND_LABEL[gate.kind]}前才能驻军`);
+  }
+  if (garrisonArmiesAtGate(s, gateId).length > 0) {
+    return fail(`${gate.name}已有驻军，须先撤回原部队`);
+  }
+  const gens = activeGenerals(s, army.generalIds);
+  if (gens.length === 0) return fail('部队没有可驻守的武将');
+  army.troops = gens.reduce((sum, g) => sum + g.troops, 0);
+  if (army.troops <= 0) return fail('部队已无兵力');
+
+  army.garrisonGateId = gateId;
+  army.path = [];
+  army.dest = { ...army.at };
+  army.legDays = 0;
+  army.mp = 0;
+  army.targetCityId = undefined;
+  log(
+    s,
+    'info',
+    `${s.factions[army.factionId]?.name ?? army.factionId} 以 ${army.troops} 兵驻守${GATE_KIND_LABEL[gate.kind]}「${gate.name}」`,
+  );
+  return { ok: true, message: `已驻守 ${gate.name}：守军 ${gateGarrisonOf(s, gateId)}` };
+}
+
+/** 从关港撤出驻军：回到关前原地，下一条行军令可继续 */
+export function withdrawGate(s: GameState, armyId: string): OpResult {
+  const army = (s.armies ?? []).find((a) => a.id === armyId);
+  if (!army) return fail('部队不存在');
+  const gateId = army.garrisonGateId;
+  if (!gateId) return fail('该部队不在关港驻守');
+  const gate = gateById(gateId);
+  delete army.garrisonGateId;
+  army.path = [];
+  army.dest = { ...army.at };
+  army.legDays = 0;
+  // 旧档 / 缺省 mp 视为满额：撤出后当旬即可重新移动
+  delete army.mp;
+  army.targetCityId = undefined;
+  log(
+    s,
+    'info',
+    `${s.factions[army.factionId]?.name ?? army.factionId} 部队撤出${gate ? `「${gate.name}」` : '关防'}`,
+  );
+  return { ok: true, message: gate ? `已撤出 ${gate.name}` : '已撤出关防' };
 }
 
 /**

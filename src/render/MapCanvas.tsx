@@ -1223,7 +1223,8 @@ export function battleFocusWorld(b: BattleState): { x: number; y: number } {
  */
 function battleZoomFor(w: number, h: number): number {
   const layout = layoutOf(w, h);
-  return clamp(52 / Math.max(1, MAP.tile * layout.scale), 0.35, 1.6);
+  // 小屏一格最多 24–30px，大屏保持一格 52px；上限交给 MAX_ZOOM，避免镜头反而拉远
+  return clamp(52 / Math.max(1, MAP.tile * layout.scale), 0.35, MAX_ZOOM);
 }
 
 export function MapCanvas({

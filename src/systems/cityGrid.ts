@@ -47,6 +47,8 @@ const keyOf = (col: number, row: number): string => `${col},${row}`;
 /** 该格上的部队（同一格最多一支） */
 export function armyAtTile(s: GameState, col: number, row: number): Army | null {
   for (const a of s.armies ?? []) {
+    // 关港驻军收在关内，不占地图格
+    if (a.garrisonGateId) continue;
     if (a.at.col === col && a.at.row === row) return a;
   }
   return null;

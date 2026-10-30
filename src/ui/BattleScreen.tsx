@@ -32,6 +32,7 @@ import {
 import { trainingMultiplier } from '../systems/formulas';
 import { gameStore, useGameStore } from '../store/gameStore';
 import { BattleCanvas, TERRAIN_SWATCH, type BattleFx } from '../render/BattleCanvas';
+import { MapCanvas } from '../render/MapCanvas';
 import { BATTLEFIELD_PALETTE } from '../render/battlefieldTheme';
 import { audio } from '../audio';
 import { AudioSettingsButton } from './AudioSettings';
@@ -128,8 +129,9 @@ function BattleScreenBody() {
   const state = store.state as GameState;
   const battle = state.battle as BattleState;
   const playerSide = battle.playerSide;
+  const isField = battle.kind === 'field' && Boolean(battle.field);
   const defenderRetreatCity =
-    playerSide === 'defender'
+    playerSide === 'defender' && !isField
       ? retreatCityFor(state, battle.targetCityId, battle.defenderFactionId)
       : null;
   const foeSide = otherSide(playerSide);
@@ -161,12 +163,16 @@ function BattleScreenBody() {
       city: 0,
     };
     if (battle.mapBattle) {
-      const cx = battle.cityBlock
-        ? Math.round((battle.cityBlock.x0 + battle.cityBlock.x1) / 2)
-        : battle.units[Object.keys(battle.units)[0] ?? '']?.x ?? 0;
-      const cy = battle.cityBlock
-        ? Math.round((battle.cityBlock.y0 + battle.cityBlock.y1) / 2)
-        : battle.units[Object.keys(battle.units)[0] ?? '']?.y ?? 0;
+      const cx = battle.field
+        ? Math.round(battle.field.x)
+        : battle.cityBlock
+          ? Math.round((battle.cityBlock.x0 + battle.cityBlock.x1) / 2)
+          : battle.units[Object.keys(battle.units)[0] ?? '']?.x ?? 0;
+      const cy = battle.field
+        ? Math.round(battle.field.y)
+        : battle.cityBlock
+          ? Math.round((battle.cityBlock.y0 + battle.cityBlock.y1) / 2)
+          : battle.units[Object.keys(battle.units)[0] ?? '']?.y ?? 0;
       const radius = 18;
       for (let y = cy - radius; y <= cy + radius; y++) {
         for (let x = cx - radius; x <= cx + radius; x++) {
@@ -179,7 +185,7 @@ function BattleScreenBody() {
       }
     }
     return counts;
-  }, [battle.mapBattle, battle.cityBlock, battle.grid, battle.targetCityId]);
+  }, [battle.mapBattle, battle.cityBlock, battle.field, battle.grid, battle.targetCityId]);
   const terrainColors: Record<BattleTerrain, string> = {
     plain: battlefieldPalette.plain,
     forest: battlefieldPalette.forest,
@@ -713,14 +719,16 @@ function BattleScreenBody() {
               ? '点击绿格移动 · Tab 切换部队 · 空格结束回合'
               : '无可移动格 · 可释放计策或待机';
 
-  const breakDays = estimateBreakDays(battle);
+  const breakDays = isField ? null : estimateBreakDays(battle);
   const remainingDays = BALANCE.BATTLE_MAX_DAYS - battle.day + 1;
   const budgetTone =
     breakDays == null || breakDays > remainingDays ? 'warn-text' : 'muted';
 
   /** 攻城提示：攻方站上城池格才会磨损城墙，耐久归零即城破 */
   const wallHint =
-    typeof battle.cityDurability === 'number' && battle.cityDurability > 0
+    !isField &&
+    typeof battle.cityDurability === 'number' &&
+    battle.cityDurability > 0
       ? playerSide === 'attacker'
         ? '站上城池格（城内）可逐日磨损城墙，耐久归零即破城'
         : '城墙耐久归零即城破，别让敌军站住城内'
@@ -731,18 +739,27 @@ function BattleScreenBody() {
       <header className="topbar battle-top">
         <div className="tb-left">
           <span className="date">
-            {playerSide === 'defender'
-              ? `${state.cities[battle.fromCityId]?.name} 来犯 · 守 ${state.cities[battle.targetCityId]?.name}`
-              : `${state.cities[battle.fromCityId]?.name} → ${state.cities[battle.targetCityId]?.name}`}
+            {isField
+              ? `${factionName(state, myFactionId)} 遇 ${factionName(state, foeFactionId)} · ${battlefieldName}`
+              : playerSide === 'defender'
+                ? `${state.cities[battle.fromCityId]?.name} 来犯 · 守 ${state.cities[battle.targetCityId]?.name}`
+                : `${state.cities[battle.fromCityId]?.name} → ${state.cities[battle.targetCityId]?.name}`}
           </span>
           <span className="turn">
-            {playerSide === 'defender' ? '守城战' : '出征'} · 第 {battle.day} /{' '}
-            {BALANCE.BATTLE_MAX_DAYS} 回合 · 天气 {WEATHER_LABEL[battle.weather]}
+            {isField ? '野战' : playerSide === 'defender' ? '守城战' : '出征'} · 第{' '}
+            {battle.day} / {BALANCE.BATTLE_MAX_DAYS} 回合 · 天气{' '}
+            {WEATHER_LABEL[battle.weather]}
           </span>
-          <span className={`turn turn-budget ${budgetTone}`}>
-            {playerSide === 'defender' ? '预计失守' : '预计破城'}{' '}
-            {breakDays == null ? '—' : `~${breakDays}`} 回合 · 剩余 {remainingDays} 回合
-          </span>
+          {isField ? (
+            <span className="turn turn-budget muted">
+              大地图接战 · 无城墙耐久 · 剩余 {remainingDays} 回合
+            </span>
+          ) : (
+            <span className={`turn turn-budget ${budgetTone}`}>
+              {playerSide === 'defender' ? '预计失守' : '预计破城'}{' '}
+              {breakDays == null ? '—' : `~${breakDays}`} 回合 · 剩余 {remainingDays} 回合
+            </span>
+          )}
         </div>
 
         <div className="battle-sides">
@@ -806,7 +823,7 @@ function BattleScreenBody() {
             onClick={() => setRetreatOpen(true)}
             disabled={enemyTurn}
           >
-            {playerSide === 'defender' ? '弃城撤退' : '撤退'}
+            {isField ? '撤退' : playerSide === 'defender' ? '弃城撤退' : '撤退'}
           </button>
           <button className="btn primary" onClick={endTurn} disabled={enemyTurn}>
             {readyCount > 0 ? `结束回合（剩 ${readyCount}）` : '结束回合'}
@@ -863,23 +880,41 @@ function BattleScreenBody() {
               </button>
             ))}
           </div>
-          <BattleCanvas
-            battle={battle}
-            selectedUnitId={selectedId}
-            reachable={reachable}
-            targets={targets}
-            fx={fx}
-            showThreat={showThreat}
-            onUnitClick={onUnitClick}
-            onCellClick={onCellClick}
-          />
+          {battle.mapBattle ? (
+            <div className="battle-map-wrap">
+              <MapCanvas
+                state={state}
+                selectedCityId={battle.fromCityId}
+                battle={battle}
+                battleSelectedUnitId={selectedId}
+                battleReachable={reachable}
+                battleTargets={targets}
+                battleFx={fx}
+                battleShowThreat={showThreat}
+                onSelect={() => {}}
+                onBattleUnitClick={onUnitClick}
+                onBattleCellClick={onCellClick}
+              />
+            </div>
+          ) : (
+            <BattleCanvas
+              battle={battle}
+              selectedUnitId={selectedId}
+              reachable={reachable}
+              targets={targets}
+              fx={fx}
+              showThreat={showThreat}
+              onUnitClick={onUnitClick}
+              onCellClick={onCellClick}
+            />
+          )}
           <div
             className="battlefield-badge"
             style={{ borderLeftColor: battlefieldPalette.accent }}
             aria-hidden="true"
           >
             <span>
-              {targetCityName} · {BATTLEFIELD_THEME_LABEL[battlefieldTheme]}
+              {isField ? '野战' : targetCityName} · {BATTLEFIELD_THEME_LABEL[battlefieldTheme]}
               {battle.waterBattle ? ' · 水战' : ''}
             </span>
             <b>{battlefieldName}</b>
@@ -1193,7 +1228,9 @@ function BattleScreenBody() {
           <section>
             <div className="section-title">
               <span>战场</span>
-              <span className="muted small">城池减伤 50%</span>
+              <span className="muted small">
+                {isField ? '野战 · 无城防加成' : '城池减伤 50%'}
+              </span>
             </div>
             <div className="battlefield-card">
               <i
@@ -1307,7 +1344,21 @@ function BattleScreenBody() {
       {saveOpen ? <SaveDialog mode="save" onClose={() => setSaveOpen(false)} /> : null}
 
       {retreatOpen ? (
-        playerSide === 'defender' ? (
+        isField ? (
+          <ConfirmDialog
+            title="脱离战场？"
+            body={`撤退按战败处理：残兵仅保留 ${Math.round(
+              BALANCE.RETREAT_KEEP_RATE * 100,
+            )}%，胜方仍据 ${battlefieldName}。`}
+            cancelLabel="继续战斗"
+            confirmLabel="撤退"
+            onCancel={() => setRetreatOpen(false)}
+            onConfirm={() => {
+              setRetreatOpen(false);
+              store.dispatch({ t: 'BATTLE_RETREAT' });
+            }}
+          />
+        ) : playerSide === 'defender' ? (
           <ConfirmDialog
             title="弃城撤退？"
             body={

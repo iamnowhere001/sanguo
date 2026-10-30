@@ -8,6 +8,7 @@ import {
 } from '../data/tables/gates';
 import {
   armiesAtGate,
+  garrisonArmiesAtGate,
   gateAccessLabel,
   gateSummary,
 } from '../systems/gates';
@@ -28,12 +29,16 @@ export function GatePanel({
   onClose,
   onAssault,
   onSelectArmy,
+  onGarrison,
+  onWithdraw,
 }: {
   state: GameState;
   gateId: string;
   onClose: () => void;
   onAssault: (armyId: string, gateId: string) => void;
   onSelectArmy?: (armyId: string) => void;
+  onGarrison?: (armyId: string, gateId: string) => void;
+  onWithdraw?: (armyId: string) => void;
 }) {
   const summary = useMemo(
     () => gateSummary(state, gateId, state.playerFactionId),
@@ -41,6 +46,10 @@ export function GatePanel({
   );
   const armies = useMemo(
     () => armiesAtGate(state, gateId, state.playerFactionId),
+    [state, gateId],
+  );
+  const garrisonArmies = useMemo(
+    () => garrisonArmiesAtGate(state, gateId, state.playerFactionId),
     [state, gateId],
   );
 
@@ -231,6 +240,46 @@ export function GatePanel({
           </p>
         </section>
 
+        {mine && !trail ? (
+          <section className="gate-section">
+            <div className="section-title">
+              <span>关内驻军</span>
+              <span className="muted small">{garrisonArmies.length}</span>
+            </div>
+            {garrisonArmies.length === 0 ? (
+              <p className="gate-empty">
+                尚无驻军。把部队开到关前 / 滩头后，可收进关内驻守；驻军计入守军，但不占地图格。
+              </p>
+            ) : (
+              <div className="gate-armies">
+                {garrisonArmies.map((army) => (
+                  <div className="gate-army" key={army.id}>
+                    <button
+                      type="button"
+                      className="gate-army-name"
+                      onClick={() => onSelectArmy?.(army.id)}
+                      title="选中该驻军"
+                    >
+                      {army.generalIds
+                        .map((id) => state.generals[id]?.name)
+                        .filter(Boolean)
+                        .join('、') || army.id}
+                    </button>
+                    <span>{fmt(army.troops)} 兵</span>
+                    <button
+                      type="button"
+                      className="btn ghost sm"
+                      onClick={() => onWithdraw?.(army.id)}
+                    >
+                      撤出
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        ) : null}
+
         <section className="gate-section">
           <div className="section-title">
             <span>关前我军</span>
@@ -263,6 +312,20 @@ export function GatePanel({
                       onClick={() => onAssault(army.id, gate.id)}
                     >
                       {actionLabel} {gate.name}
+                    </button>
+                  ) : mine && !trail ? (
+                    <button
+                      type="button"
+                      className="btn sm"
+                      disabled={garrisonArmies.length > 0}
+                      title={
+                        garrisonArmies.length > 0
+                          ? '关内已有驻军，须先撤出'
+                          : '收进关内驻守：计入守军，不占地图格'
+                      }
+                      onClick={() => onGarrison?.(army.id, gate.id)}
+                    >
+                      驻军
                     </button>
                   ) : (
                     <span className="gate-tag safe">通行无阻</span>

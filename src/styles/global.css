@@ -4170,11 +4170,17 @@ input[type='number'] {
 }
 .battle-canvas-wrap,
 .battle-canvas,
-.battle-fx {
+.battle-fx,
+.battle-map-wrap {
   position: absolute;
 }
-.battle-canvas-wrap {
+.battle-canvas-wrap,
+.battle-map-wrap {
   inset: 40px 0 0 0;
+}
+/* 大地图战斗：复用同一张 576×432 地图，只把交互切到战棋 */
+.battle-map-wrap {
+  overflow: hidden;
 }
 .battle-canvas,
 .battle-fx {

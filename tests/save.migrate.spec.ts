@@ -110,6 +110,26 @@ describe('旧存档迁移', () => {
     expect(battle!.rng.cursor).toBe(0);
   });
 
+  it('野战读档不补城墙耐久与攻城目标', () => {
+    const s = createGame({ playerFactionId: 'liubei', seed: 15 });
+    const { battle } = createBattle(s, 'jiangxia', 'xiangyang', ['liubei', 'guanyu']);
+    expect(battle).toBeDefined();
+    battle!.kind = 'field';
+    delete battle!.objective;
+    delete battle!.sideObjective;
+    delete battle!.foeObjective;
+    delete battle!.foeSideObjective;
+    delete battle!.cityDurability;
+    delete battle!.cityDurabilityMax;
+
+    migrateSave(s);
+
+    expect(battle!.objective).toBeUndefined();
+    expect(battle!.sideObjective).toBeUndefined();
+    expect(battle!.cityDurability).toBeUndefined();
+    expect(battle!.cityDurabilityMax).toBeUndefined();
+  });
+
   it('v2 存档文件迁移到 v3：补齐 runSeed / turn / presets', () => {
     const s = createGame({ playerFactionId: 'liubei', seed: 14 });
     const row = {

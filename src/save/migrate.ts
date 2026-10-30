@@ -167,9 +167,12 @@ export function migrateSave(state: GameState): GameState {
       state.battleSerial,
     );
     state.battle.fortification ??=
-      state.cities[state.battle.targetCityId]?.fortification ?? 0;
-    // 旧战斗存档没有城墙耐久：按目标城当前耐久补齐
-    const wallCity = state.cities[state.battle.targetCityId];
+      state.battle.kind === 'field'
+        ? 0
+        : (state.cities[state.battle.targetCityId]?.fortification ?? 0);
+    // 旧战斗存档没有城墙耐久：按目标城当前耐久补齐；野战没有城墙，跳过
+    const wallCity =
+      state.battle.kind === 'field' ? undefined : state.cities[state.battle.targetCityId];
     if (wallCity) {
       const max = cityMaxDurability(
         wallCity.size,
@@ -181,7 +184,7 @@ export function migrateSave(state: GameState): GameState {
     }
     state.battle.tacticUses ??= {};
     state.battle.tacticBonus ??= 0;
-    if (!state.battle.battlefield) {
+    if (!state.battle.battlefield && state.battle.kind !== 'field') {
       const city = state.cities[state.battle.targetCityId];
       if (city) {
         state.battle.battlefield = state.battle.mapBattle
@@ -217,7 +220,8 @@ export function migrateSave(state: GameState): GameState {
       u.bonusMove ??= 0;
     }
     // 旧战斗存档没有题目：按当前战役上下文补一份，保证读档续战也有一战一题。
-    attachBattleObjectives(state, state.battle);
+    // 野战没有目标城池，不生成攻城 / 守城题目。
+    if (state.battle.kind !== 'field') attachBattleObjectives(state, state.battle);
   }
 
   // 旧存档没有势力外交关系：补齐全员战争

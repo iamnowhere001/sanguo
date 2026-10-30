@@ -96,12 +96,15 @@ export function advanceBattleDay(
     }
   }
 
-  // 【优化】E06 守城方每天按 DEFENDER_REGEN_RATE 恢复兵力：拖得越久，对攻方越不利
-  for (const u of Object.values(b.units)) {
-    if (u.side !== 'defender' || u.routed) continue;
-    const heal = Math.floor(u.maxTroops * BALANCE.DEFENDER_REGEN_RATE);
-    if (heal > 0 && u.troops < u.maxTroops) {
-      u.troops = Math.min(u.maxTroops, u.troops + heal);
+  // 【优化】E06 守城方每天按 DEFENDER_REGEN_RATE 恢复兵力：拖得越久，对攻方越不利。
+  // 野战没有城池补给，双方都只能靠随军粮草，不享受守方回兵。
+  if (b.kind !== 'field') {
+    for (const u of Object.values(b.units)) {
+      if (u.side !== 'defender' || u.routed) continue;
+      const heal = Math.floor(u.maxTroops * BALANCE.DEFENDER_REGEN_RATE);
+      if (heal > 0 && u.troops < u.maxTroops) {
+        u.troops = Math.min(u.maxTroops, u.troops + heal);
+      }
     }
   }
 

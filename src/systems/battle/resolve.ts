@@ -1,4 +1,6 @@
 import { BALANCE } from '../../data/tables/balance';
+import { MAP } from '../../data/tables/geography';
+import { marchCostOfTile } from '../../data/tables/marchCost';
 import { WEATHER_LABEL } from '../../data/tables/tactics';
 import { chance } from '../../core/rng';
 import type {
@@ -9,9 +11,11 @@ import type {
   City,
   Faction,
   GameState,
+  GridPoint,
   ReportLine,
 } from '../../core/state';
 import { factionTroops, garrisonTroopsOf, neighborsOf, syncFactionCities } from '../../core/state';
+import { cityBlocks, isWaterKind, tileKindAt, wallTileAt } from '../../render/terrainGrid';
 import { log } from '../economy';
 import { changeRelationScore } from '../factionDiplomacy';
 import { clamp, garrisonCapOf } from '../formulas';
@@ -154,6 +158,277 @@ export function retreatCityFor(
   return options[0] ?? null;
 }
 
+/** 败军最近的己方城池：野战没有相邻城池的限制，按曼哈顿距离取最近一座 */
+function nearestFriendlyCity(
+  state: GameState,
+  factionId: string,
+  at: GridPoint,
+): City | null {
+  let best: { city: City; d: number } | null = null;
+  for (const [id, block] of Object.entries(cityBlocks())) {
+    const city = state.cities[id];
+    if (!city || city.ownerId !== factionId) continue;
+    const d = Math.abs(block.col - at.col) + Math.abs(block.row - at.row);
+    if (!best || d < best.d || (d === best.d && city.id < best.city.id)) {
+      best = { city, d };
+    }
+  }
+  return best?.city ?? null;
+}
+
+/**
+ * 非水军打赢水战后不能留在江心：从接战点向外找第一块可行军陆地。
+ * 这里不引 `army.ts`（`setup.ts` 已依赖本文件，会形成循环），只用地形与基础行军代价。
+ */
+function nearestLandTile(at: GridPoint): GridPoint {
+  if (Number.isFinite(marchCostOfTile(at.col, at.row))) return at;
+  for (let radius = 1; radius <= 24; radius++) {
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
+        const col = at.col + dx;
+        const row = at.row + dy;
+        if (col < 0 || row < 0 || col >= MAP.cols || row >= MAP.rows) continue;
+        if (wallTileAt(col, row)) continue;
+        if (!Number.isFinite(marchCostOfTile(col, row))) continue;
+        return { col, row };
+      }
+    }
+  }
+  return at;
+}
+
+/**
+ * 野战结算：不占城，也不动城池归属。
+ *
+ * - 胜方纵队留在原格，兵力 / 武将状态回写后继续行军；
+ * - 败方纵队从 `state.armies` 移除，残部退往最近己方城，无城可退则溃散；
+ * - 水战中的非水军胜方会被挪到最近陆地，避免下一旬从江心起步。
+ */
+function resolveFieldBattle(
+  state: GameState,
+  b: BattleState,
+  outcome: BattleOutcome,
+): void {
+  const field = b.field!;
+  const armies = state.armies ?? [];
+  const attackerArmy = armies.find((a) => a.id === field.attackerArmyId);
+  const defenderArmy = armies.find((a) => a.id === field.defenderArmyId);
+  const winnerSide: BattleSide = outcome === 'victory' ? 'attacker' : 'defender';
+  const loserSide = otherSide(winnerSide);
+  const winnerArmy = winnerSide === 'attacker' ? attackerArmy : defenderArmy;
+  const loserArmy = loserSide === 'attacker' ? attackerArmy : defenderArmy;
+  const loserFactionId =
+    loserSide === 'attacker' ? b.attackerFactionId : b.defenderFactionId;
+  const loserAt = loserSide === 'attacker' ? field.attackerAt : field.defenderAt;
+  const retreatCity = nearestFriendlyCity(state, loserFactionId, loserAt);
+  const defenderWasStrong =
+    b.playerSide === 'attacker' && isStrongFaction(state, b.defenderFactionId);
+
+  const units = Object.values(b.units);
+  for (const u of units) {
+    const losing = u.side === loserSide;
+    const keep = losing ? BALANCE.RETREAT_KEEP_RATE : 1;
+    const shares = splitUnitTroops(u, Math.max(0, Math.floor(u.troops * keep)));
+    for (const id of unitMembers(u)) {
+      const g = state.generals[id];
+      if (!g) continue;
+      g.stamina = clamp(u.stamina, 0, BALANCE.STAMINA_MAX);
+      g.troops = shares[id] ?? 0;
+      if (!losing) {
+        if (!u.routed) grantExp(g, BALANCE.EXP.victory);
+        continue;
+      }
+      // 败军：有城可退就保存残部，无城可退则主将被俘、副将溃散
+      delete g.armyId;
+      if (retreatCity && !u.routed && g.troops > 0) {
+        g.status = 'active';
+        g.locationId = retreatCity.id;
+        if (!u.routed) grantExp(g, 50);
+      } else {
+        g.status = u.isCommander ? 'captured' : 'inactive';
+        g.troops = 0;
+        g.locationId = winnerArmy?.fromCityId ?? b.fromCityId;
+      }
+    }
+  }
+
+  if (winnerArmy) {
+    const gens = winnerArmy.generalIds
+      .map((id) => state.generals[id])
+      .filter((g) => g?.status === 'active');
+    winnerArmy.troops = gens.reduce((n, g) => n + g.troops, 0);
+    winnerArmy.path = [];
+    winnerArmy.dest = { ...winnerArmy.at };
+    winnerArmy.legDays = 0;
+    winnerArmy.mp = 0;
+    winnerArmy.targetCityId = undefined;
+    // 陆军 / 弓兵在水面打赢后要上岸，否则下一条行军令会从不可通行格起步
+    if (
+      b.waterBattle &&
+      winnerArmy.unitClass !== 'navy' &&
+      isWaterKind(tileKindAt(winnerArmy.at.col, winnerArmy.at.row))
+    ) {
+      winnerArmy.at = nearestLandTile(field.attackerArmyId === winnerArmy.id
+        ? field.attackerAt
+        : field.defenderAt);
+    }
+  }
+  if (loserArmy) {
+    // 0 兵预备队不会进入战棋单位，但仍挂着败军的 armyId；随败军一起撤回，避免幽灵编队
+    const fielded = new Set(units.flatMap((u) => unitMembers(u)));
+    for (const id of loserArmy.generalIds) {
+      if (fielded.has(id)) continue;
+      const g = state.generals[id];
+      if (!g) continue;
+      if (g.armyId === loserArmy.id) delete g.armyId;
+      if (retreatCity) {
+        g.status = 'active';
+        g.locationId = retreatCity.id;
+        g.troops = 0;
+      } else {
+        g.status = 'inactive';
+        g.troops = 0;
+      }
+    }
+    state.armies = (state.armies ?? []).filter((a) => a.id !== loserArmy.id);
+  }
+
+  const loyalty = applyBattleLoyalty(
+    state,
+    units.filter((u) => u.side === 'attacker'),
+    outcome,
+  );
+  if (loyalty.count > 0) {
+    log(
+      state,
+      'info',
+      `出征忠诚 ${loyalty.delta}（${loyalty.count} 人）${outcome !== 'victory' ? '，战败追加惩罚' : ''}`,
+    );
+  }
+
+  const playerWon =
+    b.playerSide === 'attacker' ? outcome === 'victory' : outcome !== 'victory';
+  if (b.playerInvolved) {
+    recordBattleResult(state, {
+      side: b.playerSide,
+      won: playerWon,
+      defenderWasStrong,
+    });
+  }
+
+  const survivingTroops = (side: BattleSide): number =>
+    units
+      .filter((u) => u.side === side)
+      .reduce((sum, u) => {
+        const memberSum = unitMembers(u).reduce((n, id) => {
+          const g = state.generals[id];
+          return n + (g?.status === 'active' ? g.troops : 0);
+        }, 0);
+        return sum + memberSum;
+      }, 0);
+  const playerTroopsNow = survivingTroops(b.playerSide);
+  const foeTroopsNow = survivingTroops(otherSide(b.playerSide));
+  const place = b.battlefield?.name ?? '无名旷野';
+  const loserName = retreatCity ? retreatCity.name : '后方';
+
+  if (b.playerInvolved) {
+    const title =
+      b.playerSide === 'attacker'
+        ? outcome === 'victory'
+          ? '野战胜利'
+          : outcome === 'retreat'
+            ? '脱离战场'
+            : '野战失利'
+        : outcome === 'victory'
+          ? '遭遇战失利'
+          : outcome === 'retreat'
+            ? '敌军撤退'
+            : '击退敌军';
+
+    const lines: ReportLine[] = [];
+    if (playerWon) {
+      lines.push({
+        label: '结果',
+        text:
+          b.playerSide === 'attacker'
+            ? `击退敌军，我军仍据 ${place}`
+            : `击退来犯之敌，守住 ${place}`,
+        tone: 'good',
+      });
+    } else {
+      lines.push({
+        label: '结果',
+        text:
+          outcome === 'retreat'
+            ? `主动脱离战场，残部退往 ${loserName}（保留 ${Math.round(
+                BALANCE.RETREAT_KEEP_RATE * 100,
+              )}% 兵力）`
+            : `我军战败，残部退往 ${loserName}（保留 ${Math.round(
+                BALANCE.RETREAT_KEEP_RATE * 100,
+              )}% 兵力）`,
+        tone: outcome === 'retreat' ? 'warn' : 'danger',
+      });
+    }
+    lines.push({ label: '我方', text: `剩余兵力 ${playerTroopsNow}`, tone: 'info' });
+    lines.push({ label: '敌方', text: `剩余兵力 ${foeTroopsNow}`, tone: 'info' });
+    const levels = units
+      .filter((u) => u.side === b.playerSide)
+      .flatMap((u) => unitMembers(u))
+      .map((id) => {
+        const g = state.generals[id];
+        return g ? `${g.name} Lv${g.level}` : '';
+      })
+      .filter(Boolean)
+      .join(' · ');
+    lines.push({
+      label: '成长',
+      text: `${levels || '—'}（${playerWon ? '战斗经验' : '败退经验 +50'}）`,
+      tone: 'info',
+    });
+    if (loyalty.count > 0) {
+      lines.push({
+        label: '忠诚',
+        text: `出征武将 ${loyalty.delta}${outcome !== 'victory' ? '（战败追加 −4）' : ''}`,
+        tone: loyalty.delta < 0 ? 'warn' : 'info',
+      });
+    }
+    if (!playerWon && retreatCity) {
+      lines.push({
+        label: '退路',
+        text: `残部撤往 ${retreatCity.name}`,
+        tone: 'warn',
+      });
+    }
+
+    state.report = {
+      kind: 'battle',
+      title,
+      subtitle: `${b.day} 回合 · ${place} · ${WEATHER_LABEL[b.weather]}`,
+      result: playerWon ? 'victory' : outcome === 'retreat' ? 'retreat' : 'defeat',
+      lines,
+    };
+  } else {
+    const winnerName =
+      state.factions[
+        winnerSide === 'attacker' ? b.attackerFactionId : b.defenderFactionId
+      ]?.name ?? '';
+    const loserNameText =
+      state.factions[loserFactionId]?.name ?? loserFactionId;
+    log(
+      state,
+      'info',
+      `${winnerName} 军在 ${place} 击退 ${loserNameText} 军`,
+      'ai',
+    );
+  }
+
+  state.battle = undefined;
+  state.phase = 'map';
+  checkGameOver(state);
+  checkActProgress(state);
+}
+
 /**
  * 战后结算。outcome 以**进攻方**视角：victory = 进攻方胜。
  * 玩家可能是防守方，因此战报要按玩家视角翻译。
@@ -163,6 +438,11 @@ export function resolveBattle(
   b: BattleState,
   outcome: BattleOutcome,
 ): void {
+  // 野战不占城：单独结算两支行军纵队，避免误改 `targetCityId` 的归属
+  if (b.kind === 'field' && b.field) {
+    resolveFieldBattle(state, b, outcome);
+    return;
+  }
   const from = state.cities[b.fromCityId];
   const target = state.cities[b.targetCityId];
   // 强敌判定必须在占城结算之前取快照；否则守方丢城后会立刻“变弱”。

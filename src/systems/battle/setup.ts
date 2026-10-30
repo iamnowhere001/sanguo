@@ -3,6 +3,7 @@ import { aptitudeOf } from '../../data/tables/unitClasses';
 import { nextFloat, streamFor, type RngState } from '../../core/rng';
 import { done, fail, type OpResult } from '../../core/result';
 import type {
+  Army,
   BattleSide,
   BattleState,
   BattleUnit,
@@ -426,6 +427,311 @@ function setupMapBattle(
     cityBlock: { x0: block.col - 1, y0: block.row - 1, x1: block.col + 1, y1: block.row + 1 },
     waterBattle: waterShareAround(block.col, block.row) >= WATER_BATTLE_SHARE,
   };
+}
+
+// ── 野战 / 水战（大地图无缝遭遇）────────────────────────────
+/** 大地图野战落位：水战允许站上水面，陆战仍把水域视作不可站 */
+function fieldCellStandable(x: number, y: number, allowWater: boolean): boolean {
+  if (x < 0 || y < 0 || x >= MAP.cols || y >= MAP.rows) return false;
+  if (wallTileAt(x, y)) return false;
+  const water = isWaterKind(tileKindAt(x, y));
+  return allowWater || !water;
+}
+
+/**
+ * 从接战点向外找列阵位。
+ *
+ * 水战先挑水面格：这样镜头里看到的是江面上的舟师，而不是把水战又摆回岸上。
+ * 水面不够时再退到陆地，保证任何地形都能开战。
+ */
+function fieldSpawnCells(
+  seed: FieldPoint,
+  count: number,
+  opts: { allowWater: boolean; preferWater: boolean; blocked: Set<string> },
+): FieldPoint[] {
+  const sx = Math.round(seed.x);
+  const sy = Math.round(seed.y);
+  const cells: Array<{ p: FieldPoint; water: boolean; d: number }> = [];
+  for (let radius = 0; radius <= 14; radius++) {
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        if (radius > 0 && Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
+        const x = sx + dx;
+        const y = sy + dy;
+        const key = `${x},${y}`;
+        if (opts.blocked.has(key)) continue;
+        if (!fieldCellStandable(x, y, opts.allowWater)) continue;
+        const water = isWaterKind(tileKindAt(x, y));
+        if (!opts.allowWater && water) continue;
+        cells.push({ p: { x, y }, water, d: Math.abs(dx) + Math.abs(dy) });
+      }
+    }
+  }
+  const ordered = opts.preferWater
+    ? [
+        ...cells.filter((c) => c.water).sort((a, b) => a.d - b.d || a.p.y - b.p.y || a.p.x - b.p.x),
+        ...cells
+          .filter((c) => !c.water)
+          .sort((a, b) => a.d - b.d || a.p.y - b.p.y || a.p.x - b.p.x),
+      ]
+    : cells.sort((a, b) => a.d - b.d || a.p.y - b.p.y || a.p.x - b.p.x);
+  const out: FieldPoint[] = [];
+  for (const cell of ordered) {
+    if (out.length >= count) break;
+    out.push(cell.p);
+    opts.blocked.add(`${cell.p.x},${cell.p.y}`);
+  }
+  return out;
+}
+
+function fieldBearing(dx: number, dy: number): string {
+  const ns = dy < 0 ? '北' : dy > 0 ? '南' : '';
+  const ew = dx < 0 ? '西' : dx > 0 ? '东' : '';
+  return ns && ew ? `${ew}${ns}` : ns || ew;
+}
+
+/** 野战地点读法：就近城池 + 方位，避免把调试坐标摆到战报里 */
+function fieldPlaceName(state: GameState, center: FieldPoint): string {
+  let best: { name: string; dx: number; dy: number; d: number } | null = null;
+  for (const [id, block] of Object.entries(cityBlocks())) {
+    const city = state.cities[id];
+    if (!city) continue;
+    const dx = center.x - block.col;
+    const dy = center.y - block.row;
+    const d = Math.max(Math.abs(dx), Math.abs(dy));
+    if (!best || d < best.d || (d === best.d && city.name < best.name)) {
+      best = { name: city.name, dx, dy, d };
+    }
+  }
+  if (!best) return '无名旷野';
+  if (best.d <= 3) return `${best.name}近郊`;
+  return `${best.name}${fieldBearing(best.dx, best.dy)} ${best.d} 格`;
+}
+
+/** 野战主题：按接战点周边地形给一个可读的战场身份 */
+function fieldIdentity(
+  state: GameState,
+  center: FieldPoint,
+  water: boolean,
+): BattlefieldInfo {
+  const place = fieldPlaceName(state, center);
+  if (water) {
+    const kind = tileKindAt(center.x, center.y);
+    return {
+      theme: kind === 'lake' ? 'lake' : 'river',
+      name: `${place}·江面`,
+      subtitle: '两军在江面接战：所有部队乘船机动，非水军会持续晕船减员。',
+    };
+  }
+  let forest = 0;
+  let highland = 0;
+  let mountain = 0;
+  let total = 0;
+  for (let dy = -6; dy <= 6; dy++) {
+    for (let dx = -6; dx <= 6; dx++) {
+      const x = center.x + dx;
+      const y = center.y + dy;
+      if (x < 0 || y < 0 || x >= MAP.cols || y >= MAP.rows) continue;
+      total += 1;
+      const kind = tileKindAt(x, y);
+      if (kind === 'forest') forest += 1;
+      else if (kind === 'mountain') mountain += 1;
+      else if (kind === 'hill') highland += 1;
+    }
+  }
+  const ratio = (n: number) => (total > 0 ? n / total : 0);
+  const theme = ratio(mountain) >= 0.3
+    ? 'gorge'
+    : ratio(forest) >= 0.3
+      ? 'forest'
+      : ratio(highland) >= 0.3
+        ? 'highland'
+        : 'farmland';
+  return {
+    theme,
+    name: `${place}·野战`,
+    subtitle: '行军途中遭遇，就地列阵：没有城墙可依托，胜负只看阵形、兵种与士气。',
+  };
+}
+
+/**
+ * 行军途中接战：双方仍是大地图上的两支 `Army`，不占城、不切场景。
+ * 单位坐标直接使用 576×432 绝对格坐标，战斗画面由 `MapCanvas` 复用同一张地图。
+ */
+export function createFieldBattle(
+  state: GameState,
+  attackerArmyId: string,
+  defenderArmyId: string,
+): { result: OpResult; battle?: BattleState } {
+  const armies = state.armies ?? [];
+  const attackerArmy = armies.find((a) => a.id === attackerArmyId);
+  const defenderArmy = armies.find((a) => a.id === defenderArmyId);
+  if (!attackerArmy || !defenderArmy) return { result: fail('接战部队不存在') };
+  if (attackerArmy.id === defenderArmy.id) return { result: fail('部队不能与自己接战') };
+  if (attackerArmy.garrisonGateId || defenderArmy.garrisonGateId) {
+    return { result: fail('驻守关港的部队不能主动出战') };
+  }
+  if (attackerArmy.factionId === defenderArmy.factionId) {
+    return { result: fail('不能攻击友军') };
+  }
+  if (!canAttackFactions(state, attackerArmy.factionId, defenderArmy.factionId)) {
+    return { result: fail('处于停战 / 同盟期，不能开战') };
+  }
+  const distance =
+    Math.abs(attackerArmy.at.col - defenderArmy.at.col) +
+    Math.abs(attackerArmy.at.row - defenderArmy.at.row);
+  if (distance > 1) return { result: fail('敌军不在相邻格，无法接战') };
+
+  const squadsOf = (army: Army) =>
+    buildSquads(army.generalIds, army.squads).filter((squad) =>
+      squadMembers(squad).some((id) => (state.generals[id]?.troops ?? 0) > 0),
+    );
+  const attackerSquads = squadsOf(attackerArmy);
+  const defenderSquads = squadsOf(defenderArmy);
+  if (attackerSquads.length === 0) return { result: fail('进攻部队已无兵力') };
+  if (defenderSquads.length === 0) return { result: fail('敌军已无兵力') };
+
+  const mid = {
+    x: (attackerArmy.at.col + defenderArmy.at.col) / 2,
+    y: (attackerArmy.at.row + defenderArmy.at.row) / 2,
+  };
+  const attackerOnWater = isWaterKind(tileKindAt(attackerArmy.at.col, attackerArmy.at.row));
+  const defenderOnWater = isWaterKind(tileKindAt(defenderArmy.at.col, defenderArmy.at.row));
+  const midWater = isWaterKind(tileKindAt(Math.round(mid.x), Math.round(mid.y)));
+  const waterBattle = attackerOnWater || defenderOnWater || midWater;
+
+  const blocked = new Set<string>();
+  // 双方各自的落点先互相排除，避免两支敌军出生在同一格
+  blocked.add(`${defenderArmy.at.col},${defenderArmy.at.row}`);
+  const attackerSpawns = fieldSpawnCells(
+    { x: attackerArmy.at.col, y: attackerArmy.at.row },
+    attackerSquads.length,
+    {
+      allowWater: waterBattle,
+      preferWater: waterBattle,
+      blocked,
+    },
+  );
+  blocked.add(`${attackerArmy.at.col},${attackerArmy.at.row}`);
+  const defenderSpawns = fieldSpawnCells(
+    { x: defenderArmy.at.col, y: defenderArmy.at.row },
+    defenderSquads.length,
+    {
+      allowWater: waterBattle,
+      preferWater: waterBattle,
+      blocked,
+    },
+  );
+
+  const units: Record<string, BattleUnit> = {};
+  const rulerId = state.factions[attackerArmy.factionId]?.rulerId;
+  const atkCommander =
+    attackerSquads.find((squad) => squad.commanderId === rulerId)?.commanderId ??
+    attackerSquads[0]!.commanderId;
+  const defCommander = defenderSquads[0]!.commanderId;
+  attackerSquads.forEach((squad, i) => {
+    const p = attackerSpawns[Math.min(i, Math.max(0, attackerSpawns.length - 1))];
+    if (!p) return;
+    const u = unitFromSquad(state, squad, 'attacker', p.x, p.y, squad.commanderId === atkCommander);
+    units[u.id] = u;
+  });
+  defenderSquads.forEach((squad, i) => {
+    const p = defenderSpawns[Math.min(i, Math.max(0, defenderSpawns.length - 1))];
+    if (!p) return;
+    const u = unitFromSquad(state, squad, 'defender', p.x, p.y, squad.commanderId === defCommander);
+    units[u.id] = u;
+  });
+
+  const playerInvolved =
+    attackerArmy.factionId === state.playerFactionId ||
+    defenderArmy.factionId === state.playerFactionId;
+  const playerSide: BattleSide =
+    attackerArmy.factionId === state.playerFactionId ? 'attacker' : 'defender';
+
+  const battlefield = fieldIdentity(state, mid, waterBattle);
+  const features: BattlefieldFeature[] = [];
+  if (attackerSpawns[0]) {
+    features.push({
+      x: attackerSpawns[0].x,
+      y: attackerSpawns[0].y,
+      kind: 'camp',
+      label: '攻方前营',
+      description: '行军纵队展开的位置。',
+    });
+  }
+  if (defenderSpawns[0]) {
+    features.push({
+      x: defenderSpawns[0].x,
+      y: defenderSpawns[0].y,
+      kind: 'camp',
+      label: '守方前营',
+      description: '遭遇时先占住阵脚的一方。',
+    });
+  }
+  battlefield.features = features;
+
+  const battleRng = streamFor(state.seed, 'battle', state.turn, state.battleSerial);
+  state.battleSerial += 1;
+  const rolled = rollWeather(battleRng);
+
+  const attackerName = state.factions[attackerArmy.factionId]?.name ?? attackerArmy.factionId;
+  const defenderName = state.factions[defenderArmy.factionId]?.name ?? defenderArmy.factionId;
+  const battle: BattleState = {
+    fromCityId: attackerArmy.fromCityId,
+    targetCityId: defenderArmy.fromCityId,
+    kind: 'field',
+    field: {
+      x: mid.x,
+      y: mid.y,
+      attackerArmyId: attackerArmy.id,
+      defenderArmyId: defenderArmy.id,
+      attackerAt: { ...attackerArmy.at },
+      defenderAt: { ...defenderArmy.at },
+      water: waterBattle,
+    },
+    attackerFactionId: attackerArmy.factionId,
+    defenderFactionId: defenderArmy.factionId,
+    playerSide,
+    playerInvolved,
+    mapBattle: true,
+    battlefield,
+    waterBattle,
+    units,
+    side: playerSide,
+    day: 1,
+    weather: rolled.weather,
+    status: 'ongoing',
+    log: [
+      `${attackerName} 与 ${defenderName} 在 ${battlefield.name} 接战`,
+      waterBattle ? '江面水战：非水军进入水面会持续减员' : '野外遭遇：无城墙可依托',
+    ],
+    tacticUses: {},
+    rng: rolled.rng,
+    commandPoints:
+      state.settings.ruleset === 'classic' || !playerInvolved
+        ? undefined
+        : BALANCE.MODERN.COMMAND_POINTS,
+    foeCommandPoints:
+      state.settings.ruleset === 'classic' || !playerInvolved
+        ? undefined
+        : BALANCE.MODERN.COMMAND_POINTS,
+    tacticBonus:
+      state.settings.ruleset === 'classic' || !playerInvolved
+        ? 0
+        : policyTacticBonus(state),
+  };
+
+  // 接战当旬两队都停在原地，不再消耗剩余移动力
+  attackerArmy.mp = 0;
+  defenderArmy.mp = 0;
+  state.battle = battle;
+  state.phase = 'battle';
+  log(
+    state,
+    'info',
+    `${attackerName} 与 ${defenderName} 在 ${battlefield.name} 遭遇`,
+  );
+  return { result: done(`进入 ${battlefield.name} 战场`), battle };
 }
 
 /**

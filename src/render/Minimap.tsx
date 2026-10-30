@@ -154,7 +154,10 @@ export function Minimap({
         onPointerDown={(e) => {
           if (e.button !== 0) return;
           const box = e.currentTarget.getBoundingClientRect();
-          const layout = minimapLayout(MINI_WIDTH, height);
+          // 手机端 .map-minimap 会被 CSS transform 缩放，用实际渲染尺寸反算，避免点击偏移
+          const width = box.width || MINI_WIDTH;
+          const drawnHeight = box.height || height;
+          const layout = minimapLayout(width, drawnHeight);
           const world = minimapToWorld(e.clientX - box.left, e.clientY - box.top, layout);
           onNavigate(world);
         }}
