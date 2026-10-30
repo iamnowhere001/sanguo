@@ -25,10 +25,10 @@ export interface Layout {
   oy: number;
 }
 
-export const MIN_ZOOM = 0.2;
-/** 300% = 城池与野战单位的默认作战视角 */
+export const MIN_ZOOM = 0.3;
+/** 200% = 城池与野战单位的默认作战视角 */
 export const DEFAULT_ZOOM = 3;
-export const MAX_ZOOM = 7.2;
+export const MAX_ZOOM = 6;
 
 /**
  * 缩放档位。

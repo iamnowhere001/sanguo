@@ -171,11 +171,19 @@ export function gateDistanceTo(site: GateSite, at: GridPoint): number {
   return best;
 }
 
-/** 兵临关下：站在通行线相邻格（含线内）即可攻关 / 接管 */
+/**
+ * 兵临关下：站在通行线附近即可攻关 / 接管。
+ *
+ * 半径取 2 而不是 1：关隘通行线往往只有 1 格（凿谷后尤其如此），
+ * 部队停在"视觉上贴着关"的位置时，实际可能差 2 格 —— 玩家会以为点不动、
+ * 无法占领。放宽到 2 格（5×5）既不会让远处部队攻关，也不会卡住贴脸站位的部队。
+ */
+export const GATE_ASSAULT_RADIUS = 2;
+
 export function armyAtGate(army: Army, gateId: string): boolean {
   const site = gateSiteById(gateId);
   if (!site) return false;
-  return gateDistanceTo(site, army.at) <= 1;
+  return gateDistanceTo(site, army.at) <= GATE_ASSAULT_RADIUS;
 }
 
 /** 某势力可参与攻关的部队（按距离近、兵力多排序） */
@@ -189,7 +197,7 @@ export function armiesAtGate(
   return (s.armies ?? [])
     .filter((army) => !army.garrisonGateId)
     .filter((army) => !factionId || army.factionId === factionId)
-    .filter((army) => gateDistanceTo(site, army.at) <= 1)
+    .filter((army) => gateDistanceTo(site, army.at) <= GATE_ASSAULT_RADIUS)
     .sort((a, b) => b.troops - a.troops || a.id.localeCompare(b.id));
 }
 

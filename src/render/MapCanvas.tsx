@@ -1218,7 +1218,7 @@ export function battleFocusWorld(b: BattleState): { x: number; y: number } {
 /**
  * 战斗默认镜头倍率。
  *
- * 行军用 300% 看城池细节；战棋需要同时看到双方阵线与可达范围，
+ * 行军用 200% 看城池细节；战棋需要同时看到双方阵线与可达范围，
  * 因此按「一格约 52px」反算，小屏和大屏的战术视野保持一致。
  */
 function battleZoomFor(w: number, h: number): number {
@@ -1433,7 +1433,7 @@ export function MapCanvas({
   useEffect(() => {
     if (!size.w || !size.h || mobileInit.current) return;
     mobileInit.current = true;
-    // 大地图战斗：镜头对准接战点；平时默认 300% 州郡视角
+    // 大地图战斗：镜头对准接战点；平时默认 200% 州郡视角
     if (battle) {
       const focus = battleFocusWorld(battle);
       setView(centerOnWorld(focus.x, focus.y, battleZoomFor(size.w, size.h), size.w, size.h));
