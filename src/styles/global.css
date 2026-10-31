@@ -2147,6 +2147,9 @@ input[type='number'] {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scroll-padding-block: var(--sp-3);
   padding: var(--sp-4) var(--panel-pad) var(--sp-5);
 }
 .panel-foot {
@@ -2175,6 +2178,12 @@ input[type='number'] {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 5px;
   margin-top: var(--sp-3);
+}
+/* 窄右栏（手机 / 1080 档）四格会挤掉大数字，降到两列 */
+@container cphead (max-width: 305px) {
+  .cp-kpi {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 .cp-metric {
   min-width: 0;
@@ -2209,24 +2218,6 @@ input[type='number'] {
 .cp-metric .bar-track {
   height: 3px;
   margin-top: 3px;
-}
-.cp-metric .food-net {
-  display: block;
-  margin-top: 1px;
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-style: normal;
-  letter-spacing: 0.02em;
-  color: var(--muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.cp-metric .food-net.pos {
-  color: var(--teal);
-}
-.cp-metric .food-net.neg {
-  color: var(--red-text);
 }
 .cp-metric.danger {
   border-color: rgba(193, 74, 58, 0.55);
@@ -2289,24 +2280,31 @@ input[type='number'] {
   color: var(--red);
   font-weight: 600;
 }
-.cp-gates {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+/* 城门耐久：两列紧凑排布，与底部的「四门」状态条区分开 */
+.cp-gate-bars {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3px 12px;
   margin: 0 0 var(--sp-2);
   font-size: 10px;
   color: var(--muted);
 }
-.cp-gate {
+.cp-gate-bar {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
 }
-.cp-gate .bar-track {
+.cp-gate-bar > span {
+  flex: none;
+  white-space: nowrap;
+}
+.cp-gate-bar .bar-track {
   flex: 1;
+  min-width: 0;
 }
-.cp-gate b {
-  min-width: 34px;
+.cp-gate-bar b {
+  min-width: 28px;
   text-align: right;
   font-family: var(--font-mono);
   font-size: 10px;
@@ -2358,6 +2356,9 @@ input[type='number'] {
 }
 /* 城名头部：标题与指标上下分层 */
 .cp-head {
+  /* 右栏宽度会随断点变化，KPI 用容器查询自行降列；头部不含固定层弹窗，可安全做尺寸包含 */
+  container-name: cphead;
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -2372,6 +2373,35 @@ input[type='number'] {
 }
 .cp-title {
   min-width: 0;
+}
+.cp-head-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cp-collapse {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 0 1px;
+  border: 1px solid var(--line2);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+.cp-collapse:hover {
+  color: var(--paper);
+  border-color: var(--gold);
+}
+.cp-collapse:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
 }
 /* 分区标签：城务 / 人事 */
 .cp-tabs {
@@ -2441,8 +2471,9 @@ input[type='number'] {
 .cp-context .cc-label {
   flex: none;
   font-size: 10px;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.08em;
   color: var(--dim);
+  white-space: nowrap;
 }
 .cp-context .cc-agent {
   flex: 1;
@@ -2593,7 +2624,8 @@ input[type='number'] {
   padding: 0 4px;
   font-size: 10.5px;
 }
-.city-panel .inline-form input {
+/* 运输三格有自己的伸缩规则（见 .transport-inputs），不能套 96px 固定宽 */
+.city-panel .inline-form:not(.transport-inputs) input {
   flex: 0 0 96px;
   margin-right: auto;
 }
@@ -3110,11 +3142,15 @@ input[type='number'] {
 }
 .g-stats {
   display: flex;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 1px 10px;
   font-family: var(--font-mono);
   font-size: 10px;
   color: var(--muted);
   margin-bottom: 4px;
+}
+.g-stats > span {
+  white-space: nowrap;
 }
 .g-troops {
   display: flex;
@@ -6834,7 +6870,7 @@ input[type='number'] {
   font-family: inherit;
 }
 .cp-delegate:hover {
-  color: var(--ink);
+  color: var(--paper);
   border-color: var(--gold);
 }
 .cp-delegate.on {

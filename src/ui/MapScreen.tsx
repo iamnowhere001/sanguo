@@ -143,6 +143,11 @@ export function MapScreen() {
     setRightCollapsed(next);
     if (next && phoneWidth()) setLeftCollapsed(true);
   };
+  /** 点选城池 / 关防时详情才是焦点：右栏若被收起，自动展开 */
+  const revealDetails = () => {
+    setRightCollapsed(false);
+    if (phoneWidth()) setLeftCollapsed(true);
+  };
 
   /** 当前规划用的出发城：派遣模式下锁定出发城，否则跟随选中城池 */
   const routeFromCityId = dispatch?.fromCityId ?? selectedCityId;
@@ -286,6 +291,7 @@ export function MapScreen() {
   const selectCity = (id: string) => {
     setSelectedCityId(id);
     setSelectedGateId(null);
+    revealDetails();
   };
 
   const handleSelectGate = (gateId: string | null) => {
@@ -293,6 +299,7 @@ export function MapScreen() {
     if (gateId) {
       setSelectedArmyId(null);
       closeDispatch();
+      revealDetails();
       audio.play('ui.select');
     }
   };
@@ -1080,6 +1087,7 @@ export function MapScreen() {
             onAssault={handleAssaultGate}
             onGarrison={handleGarrisonGate}
             onWithdraw={handleWithdrawGate}
+            onCollapse={() => setRightCollapsed(true)}
             onSelectArmy={(armyId) => {
               setSelectedArmyId(armyId);
               closeDispatch();
@@ -1092,6 +1100,7 @@ export function MapScreen() {
             state={state}
             cityId={selectedCityId}
             onMarch={(cityId) => openDispatch(cityId)}
+            onCollapse={() => setRightCollapsed(true)}
           />
         )}
       </div>

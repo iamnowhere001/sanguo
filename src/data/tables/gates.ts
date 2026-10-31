@@ -101,11 +101,11 @@ export const GATES: GateFeature[] = [
     guardCityId: 'luoyang',
     // 地图上的黄河在 34.75°N 一带，写 34.85 会把门洞吸到河北岸。
     anchor: [113.15, 34.62],
-    extraDays: 3,
-    fortification: 16,
-    gold: 40,
-    food: 110,
-    garrison: 2800,
+    extraDays: 2,
+    fortification: 13,
+    gold: 32,
+    food: 90,
+    garrison: 2300,
     note: '洛阳东门户，中原咽喉；三英战吕布之地',
   },
   {
@@ -483,7 +483,9 @@ export const GATES: GateFeature[] = [
     tier: 2,
     edges: [['jianye', 'lujiang']],
     guardCityId: null,
-    anchor: [118.55, 31.72],
+    // 锚点必须比横江渡更靠东：两港渡线在中段重叠，图标按「离锚点近的一端」选岸，
+    // 118.55 时两端等距、取西端，与横江渡挤在同一岸（tests/gates.spec.ts 会红）。
+    anchor: [118.62, 31.72],
     extraDays: 2,
     fortification: 7,
     gold: 22,

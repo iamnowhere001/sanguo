@@ -27,6 +27,7 @@ export function GatePanel({
   state,
   gateId,
   onClose,
+  onCollapse,
   onAssault,
   onSelectArmy,
   onGarrison,
@@ -35,6 +36,8 @@ export function GatePanel({
   state: GameState;
   gateId: string;
   onClose: () => void;
+  /** 收起右栏，把地图让出来 */
+  onCollapse?: () => void;
   onAssault: (armyId: string, gateId: string) => void;
   onSelectArmy?: (armyId: string) => void;
   onGarrison?: (armyId: string, gateId: string) => void;
@@ -76,7 +79,10 @@ export function GatePanel({
   const actionLabel = access === 'neutral' ? '接管' : '攻关';
 
   return (
-    <aside className={`side-panel city-panel gate-panel ${gate.kind}`}>
+    <aside
+      className={`side-panel city-panel gate-panel ${gate.kind}`}
+      aria-label={`${gate.name}关防详情`}
+    >
       <header className="panel-head cp-head">
         <div className="cp-head-top">
           <div className="cp-title">
@@ -98,9 +104,22 @@ export function GatePanel({
               </span>
             </div>
           </div>
-          <span className={`owner-badge${mine ? ' mine' : ''}`}>
-            {mine ? '我方' : ownerId ? '他方' : '无主'}
-          </span>
+          <div className="cp-head-actions">
+            <span className={`owner-badge${mine ? ' mine' : ''}`}>
+              {mine ? '我方' : ownerId ? '他方' : '无主'}
+            </span>
+            {onCollapse ? (
+              <button
+                type="button"
+                className="cp-collapse"
+                onClick={onCollapse}
+                aria-label="收起详情栏"
+                title="收起详情栏，放大战场"
+              >
+                ›
+              </button>
+            ) : null}
+          </div>
         </div>
 
         <div className="cp-kpi">

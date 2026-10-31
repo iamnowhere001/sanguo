@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { createGame } from '../src/data/tables/scenarios';
 import { continueAiPhase, runAiFaction } from '../src/systems/ai';
 import { playArmyTurn } from '../src/systems/army';
-import { resolveBattle } from '../src/systems/battle';
+import { advanceTime } from '../src/systems/economy';
+import { isSieged } from '../src/systems/cityGrid';
 import { playerSnapshot } from '../src/systems/report';
 import type { GameState } from '../src/core/state';
 
@@ -23,12 +24,16 @@ function strongCaoCao(): GameState {
 
 /**
  * L 档：AI 不再凭空开战，而是先派兵上路。
- * 这里把行军推到底，直到部队走到城下自动攻城、进入战棋。
+ *
+ * 攻城已地图化（《大地图攻城 v1》Phase 1）：走到城下只**围城**，不自动切战棋；
+ * 每旬由 `playArmyTurn` 下令打一记，耐久归零才易主。所以推旬必须同时推时间——
+ * 不 `advanceTime` 的话 `actedXun === xunTurn` 会把后续动作全挡住（这正是行动权该做的事）。
  */
-function marchToBattle(s: GameState): boolean {
-  for (let i = 0; i < 16; i++) {
+function marchToSiege(s: GameState, cityId = 'xinye'): boolean {
+  for (let i = 0; i < 40; i++) {
     playArmyTurn(s);
-    if (s.phase === 'battle') return true;
+    if (isSieged(s, cityId) || s.cities[cityId]!.ownerId !== 'liubei') return true;
+    advanceTime(s);
   }
   return false;
 }
@@ -54,7 +59,7 @@ describe('AI 出兵', () => {
     expect(captured.length).toBeGreaterThan(0);
   });
 
-  it('曹操兵力占优时先派兵上路，走到城下才开战', () => {
+  it('曹操兵力占优时先派兵上路，走到城下围城但不切战棋', () => {
     const s = strongCaoCao();
     const r = runAiFaction(s, 'caocao');
     expect(r).toBe('done');
@@ -65,47 +70,41 @@ describe('AI 出兵', () => {
     expect(column, '曹操没有派出进攻部队').toBeDefined();
     expect(s.phase).toBe('map');
 
-    expect(marchToBattle(s)).toBe(true);
-    expect(s.battle!.playerSide).toBe('defender');
-    expect(s.battle!.defenderFactionId).toBe('liubei');
-    expect(s.battle!.attackerFactionId).toBe('caocao');
+    expect(marchToSiege(s)).toBe(true);
+    expect(isSieged(s, 'xinye')).toBe(true);
+    // 关键契约：围城不等于开战，全程留在大地图
+    expect(s.phase).toBe('map');
+    expect(s.battle).toBeUndefined();
   });
 
-  it('防守成功：击退攻方后城池保留', () => {
+  it('围城后每旬只下一记，同一旬不会二次下令', () => {
     const s = strongCaoCao();
     runAiFaction(s, 'caocao');
-    expect(marchToBattle(s)).toBe(true);
-    const b = s.battle!;
-    for (const u of Object.values(b.units)) {
-      if (u.side === 'attacker') {
-        u.routed = true;
-        u.troops = 0;
-      }
-    }
-    resolveBattle(s, b, 'defeat');
+    expect(marchToSiege(s)).toBe(true);
+    const city = s.cities.xinye!;
+    const afterSiege = city.durability ?? 0;
+
+    // 同一旬再推一次：行动权已记账，耐久不该再掉
+    playArmyTurn(s);
+    expect(city.durability).toBe(afterSiege);
+
+    // 推进一旬后再下令：耐久才会继续下降
+    advanceTime(s);
+    playArmyTurn(s);
+    expect(city.durability).toBeLessThan(afterSiege);
     expect(s.phase).toBe('map');
-    expect(s.cities.xinye!.ownerId).toBe('liubei');
-    expect(s.report?.title).toBe('防守成功');
-    expect(s.report?.result).toBe('victory');
   });
 
-  it('城池失守：守军全灭后城池归攻方', () => {
+  it('城池失守：耐久归零后城池归攻方', () => {
     const s = strongCaoCao();
     runAiFaction(s, 'caocao');
-    expect(marchToBattle(s)).toBe(true);
-    const b = s.battle!;
-    for (const u of Object.values(b.units)) {
-      if (u.side === 'defender') {
-        u.routed = true;
-        u.troops = 0;
-      }
+    expect(marchToSiege(s)).toBe(true);
+    for (let i = 0; i < 12 && s.cities.xinye!.ownerId === 'liubei'; i++) {
+      advanceTime(s);
+      playArmyTurn(s);
     }
-    resolveBattle(s, b, 'victory');
-    expect(s.phase).toBe('map');
     expect(s.cities.xinye!.ownerId).toBe('caocao');
-    expect(s.report?.title).toBe('城池失守');
-    expect(s.report?.result).toBe('defeat');
-    expect(s.generals.zhangfei!.status).not.toBe('active');
+    expect(s.phase).toBe('map');
   });
 });
 

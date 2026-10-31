@@ -76,7 +76,7 @@ const FIELD_LABEL: Record<string, string> = {
 type PanelTab = 'manage' | 'staff';
 const TAB_ORDER: PanelTab[] = ['manage', 'staff'];
 
-type JumpKey = 'recruit' | 'trade' | 'banquet';
+type JumpKey = 'recruit' | 'trade' | 'banquet' | 'prisoners';
 
 /**
  * 【优化】§5.3 按武将推荐道具：武力/智力/移动分别找最需要的人。
@@ -122,11 +122,14 @@ export function CityPanel({
   state,
   cityId,
   onMarch,
+  onCollapse,
 }: {
   state: GameState;
   cityId: string;
   /** 进入出征模式：由地图点选目标，城池直接点将出征 */
   onMarch: (cityId: string) => void;
+  /** 收起右栏，把地图让出来；不传时不渲染收起按钮 */
+  onCollapse?: () => void;
 }) {
   const city = state.cities[cityId];
   const gens = city ? cityGenerals(state, cityId) : [];
@@ -165,6 +168,7 @@ export function CityPanel({
   const tradeRef = useRef<HTMLElement>(null);
   const banquetRef = useRef<HTMLElement>(null);
   const transportRef = useRef<HTMLElement>(null);
+  const prisonersRef = useRef<HTMLElement>(null);
 
   /** 告警直达：切到对应分区并把目标小节滚进视野 */
   useEffect(() => {
@@ -174,7 +178,9 @@ export function CityPanel({
         ? recruitRef.current
         : pendingJump === 'trade'
           ? tradeRef.current
-          : banquetRef.current;
+          : pendingJump === 'prisoners'
+            ? prisonersRef.current
+            : banquetRef.current;
     el?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
     if (pendingJump === 'recruit') recruitInputRef.current?.focus({ preventScroll: true });
     setPendingJump(null);
@@ -187,7 +193,7 @@ export function CityPanel({
   };
 
   const jumpTo = (key: JumpKey) => {
-    setTab(key === 'banquet' ? 'staff' : 'manage');
+    setTab(key === 'banquet' || key === 'prisoners' ? 'staff' : 'manage');
     setPendingJump(key);
   };
 
@@ -398,9 +404,17 @@ export function CityPanel({
       action: { label: '去宴请', run: () => jumpTo('banquet') },
     });
   }
+  if (isMine && prisoners.length > 0) {
+    alerts.push({
+      key: 'prisoners',
+      tone: 'warn',
+      text: `俘虏待处置：${prisoners.map((g) => g.name).join('、')}`,
+      action: { label: '去人事', run: () => jumpTo('prisoners') },
+    });
+  }
 
   return (
-    <aside className="side-panel city-panel">
+    <aside className="side-panel city-panel" aria-label={`${city.name}城池详情`}>
       <header className="panel-head cp-head">
         <div className="cp-head-top">
           <div className="cp-title">
@@ -414,9 +428,22 @@ export function CityPanel({
               </span>
             </div>
           </div>
-          <span className={`owner-badge${isMine ? ' mine' : ''}`}>
-            {isMine ? '我方' : city.ownerId ? '他方' : '中立'}
-          </span>
+          <div className="cp-head-actions">
+            <span className={`owner-badge${isMine ? ' mine' : ''}`}>
+              {isMine ? '我方' : city.ownerId ? '他方' : '中立'}
+            </span>
+            {onCollapse ? (
+              <button
+                type="button"
+                className="cp-collapse"
+                onClick={onCollapse}
+                aria-label="收起详情栏"
+                title="收起详情栏，放大战场"
+              >
+                ›
+              </button>
+            ) : null}
+          </div>
         </div>
 
         <div className="cp-kpi">
@@ -425,16 +452,18 @@ export function CityPanel({
             <div className="v">
               <b>{fmt(city.gold)}</b>
             </div>
+            <Bar
+              label={`金钱 ${fmt(city.gold)} / 上限 ${fmt(BALANCE.GOLD_CAP)}`}
+              value={city.gold}
+              max={BALANCE.GOLD_CAP}
+              color={city.gold >= BALANCE.GOLD_CAP * 0.9 ? 'var(--gold)' : 'var(--teal)'}
+            />
           </div>
           <div className="cp-metric" title={`粮草 ${fmt(city.food)} · 每月净收支 ${netFood >= 0 ? '+' : ''}${fmt(netFood)}`}>
             <span>粮草</span>
             <div className="v">
               <b>{fmt(city.food)}</b>
             </div>
-            <em className={netFood >= 0 ? 'food-net pos' : 'food-net neg'}>
-              月净 {netFood >= 0 ? '+' : ''}
-              {fmt(netFood)}
-            </em>
           </div>
           <div
             className="cp-metric"
@@ -444,6 +473,12 @@ export function CityPanel({
             <div className="v">
               <b>{fmt(troops)}</b>
             </div>
+            <Bar
+              label={`驻军 ${fmt(troops)} / 上限 ${fmt(garrisonCap)}`}
+              value={troops}
+              max={Math.max(1, garrisonCap)}
+              color={troops >= garrisonCap * 0.9 ? 'var(--gold)' : 'var(--teal)'}
+            />
           </div>
           <div className={`cp-metric${netFood < 0 ? ' warn' : ''}`} title={`月产粮 +${foodRate} · 驻军月耗 −${upkeep}`}>
             <span>月净粮</span>
@@ -505,7 +540,7 @@ export function CityPanel({
           不再在每个小节标题里重复三遍 */}
       {isMine ? (
         <div className="cp-context">
-          <span className="cc-label">执行</span>
+          <span className="cc-label">执行武将</span>
           {gens.length > 1 ? (
             <select
               className="mini-select"
@@ -589,24 +624,17 @@ export function CityPanel({
             <span>防灾</span>
             <b>{city.defense}</b>
           </div>
-          <div className="cp-attr" title={`训练：部队伤害 +${trainingBonus}%`}>
-            <span>训练</span>
-            <b>{training}</b>
-          </div>
-          <div
-            className="cp-attr"
-            title={`城池耐久 ${durability}/${durabilityMax}：攻方每旬下一道攻城令磨损城墙，归零即城破；围城期间不修墙；月结自动修复 ${Math.round(
-              BALANCE.DURABILITY.repairPerMonth * 100,
-            )}%`}
-          >
-            <span>耐久</span>
-            <b>{fmt(durability)}</b>
-          </div>
         </div>
 
-        <div className="cp-durability" title={`城池耐久 ${durability} / ${durabilityMax}`}>
+        <div
+          className="cp-durability"
+          title={`城池耐久 ${durability}/${durabilityMax}：攻方每旬下一道攻城令磨损城墙，归零即城破；围城期间不修墙；月结自动修复 ${Math.round(
+            BALANCE.DURABILITY.repairPerMonth * 100,
+          )}%`}
+        >
           <span>城墙耐久</span>
           <Bar
+            label={`城墙耐久 ${durability} / ${durabilityMax}`}
             value={durability}
             max={Math.max(1, durabilityMax)}
             color={durabilityPct < 30 ? 'var(--red)' : durabilityPct < 60 ? 'var(--gold)' : 'var(--teal)'}
@@ -625,15 +653,16 @@ export function CityPanel({
         ) : null}
 
         {showGates ? (
-          <div className="cp-gates">
+          <div className="cp-gate-bars">
             {gateBars.map((g) => (
               <div
                 key={g.side}
-                className="cp-gate"
+                className="cp-gate-bar"
                 title={`${g.label}门耐久 ${g.hp}/${gateMax}：只有冲车撞得开，归零即破门`}
               >
                 <span>{g.label}门</span>
                 <Bar
+                  label={`${g.label}门耐久 ${g.hp} / ${gateMax}`}
                   value={g.hp}
                   max={Math.max(1, gateMax)}
                   color={g.hp <= 0 ? 'var(--red)' : g.hp < gateMax * 0.35 ? 'var(--gold)' : 'var(--teal)'}
@@ -1206,6 +1235,7 @@ export function CityPanel({
                             {g.troops} / {cap}
                           </span>
                           <Bar
+                            label={`${g.name}兵力 ${g.troops} / ${cap}`}
                             value={g.troops}
                             max={cap}
                             color={g.troops >= cap * 0.9 ? 'var(--gold)' : 'var(--teal)'}
@@ -1325,7 +1355,7 @@ export function CityPanel({
               </section>
 
               {prisoners.length > 0 ? (
-                <section className="panel-section">
+                <section className="panel-section" ref={prisonersRef}>
                   <div className="section-title">
                     <span>俘虏</span>
                     <span className="muted small">
@@ -1464,6 +1494,7 @@ export function CityPanel({
                             {g.troops} / {cap}
                           </span>
                           <Bar
+                            label={`${g.name}兵力 ${g.troops} / ${cap}`}
                             value={g.troops}
                             max={cap}
                             color={g.troops >= cap * 0.9 ? 'var(--gold)' : 'var(--teal)'}
@@ -1480,7 +1511,11 @@ export function CityPanel({
       </div>
 
       {isMine ? (
-        <div className={`cp-gates${gateLocked ? ' locked' : ''}`} aria-label="四门状态">
+        <div
+          className={`cp-gates${gateLocked ? ' locked' : ''}`}
+          role="group"
+          aria-label="四门状态"
+        >
           <span className="cp-gates-label">四门</span>
           {cityGates.map((g) => (
             <span
@@ -1525,7 +1560,7 @@ export function CityPanel({
             }
             onClick={() => onMarch(city.id)}
           >
-            {gateLocked ? '城门被堵 · 无法出城' : '出征 · 选目的地'}
+            {gateLocked ? '城门被堵' : '出征 · 选目的地'}
           </button>
           <button
             className="btn"

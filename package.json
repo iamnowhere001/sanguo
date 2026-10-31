@@ -19,11 +19,13 @@
     "map:diag": "vite-node scripts/diag-gates.ts",
     "map:doc": "vite-node scripts/map-doc.ts",
     "map:apply": "vite-node scripts/map-apply.ts",
+    "baseline:doc": "vite-node scripts/baseline.ts",
+    "baseline:check": "vite-node scripts/baseline-check.ts",
     "table:sync": "vite-node scripts/gen-table-data.ts",
     "perf:check": "vite-node scripts/perf-check.ts",
     "bench:render": "node scripts/render-bench.mjs",
     "contrast:check": "vite-node scripts/contrast-check.ts",
-    "verify": "npm run typecheck && npm test && npm run map:check && npm run map:gates && npm run map:edges && npm run map:audit && npm run contrast:check && npm run build"
+    "verify": "npm run typecheck && npm test && npm run baseline:check && npm run map:check && npm run map:gates && npm run map:edges && npm run map:audit && npm run contrast:check && npm run build"
   },
   "engines": {
     "node": "^22.12.0 || ^24.0.0 || >=26.0.0"

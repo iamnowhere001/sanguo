@@ -23,13 +23,20 @@ function fresh(): GameState {
 }
 
 /**
- * 纯陆路可达（不走渡口、不穿山）。用来判断两座港口的图标是否落在同一岸：
- * 同岸通常几十步内就能沿岸走到，对岸之间则被江面隔开。
+ * 纯陆路可达（不走渡口、不穿山）。用来判断两座港口的图标是否落在同一岸。
+ *
+ * 判据用「同岸步数上限」而不是「任意陆路可达」：
+ * - 12 组成对**河港**之间根本没有陆路（400 步内不可达），阈值取多少都不影响；
+ * - 湖港会被绕湖的陆路连起来，实测 巴陵↔洞庭 绕南岸 43 步、柴桑↔鄱阳 252 步；
+ * - 真正同岸的两座图标（旧 bug：采石/横江）沿岸走 **20 步以内**。
+ * 所以 30 步是「同岸」与「对岸绕行」的分界，43 步属于真实对岸。
  */
+const SAME_BANK_STEPS = 30;
+
 function landReachable(
   a: { col: number; row: number },
   b: { col: number; row: number },
-  cap = 60,
+  cap = SAME_BANK_STEPS,
 ): boolean {
   const key = (p: { col: number; row: number }): string => `${p.col},${p.row}`;
   const seen = new Set<string>([key(a)]);

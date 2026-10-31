@@ -1,0 +1,115 @@
+{
+  "schema": "sanguo.project-baseline",
+  "version": 1,
+  "facts": {
+    "map": {
+      "cols": 576,
+      "rows": 360,
+      "tile": 12,
+      "width": 6912,
+      "height": 4320,
+      "version": 4,
+      "edgeMargin": 3,
+      "lonRange": [
+        99,
+        124.5
+      ],
+      "latRange": [
+        24.1667,
+        42.5
+      ]
+    },
+    "cities": {
+      "total": 59,
+      "withCoords": 59,
+      "bySize": {
+        "medium": 21,
+        "small": 22,
+        "capital": 5,
+        "large": 11
+      },
+      "byTerrain": {
+        "plain": 42,
+        "mountain": 17
+      }
+    },
+    "gates": {
+      "total": 47,
+      "pass": 13,
+      "port": 30,
+      "trail": 4,
+      "pairedPorts": 26,
+      "byTier": {
+        "1": 6,
+        "2": 25,
+        "3": 16
+      }
+    },
+    "geography": {
+      "rivers": 7,
+      "ridges": 54,
+      "lakes": 5,
+      "forests": 10,
+      "deserts": 4,
+      "marshes": 4
+    },
+    "roads": 115,
+    "generals": {
+      "total": 338,
+      "core": 174,
+      "reserve": 164
+    },
+    "scenarios": 4,
+    "tables": {
+      "policies": 8,
+      "acts": 3,
+      "events": 4,
+      "tactics": 5,
+      "unitClasses": 6,
+      "items": 7,
+      "projects": 4
+    },
+    "versions": {
+      "save": 6,
+      "map": 4,
+      "mapConfig": 1
+    },
+    "camera": {
+      "minZoom": 0.2,
+      "defaultZoom": 3,
+      "maxZoom": 6,
+      "stops": 15,
+      "stopsList": [
+        0.2,
+        0.3,
+        0.45,
+        0.65,
+        0.85,
+        1,
+        1.25,
+        1.6,
+        2,
+        2.5,
+        3,
+        3.2,
+        4,
+        5,
+        6
+      ]
+    },
+    "balance": {
+      "goldCap": 30000,
+      "taxRate": 1.2,
+      "taxMonths": [
+        3,
+        6,
+        9,
+        12
+      ],
+      "staminaMax": 100,
+      "staminaMonthly": 20,
+      "levelMax": 20,
+      "troopsPerFood": 20
+    }
+  }
+}
