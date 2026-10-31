@@ -16,8 +16,10 @@ import {
 describe('全国小地图 · 数学', () => {
   it('保持世界地图宽高比，并居中留白', () => {
     const square = minimapLayout(180, 135);
-    expect(square.ox).toBeCloseTo(0, 6);
-    expect(square.oy).toBeCloseTo(0, 6);
+    expect(square.ox).toBeCloseTo((180 - square.w) / 2, 6);
+    expect(square.oy).toBeCloseTo((135 - square.h) / 2, 6);
+    expect(square.w).toBeLessThanOrEqual(180);
+    expect(square.h).toBeLessThanOrEqual(135);
     expect(square.w / square.h).toBeCloseTo(MAP.width / MAP.height, 6);
 
     const wide = minimapLayout(200, 100);

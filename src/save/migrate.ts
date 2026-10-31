@@ -10,7 +10,7 @@ import {
 } from '../systems/battle/battlefield';
 import { attachBattleObjectives } from '../systems/battle/objectives';
 import { ensureDiplomacy } from '../systems/factionDiplomacy';
-import { MAP, MAP_VERSION } from '../data/tables/geography';
+import { MAP, MAP_VERSION, inMarchBounds } from '../data/tables/geography';
 import { isWaterKind, nearestLandTile, tileKindAt, wallTileAt } from '../render/terrainGrid';
 
 const DEFAULT_SETTINGS: GameState['settings'] = {
@@ -22,11 +22,13 @@ const DEFAULT_SETTINGS: GameState['settings'] = {
 };
 
 /**
- * 旧版地图坐标 → 当前 576×432。
+ * 旧版地图坐标 → 当前 576×360。
  *
- * 版本链：v1 = 96×72，v2 = 192×144，v3 = 576×432。
- * 逐级放大后把格心映射到新格心，再吸附到最近的可站立陆地，
+ * 版本链：v1 = 96×72，v2 = 192×144，v3 = 576×432，v4 = 576×360（裁掉南缘）。
+ * v1–v3 逐级放大后把格心映射到新格心，再吸附到最近的可站立陆地，
  * 避免扩图后河流加宽导致旧部队落水。
+ * v3→v4 不缩放：南缘裁掉的是 20.5–24.17°N 的无人区，剩余部分的格坐标一一对应，
+ * 只需把落在裁切带里的部队吸附回图内。
  */
 function migrateLegacyPoint(p: GridPoint, factor: number): GridPoint {
   const offset = Math.floor((factor - 1) / 2);
@@ -34,7 +36,7 @@ function migrateLegacyPoint(p: GridPoint, factor: number): GridPoint {
   const row = Math.min(MAP.rows - 1, Math.max(0, p.row * factor + offset));
   const seed = nearestLandTile(col, row, 10);
   const standable = (c: number, r: number): boolean => {
-    if (c < 0 || r < 0 || c >= MAP.cols || r >= MAP.rows) return false;
+    if (!inMarchBounds(c, r)) return false;
     if (isWaterKind(tileKindAt(c, r))) return false;
     return !wallTileAt(c, r);
   };
@@ -72,19 +74,29 @@ export function migrateSave(state: GameState): GameState {
   state.armySerial ??= 0;
   state.gates ??= {};
 
-  // 大地图扩容：没有 mapVersion 的档来自 96×72，按版本链逐级放大后吸附上岸
+  // 大地图扩容：没有 mapVersion 的档来自 96×72，按版本链逐级放大后吸附上岸。
+  // v3→v4 只是南缘裁剪，比例尺不变，不再乘倍率。
   let mapVersion = state.mapVersion ?? 1;
-  if (mapVersion < MAP_VERSION) {
-    let factor = 1;
-    while (mapVersion < MAP_VERSION) {
-      factor *= mapVersion === 1 ? 2 : 3;
-      mapVersion += 1;
-    }
+  if (mapVersion < 3) {
+    const factor = mapVersion === 1 ? 6 : 3;
     for (const army of state.armies) {
       army.at = migrateLegacyPoint(army.at, factor);
       army.path = army.path.map((p) => migrateLegacyPoint(p, factor));
       army.legDays = 0;
     }
+  }
+  // 裁切带 / 边防带里的旧部队吸附回可行军区；已在可行军区的坐标不动。
+  const standable = (p: GridPoint): boolean => inMarchBounds(p.col, p.row);
+  for (const army of state.armies) {
+    const atOk = standable(army.at);
+    if (!atOk) army.at = migrateLegacyPoint(army.at, 1);
+    let pathOk = true;
+    army.path = army.path.map((p) => {
+      if (standable(p)) return p;
+      pathOk = false;
+      return migrateLegacyPoint(p, 1);
+    });
+    if (!atOk || !pathOk) army.legDays = 0;
   }
   state.mapVersion = MAP_VERSION;
 

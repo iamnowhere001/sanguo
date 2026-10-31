@@ -1,5 +1,5 @@
 import { BALANCE } from '../data/tables/balance';
-import { MAP, inMap, tileKey } from '../data/tables/geography';
+import { MAP, inMap, inMarchBounds, tileKey } from '../data/tables/geography';
 import { marchCostForArmy, marchCostOfTile, marchStepCost } from '../data/tables/marchCost';
 import type { Army, GameState, General, GridPoint, GeneralSkillId, SiegeWeaponId, UnitClass } from '../core/state';
 import { defendersOf } from '../core/state';
@@ -191,7 +191,7 @@ export interface MarchField {
 /**
  * 行军静态栅格：地形代价、关防通行线、城墙归属。
  *
- * 576×432 全图 Dijkstra 每个邻格都做字符串 key 查询会非常慢，
+ * 576×360 全图 Dijkstra 每个邻格都做字符串 key 查询会非常慢，
  * 因此把它们预计算成下标数组；Dijkstra 内只做数值访问。
  */
 interface MarchGrid {
@@ -213,7 +213,7 @@ interface MarchGrid {
 
 /**
  * 缓存键只分两类：陆军（含一切不能下水的兵种）与水军。
- * 576×432 的 Float64Array 约 2 MB，两张图常驻可接受。
+ * 576×360 的 Float64Array 约 1.7 MB，两张图常驻可接受。
  */
 type MarchGridKey = 'land' | 'navy';
 const marchGridCache = new Map<MarchGridKey, MarchGrid>();
@@ -229,7 +229,10 @@ function marchGrid(unitClass?: UnitClass): MarchGrid {
   const cost = new Float64Array(N);
   for (let row = 0; row < rows; row++) {
     for (let col = 0; col < cols; col++) {
-      cost[row * cols + col] = marchCostOfTile(col, row, unitClass);
+      // 图幅最外圈是"纸边"，不可行军；行军的各种 Dijkstra 都读这张代价图
+      cost[row * cols + col] = inMarchBounds(col, row)
+        ? marchCostOfTile(col, row, unitClass)
+        : Number.POSITIVE_INFINITY;
     }
   }
 
@@ -920,7 +923,7 @@ export function moveArmyTo(s: GameState, armyId: string, to: GridPoint): MoveOut
  * 部队当前格的行军场。
  *
  * 可达范围与悬停预览共用这一份：否则每次 pointermove 都要跑一遍全图 Dijkstra
- * （576×432 = 24.8 万格），近景拖动会明显掉帧。
+ * （576×360 = 20.7 万格），近景拖动会明显掉帧。
  */
 export function armyFieldOf(s: GameState, army: Army): MarchField {
   return marchField(s, army.factionId, army.at, undefined, undefined, armyClassOf(army));

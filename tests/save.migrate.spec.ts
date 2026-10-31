@@ -6,7 +6,7 @@ import { restoreRng, type RngState } from '../src/core/rng';
 import { createBattle } from '../src/systems/battle';
 import { migrateSave } from '../src/save/migrate';
 import { SAVE_VERSION, migrateSaveFile } from '../src/save/db';
-import { MAP, MAP_VERSION } from '../src/data/tables/geography';
+import { MAP, MAP_VERSION, inMarchBounds } from '../src/data/tables/geography';
 import { isWaterKind, tileKindAt, wallTileAt } from '../src/render/terrainGrid';
 import type { Army } from '../src/core/state';
 
@@ -34,6 +34,7 @@ function expectStandable(at: { col: number; row: number }): void {
   expect(at.col).toBeLessThan(MAP.cols);
   expect(at.row).toBeGreaterThanOrEqual(0);
   expect(at.row).toBeLessThan(MAP.rows);
+  expect(inMarchBounds(at.col, at.row)).toBe(true);
   expect(isWaterKind(tileKindAt(at.col, at.row))).toBe(false);
   expect(wallTileAt(at.col, at.row)).toBeNull();
 }
@@ -161,6 +162,24 @@ describe('旧存档迁移', () => {
     migrateSave(s);
 
     expect(s.pendingMonth.facts).toEqual(emptyMonthFacts());
+  });
+
+  it('v3 南缘裁切档：图外部队与路径点吸附回可行军区', () => {
+    const s = createGame({ playerFactionId: 'liubei', seed: 23 });
+    s.mapVersion = 3;
+    const army = legacyArmy(200, MAP.rows + 20);
+    army.path = [
+      { col: 200, row: MAP.rows + 20 },
+      { col: 202, row: 40 },
+    ];
+    s.armies = [army];
+
+    migrateSave(s);
+
+    expect(s.mapVersion).toBe(MAP_VERSION);
+    expectStandable(s.armies[0]!.at);
+    for (const p of s.armies[0]!.path) expectStandable(p);
+    expect(s.armies[0]!.legDays).toBe(0);
   });
 
   it('v2 大地图旧档：部队坐标 ×3 放大并吸附上岸', () => {

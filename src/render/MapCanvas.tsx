@@ -146,7 +146,7 @@ function project(
 /**
  * 地形分块缓存（两档分辨率，I7 · 7.5）。
  *
- * 576×432 世界 = 6912×5184；若整图缓存，即使 0.5× 也要 ~72MB，
+ * 576×360 世界 = 6912×4320；若整图缓存，即使 0.5× 也要 ~60MB，
  * 手机上必然触发 canvas 上限，所以只生成视口附近的块。
  *
  * 粗档：384 世界单位一块、1.5× 分辨率、LRU 32 块（约 42MB），州郡视角的底图。
@@ -1621,6 +1621,62 @@ export function MapCanvas({
     }
     ctx.restore();
     lapPaint('terrain');
+
+    // 图幅装帧：裁切后的地图边缘应当读成「图册纸边」，而不是地形断掉。
+    // 内侧压一圈墨晕、边缘描外深内浅双线，硬裁切才有装裱感。
+    const mapA = worldToScreen(0, 0, size.w, size.h, view, layout);
+    const mapB = worldToScreen(MAP.width, MAP.height, size.w, size.h, view, layout);
+    const frame = {
+      x: Math.min(mapA.x, mapB.x),
+      y: Math.min(mapA.y, mapB.y),
+      w: Math.abs(mapB.x - mapA.x),
+      h: Math.abs(mapB.y - mapA.y),
+    };
+    if (frame.w > 1 && frame.h > 1) {
+      const shade = Math.min(36, Math.min(frame.w, frame.h) * 0.055);
+      if (shade > 1) {
+        const fade = (
+          x0: number,
+          y0: number,
+          x1: number,
+          y1: number,
+        ): CanvasGradient => {
+          const g = ctx.createLinearGradient(x0, y0, x1, y1);
+          g.addColorStop(0, 'rgba(14,13,10,0.45)');
+          g.addColorStop(1, 'rgba(14,13,10,0)');
+          return g;
+        };
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(frame.x, frame.y, frame.w, frame.h);
+        ctx.clip();
+        ctx.fillStyle = fade(frame.x, frame.y, frame.x, frame.y + shade);
+        ctx.fillRect(frame.x, frame.y, frame.w, shade);
+        ctx.fillStyle = fade(frame.x, frame.y + frame.h, frame.x, frame.y + frame.h - shade);
+        ctx.fillRect(frame.x, frame.y + frame.h - shade, frame.w, shade);
+        ctx.fillStyle = fade(frame.x, frame.y, frame.x + shade, frame.y);
+        ctx.fillRect(frame.x, frame.y, shade, frame.h);
+        ctx.fillStyle = fade(frame.x + frame.w, frame.y, frame.x + frame.w - shade, frame.y);
+        ctx.fillRect(frame.x + frame.w - shade, frame.y, shade, frame.h);
+        ctx.restore();
+      }
+      ctx.strokeStyle = 'rgba(16,15,11,0.9)';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(
+        frame.x + 1,
+        frame.y + 1,
+        Math.max(0, frame.w - 2),
+        Math.max(0, frame.h - 2),
+      );
+      ctx.strokeStyle = 'rgba(214,190,140,0.42)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(
+        frame.x + 3.5,
+        frame.y + 3.5,
+        Math.max(0, frame.w - 7),
+        Math.max(0, frame.h - 7),
+      );
+    }
 
     const pts = project(state, size.w, size.h, view);
     pointsRef.current = pts;

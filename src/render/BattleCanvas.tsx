@@ -84,7 +84,7 @@ interface CellRange {
   y1: number;
 }
 
-/** 只绘制视口内的格子：大地图 576×432 不可能整图遍历 */
+/** 只绘制视口内的格子：大地图 576×360 不可能整图遍历 */
 function visibleCells(geo: Geo, w: number, h: number, battle: BattleState): CellRange {
   const bounds = battleBounds(battle);
   return {

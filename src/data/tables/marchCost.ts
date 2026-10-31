@@ -1,4 +1,5 @@
 import type { GridPoint, UnitClass } from '../../core/state';
+import { inMarchBounds } from './geography';
 import { ferryBetween, gateSiteAt } from '../../render/gateGrid';
 import { tileKindAt, type TileKind } from '../../render/terrainGrid';
 
@@ -57,6 +58,7 @@ export const TILE_KIND_LABEL: Record<TileKind, string> = {
  * 进入某格所需 MP；Infinity 表示该兵种不可通行。
  *
  * `unitClass` 省略时按陆军口径（水面不可通行）。
+ * 这是纯地形代价：图幅边防带由行军网格（`army.ts`）与 `marchCostForArmy` 统一处理。
  */
 export function marchCostOfTile(col: number, row: number, unitClass?: UnitClass): number {
   const kind = tileKindAt(col, row);
@@ -78,6 +80,7 @@ export function marchCostOfTile(col: number, row: number, unitClass?: UnitClass)
  * 水军例外：水面本身可走，渡口只是更快的跳跃边。
  */
 export function marchCostForArmy(col: number, row: number, unitClass?: UnitClass): number {
+  if (!inMarchBounds(col, row)) return Number.POSITIVE_INFINITY;
   const site = gateSiteAt(col, row);
   if (site) {
     if (site.water) {

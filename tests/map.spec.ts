@@ -4,9 +4,13 @@ import {
   LON_RANGE,
   LAT_RANGE,
   MAP,
+  MAP_EDGE_MARGIN,
   RIVERS,
+  inMarchBounds,
   projectLonLat,
 } from '../src/data/tables/geography';
+import { marchCostForArmy } from '../src/data/tables/marchCost';
+import { gateSites } from '../src/render/gateGrid';
 import { CITY_TABLE } from '../src/data/tables/cities';
 import {
   cityAnchors,
@@ -123,6 +127,17 @@ describe('城池落位', () => {
     }
   });
 
+  it('所有城池都远离裁切边，边防带不会吞掉任何城门', () => {
+    const clearance = MAP_EDGE_MARGIN + 10;
+    for (const [id, a] of Object.entries(anchors)) {
+      const name = CITY_TABLE[id]?.name ?? id;
+      expect(a.col, `${name} 离西边太近`).toBeGreaterThanOrEqual(clearance);
+      expect(a.col, `${name} 离东边太近`).toBeLessThanOrEqual(MAP.cols - 1 - clearance);
+      expect(a.row, `${name} 离北边太近`).toBeGreaterThanOrEqual(clearance);
+      expect(a.row, `${name} 离南边太近`).toBeLessThanOrEqual(MAP.rows - 1 - clearance);
+    }
+  });
+
   it('相对方位符合地理直觉', () => {
     const at = (id: string) => anchors[id]!;
     // 洛阳在长安以东、襄阳在洛阳以南、江夏在襄阳东南
@@ -147,6 +162,55 @@ describe('城池落位', () => {
   it('旧字段兜底：没有地理落点的城退回 City.x/y', () => {
     const p = cityWorldPos({ id: '__missing__', x: 123, y: 456 });
     expect(p).toEqual({ x: 123, y: 456 });
+  });
+});
+
+describe('图幅裁切与边防带', () => {
+  it('南缘裁到 24.17°N 后保持 16:10 横屏比例', () => {
+    expect(MAP.rows).toBe(360);
+    expect(MAP.width).toBe(6912);
+    expect(MAP.height).toBe(4320);
+    expect(MAP.width / MAP.height).toBeCloseTo(1.6, 6);
+  });
+
+  it('最外圈 MAP_EDGE_MARGIN 格不可行军', () => {
+    expect(inMarchBounds(0, 180)).toBe(false);
+    expect(inMarchBounds(MAP_EDGE_MARGIN - 1, 180)).toBe(false);
+    expect(inMarchBounds(MAP.cols - MAP_EDGE_MARGIN, 180)).toBe(false);
+    expect(inMarchBounds(180, 0)).toBe(false);
+    expect(inMarchBounds(180, MAP.rows - MAP_EDGE_MARGIN)).toBe(false);
+    expect(inMarchBounds(MAP.cols - 1, MAP.rows - 1)).toBe(false);
+    expect(inMarchBounds(MAP_EDGE_MARGIN, MAP_EDGE_MARGIN)).toBe(true);
+    expect(inMarchBounds(MAP.cols - MAP_EDGE_MARGIN - 1, MAP.rows - MAP_EDGE_MARGIN - 1)).toBe(true);
+  });
+
+  it('边防带行军代价为无穷，图内陆地不受影响', () => {
+    expect(marchCostForArmy(0, 180)).toBe(Infinity);
+    expect(marchCostForArmy(180, 0)).toBe(Infinity);
+    expect(marchCostForArmy(180, MAP.rows - 1)).toBe(Infinity);
+    expect(marchCostForArmy(MAP.cols - 1, 180)).toBe(Infinity);
+
+    const grid = terrainGrid();
+    const plain = TILE_KINDS.indexOf('plain');
+    let sawPlain = false;
+    for (let row = MAP_EDGE_MARGIN; row < MAP.rows - MAP_EDGE_MARGIN && !sawPlain; row++) {
+      for (let col = MAP_EDGE_MARGIN; col < MAP.cols - MAP_EDGE_MARGIN; col++) {
+        if (grid.cells[row * MAP.cols + col] !== plain) continue;
+        expect(marchCostForArmy(col, row)).toBe(1);
+        sawPlain = true;
+        break;
+      }
+    }
+    expect(sawPlain, '图内一块平原都找不到').toBe(true);
+  });
+
+  it('陆上城池与关防都落在可行军范围内', () => {
+    for (const a of Object.values(cityAnchors())) {
+      expect(inMarchBounds(a.col, a.row)).toBe(true);
+    }
+    for (const [id, site] of Object.entries(gateSites())) {
+      expect(inMarchBounds(site.center.col, site.center.row), `${id} 关防贴边`).toBe(true);
+    }
   });
 });
 

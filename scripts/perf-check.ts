@@ -74,7 +74,7 @@ for (let i = 0; i < ROUNDS; i++) {
 
 const rows = [
   'metric,avg_ms,max_ms,note',
-  `terrain_grid,${terrainMs.toFixed(1)},${terrainMs.toFixed(1)},576×432 地形栅格冷启动生成`,
+  `terrain_grid,${terrainMs.toFixed(1)},${terrainMs.toFixed(1)},576×360 地形栅格冷启动生成`,
   `city_blocks,${cityMs.toFixed(1)},${cityMs.toFixed(1)},59 城 3×3 落位与四门`,
   `gate_sites,${gateMs.toFixed(1)},${gateMs.toFixed(1)},31 关港通行线冷启动生成`,
   `first_load,${firstLoad.toFixed(1)},${firstLoad.toFixed(1)},首次建局含 zod 校验`,

@@ -673,7 +673,7 @@ export interface BattlefieldInfo {
 /**
  * 野战元数据。
  *
- * 双方在图上相遇时不进独立场景：战斗单位仍用 576×432 绝对坐标，
+ * 双方在图上相遇时不进独立场景：战斗单位仍用 576×360 绝对坐标，
  * 这里只记录接战位置与两支纵队的 id，战后据此恢复胜方、遣散败方。
  */
 export interface FieldBattleInfo {
@@ -711,7 +711,7 @@ export interface BattleState {
   /** 城墙耐久：归零即城破，攻方胜 */
   cityDurability?: number;
   /**
-   * 大地图战斗：单位坐标即 576×432 大地图绝对格坐标，
+   * 大地图战斗：单位坐标即 576×360 大地图绝对格坐标，
    * 地形由 `terrainGrid` 实时推导，不再保存 12×8 战术图。
    */
   mapBattle?: boolean;

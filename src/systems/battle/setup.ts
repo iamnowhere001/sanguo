@@ -556,7 +556,7 @@ function fieldIdentity(
 
 /**
  * 行军途中接战：双方仍是大地图上的两支 `Army`，不占城、不切场景。
- * 单位坐标直接使用 576×432 绝对格坐标，战斗画面由 `MapCanvas` 复用同一张地图。
+ * 单位坐标直接使用 576×360 绝对格坐标，战斗画面由 `MapCanvas` 复用同一张地图。
  */
 export function createFieldBattle(
   state: GameState,
@@ -817,7 +817,7 @@ export function createBattle(
   // 编队只影响攻方：守方按「上场上限」取兵最多的 N 将，各自成队。
   const squads = buildSquads(generalIds, opts?.squads);
 
-  // 大地图战斗：直接在 576×432 真实地形上列阵，不再裁切 12×8 战术图。
+  // 大地图战斗：直接在 576×360 真实地形上列阵，不再裁切 12×8 战术图。
   const setup = setupMapBattle(
     state,
     fromCityId,

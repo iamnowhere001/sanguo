@@ -1,5 +1,5 @@
 import { BALANCE } from '../../data/tables/balance';
-import { MAP } from '../../data/tables/geography';
+import { inMarchBounds } from '../../data/tables/geography';
 import { marchCostOfTile } from '../../data/tables/marchCost';
 import { WEATHER_LABEL } from '../../data/tables/tactics';
 import { chance } from '../../core/rng';
@@ -181,14 +181,14 @@ function nearestFriendlyCity(
  * 这里不引 `army.ts`（`setup.ts` 已依赖本文件，会形成循环），只用地形与基础行军代价。
  */
 function nearestLandTile(at: GridPoint): GridPoint {
-  if (Number.isFinite(marchCostOfTile(at.col, at.row))) return at;
+  if (inMarchBounds(at.col, at.row) && Number.isFinite(marchCostOfTile(at.col, at.row))) return at;
   for (let radius = 1; radius <= 24; radius++) {
     for (let dy = -radius; dy <= radius; dy++) {
       for (let dx = -radius; dx <= radius; dx++) {
         if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
         const col = at.col + dx;
         const row = at.row + dy;
-        if (col < 0 || row < 0 || col >= MAP.cols || row >= MAP.rows) continue;
+        if (!inMarchBounds(col, row)) continue;
         if (wallTileAt(col, row)) continue;
         if (!Number.isFinite(marchCostOfTile(col, row))) continue;
         return { col, row };

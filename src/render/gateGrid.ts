@@ -412,7 +412,7 @@ function isRealPortLine(line: { lane: GridPoint[]; approaches: [] | [GridPoint, 
  * - 两端都是可站立滩头，且都能走到城池（排除河心小岛）；
  * - 线外没有几十步就能绕回对岸的陆路（排除沿岸假渡口）。
  *
- * 这样 576×432 的大地图上，港口才是真正的路网节点，而不是地图装饰。
+ * 这样 576×360 的大地图上，港口才是真正的路网节点，而不是地图装饰。
  */
 function buildPortSite(
   gate: GateFeature,

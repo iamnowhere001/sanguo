@@ -4178,7 +4178,7 @@ input[type='number'] {
 .battle-map-wrap {
   inset: 40px 0 0 0;
 }
-/* 大地图战斗：复用同一张 576×432 地图，只把交互切到战棋 */
+/* 大地图战斗：复用同一张 576×360 地图，只把交互切到战棋 */
 .battle-map-wrap {
   overflow: hidden;
 }
