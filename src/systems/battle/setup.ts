@@ -19,6 +19,7 @@ import {
   defendersOf,
   effForce,
   effIntellect,
+  isCityDefender,
   neighborsOf,
   syncFactionCities,
 } from '../../core/state';
@@ -159,9 +160,10 @@ function captureUndefended(
   const attacker = state.factions[attackerFactionId];
 
   // 无兵守将也随城破撤退，避免留在敌城里“原地复活”
+  // 已在途的部队不在这里挪动：它们的行军路线与 `armyId` 绑定，中途改写归属会让纵队凭空消失
   const retreat = oldOwner ? retreatCityFor(state, targetCityId, oldOwner) : null;
   for (const g of Object.values(state.generals)) {
-    if (g.status !== 'active' || g.locationId !== targetCityId) continue;
+    if (!isCityDefender(g, targetCityId)) continue;
     if (retreat) {
       g.locationId = retreat.id;
       g.troops = Math.max(
@@ -798,9 +800,7 @@ export function createBattle(
   topUpFromPool(
     state,
     targetCityId,
-    Object.values(state.generals).filter(
-      (g) => g.status === 'active' && g.locationId === targetCityId && !g.armyId,
-    ),
+    Object.values(state.generals).filter((g) => isCityDefender(g, targetCityId)),
   );
   const defenders = defendersOf(state, targetCityId);
   if (defenders.length === 0) {

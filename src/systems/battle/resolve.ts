@@ -159,7 +159,7 @@ export function retreatCityFor(
 }
 
 /** 败军最近的己方城池：野战没有相邻城池的限制，按曼哈顿距离取最近一座 */
-function nearestFriendlyCity(
+export function nearestFriendlyCity(
   state: GameState,
   factionId: string,
   at: GridPoint,
@@ -180,7 +180,7 @@ function nearestFriendlyCity(
  * 非水军打赢水战后不能留在江心：从接战点向外找第一块可行军陆地。
  * 这里不引 `army.ts`（`setup.ts` 已依赖本文件，会形成循环），只用地形与基础行军代价。
  */
-function nearestLandTile(at: GridPoint): GridPoint {
+export function nearestLandTile(at: GridPoint): GridPoint {
   if (inMarchBounds(at.col, at.row) && Number.isFinite(marchCostOfTile(at.col, at.row))) return at;
   for (let radius = 1; radius <= 24; radius++) {
     for (let dy = -radius; dy <= radius; dy++) {

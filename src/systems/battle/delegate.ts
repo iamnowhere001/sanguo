@@ -1,6 +1,6 @@
 import { BALANCE } from '../../data/tables/balance';
 import type { GameState } from '../../core/state';
-import { defendersOf, neighborsOf } from '../../core/state';
+import { defendersOf, isCityDefender, neighborsOf } from '../../core/state';
 import { fail, type OpResult } from '../../core/result';
 import { autoResolveBattle } from './auto';
 import type { BattleOutcome } from './resolve';
@@ -56,7 +56,7 @@ function manualBattleReason(
   if (city.ownerId) {
     const faction = state.factions[city.ownerId];
     const ruler = faction ? state.generals[faction.rulerId] : undefined;
-    if (ruler?.locationId === cityId) return '敌国君主所在，必须亲征';
+    if (ruler && isCityDefender(ruler, cityId)) return '敌国君主所在，必须亲征';
   }
 
   if (city.size === 'capital') return '都城，必须亲征';
@@ -89,7 +89,7 @@ function candidateTroops(
 ): CandidateTroops {
   const attackerTroops = generalIds
     .map((id) => state.generals[id])
-    .filter((g) => g?.status === 'active' && g.locationId === fromCityId && !g.armyId)
+    .filter((g) => g && isCityDefender(g, fromCityId))
     .reduce((sum, g) => sum + (g?.troops ?? 0), 0);
   const allDefenders = defendersOf(state, targetCityId).sort(
     (a, b) => b.troops - a.troops,

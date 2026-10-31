@@ -5,13 +5,15 @@ import type {
   ExploreDirection,
   FacilityKind,
   GameState,
+  GateSide,
   GridPoint,
   InterActChoiceId,
   PolicyId,
   ProjectKind,
+  SiegeTargetKind,
   SiegeWeaponId,
 } from './state';
-import { emptyMonthFacts } from './state';
+import { emptyMonthFacts, isCityDefender } from './state';
 import { BALANCE } from '../data/tables/balance';
 import { runDelegations, toggleDelegation } from '../systems/delegation';
 import { POLICIES } from '../data/tables/policies';
@@ -59,13 +61,13 @@ import {
 import { continueAiPhase, startAiPhase, aiFactionIds } from '../systems/ai';
 import { tickDiplomacy } from '../systems/factionDiplomacy';
 import {
-  assaultCity,
-  attackArmy,
   moveArmyTo,
   playArmyTurn,
   runSiegeAttrition,
   sortieArmy,
 } from '../systems/army';
+import { siegeStrike } from '../systems/combat/siege';
+import { strikeArmy } from '../systems/combat/strike';
 import {
   assaultGate,
   garrisonGate,
@@ -127,7 +129,8 @@ export type Action =
   /** 关闭旬报卡片（非阻塞，不涉及推进） */
   | { t: 'DISMISS_XUN_BRIEF' }
   | { t: 'MOVE_ARMY'; armyId: string; to: GridPoint }
-  | { t: 'ASSAULT'; armyId: string }
+  /** 攻城动作：目标必须显式给出（门 / 墙 / 城内守军），器械的射程在这里生效 */
+  | { t: 'ASSAULT'; armyId: string; cityId: string; target?: SiegeTargetKind; gateSide?: GateSide }
   | { t: 'ASSAULT_GATE'; armyId: string; gateId: string }
   /** 攻击相邻敌军：从大地图直接进入野战 */
   | { t: 'ATTACK_ARMY'; attackerArmyId: string; defenderArmyId: string }
@@ -135,6 +138,7 @@ export type Action =
   | { t: 'GARRISON_GATE'; armyId: string; gateId: string }
   /** 从关港撤出驻军 */
   | { t: 'WITHDRAW_GATE'; armyId: string }
+  | { t: 'TOGGLE_ARMY_AUTO'; armyId: string }
   | { t: 'BATTLE_MOVE'; unitId: string; x: number; y: number }
   | { t: 'BATTLE_UNDO_MOVE'; unitId: string }
   | { t: 'BATTLE_ATTACK'; attackerId: string; targetId: string }
@@ -376,7 +380,7 @@ export function reduce(
         return { state, result: { ok: false, message: '城中没有待分配的兵力' } };
       }
       const gens = Object.values(s.generals).filter(
-        (g) => g.status === 'active' && g.locationId === city.id,
+        (g) => isCityDefender(g, city.id),
       );
       if (gens.length === 0) {
         return { state, result: { ok: false, message: '此城没有可领兵的武将' } };
@@ -484,7 +488,7 @@ export function reduce(
       if (army.factionId !== s.playerFactionId) {
         return { state, result: { ok: false, message: '只能指挥己方部队攻城' } };
       }
-      const r = assaultCity(s, action.armyId);
+      const r = siegeStrike(s, action.armyId, action.cityId, action.target ?? 'gate', action.gateSide);
       return { state: r.ok ? s : state, result: r };
     }
     case 'ASSAULT_GATE': {
@@ -508,8 +512,8 @@ export function reduce(
       if (army.factionId !== s.playerFactionId) {
         return { state, result: { ok: false, message: '只能指挥己方部队接战' } };
       }
-      const r = attackArmy(s, action.attackerArmyId, action.defenderArmyId);
-      return { state: r.result.ok ? s : state, result: r.result };
+      const r = strikeArmy(s, action.attackerArmyId, action.defenderArmyId);
+      return { state: r.ok ? s : state, result: r };
     }
     case 'GARRISON_GATE': {
       if (s.phase !== 'map') {
@@ -534,6 +538,34 @@ export function reduce(
       }
       const r = withdrawGate(s, action.armyId);
       return { state: r.ok ? s : state, result: r };
+    }
+    case 'TOGGLE_ARMY_AUTO': {
+      if (s.phase !== 'map') {
+        return { state, result: { ok: false, message: '当前不在大地图阶段' } };
+      }
+      const army = (s.armies ?? []).find((a) => a.id === action.armyId);
+      if (!army) return { state, result: { ok: false, message: '部队不存在' } };
+      if (army.factionId !== s.playerFactionId) {
+        return { state, result: { ok: false, message: '只能托管己方部队' } };
+      }
+      if (army.garrisonGateId || army.role === 'garrison') {
+        return { state, result: { ok: false, message: '驻守部队由关防自动调度' } };
+      }
+      army.autoOrder = !army.autoOrder;
+      const who =
+        army.generalIds
+          .map((id) => s.generals[id]?.name)
+          .filter(Boolean)
+          .join('、') || '该部队';
+      return {
+        state: s,
+        result: {
+          ok: true,
+          message: army.autoOrder
+            ? `${who}已托管，旬结时自动行军与交战`
+            : `${who}已接管，恢复手动下令`,
+        },
+      };
     }
     case 'BATTLE_MOVE': {
       if (!s.battle || s.phase !== 'battle') {

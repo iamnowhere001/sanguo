@@ -18,7 +18,7 @@ import { cityDamageMultiplier, clamp, trainingMultiplier } from '../formulas';
  * 纯函数、不依赖 GameState：战斗层与数值沙盒必须调用同一份实现，
  * 否则“模拟器调参”和“实机手感”会变成两套规则。
  */
-interface DamageAttacker {
+export interface DamageAttacker {
   troops: number;
   force: number;
   unitClass: UnitClass;
@@ -32,7 +32,7 @@ interface DamageAttacker {
   skill?: GeneralSkillId;
 }
 
-interface DamageDefender {
+export interface DamageDefender {
   troops: number;
   force: number;
   unitClass: UnitClass;

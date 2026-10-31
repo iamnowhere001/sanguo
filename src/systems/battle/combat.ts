@@ -1,9 +1,12 @@
 import { BALANCE } from '../../data/tables/balance';
 import { randRange } from '../../core/rng';
 import { done, fail, type OpResult } from '../../core/result';
-import type { BattleState, BattleUnit, GameState, General } from '../../core/state';
-import { expToNext } from '../formulas';
-import { computeDamageValue } from './damage';
+import type { BattleState, BattleUnit, GameState } from '../../core/state';
+import { computeDamageValue } from '../combat/damage';
+import { grantExp } from '../combat/exp';
+
+/** Phase 2 起经验结算归 `combat/exp`；这里保留再导出，战棋内部调用点不必全改 */
+export { grantExp };
 import {
   activeUnits,
   battleTerrainAt,
@@ -179,18 +182,6 @@ export function performCharge(
   b.log.push(`${a.name} 突击 ${d.name}：${dmg} 伤害并混乱 ${d.stunned} 回合`);
   if (b.log.length > 80) b.log.splice(0, b.log.length - 80);
   return { ok: true, message: `突击造成 ${dmg} 伤害`, damage: dmg, routed };
-}
-
-export function grantExp(g: General, amount: number): void {
-  if (g.level >= BALANCE.LEVEL_MAX) return;
-  g.exp += amount;
-  let guard = 0;
-  while (g.level < BALANCE.LEVEL_MAX && guard++ < 40) {
-    const need = expToNext(g.level);
-    if (need <= 0 || g.exp < need) break;
-    g.exp -= need;
-    g.level += 1;
-  }
 }
 
 export function moveUnit(b: BattleState, unitId: string, x: number, y: number): OpResult {

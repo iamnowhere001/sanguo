@@ -1,11 +1,12 @@
 import { BALANCE } from '../data/tables/balance';
 import type { City, GameState } from '../core/state';
-import { garrisonTroopsOf, neighborsOf } from '../core/state';
+import { garrisonTroopsOf, isCityDefender, neighborsOf } from '../core/state';
 import { done, fail, type OpResult } from '../core/result';
 import { cityMaxDurability, garrisonCapOf } from './formulas';
 import { edictLeftOf } from './domestic';
 import { log } from './economy';
 import { distributeToGenerals, poolOf, withdrawTroops } from './troops';
+import { isSieged } from './cityGrid';
 
 /**
  * 后勤层：城际运输 + 城池耐久。
@@ -33,11 +34,18 @@ function ensureCityDurability(city: City): void {
   city.troops = Math.max(0, Math.floor(city.troops ?? 0));
 }
 
-/** 月结：有主城池按比例修复城墙 */
+/**
+ * 月结：有主城池按比例修复城墙。
+ *
+ * 【围城停修】任一门外压着敌军的城，本月一律不修（大地图攻城-v1 裁决 6）。
+ * 中城月修 121 ≈ 40/旬，裸攻 70/旬，净 30 → 27 旬才破；不停修的话，
+ * 「围而不打、等它修好」永远比「打」划算，围城机制就废了。
+ */
 export function runCityRepair(s: GameState): void {
   const rate = BALANCE.DURABILITY.repairPerMonth;
   for (const city of Object.values(s.cities)) {
     if (!city.ownerId) continue;
+    if (isSieged(s, city.id)) continue;
     ensureCityDurability(city);
     const max = durabilityMaxOf(city);
     const current = city.durability ?? max;
@@ -129,9 +137,7 @@ export function doTransport(s: GameState, order: TransportOrder): OpResult {
   to.food += food;
   if (moved > 0) {
     to.troops = poolOf(to) + moved;
-    const gens = Object.values(s.generals).filter(
-      (g) => g.status === 'active' && g.locationId === to.id && !g.armyId,
-    );
+    const gens = Object.values(s.generals).filter((g) => isCityDefender(g, to.id));
     const leftover = distributeToGenerals(s, gens, moved);
     to.troops = leftover;
   }

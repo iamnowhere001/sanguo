@@ -295,7 +295,7 @@ function applyPlan(plan: Plan, cells: Uint8Array): void {
  * 需要 A/B 城心来确定道路方向；这里用**落城前**的城心，
  * 砌墙会改地形，调用方随后必须 `invalidateCityLayout()` 重算城池。
  */
-export function buildGateWalls(): GateWallBuild {
+export function buildGateWalls(gates: GateFeature[] = GATES): GateWallBuild {
   const anchors = cityAnchors();
   const taken = new Set<number>();
   const previousWalls = new Set<number>();
@@ -304,8 +304,8 @@ export function buildGateWalls(): GateWallBuild {
 
   const rank = (gate: GateFeature): number =>
     gate.kind === 'pass' ? 0 : gate.kind === 'trail' ? 1 : 2;
-  const ordered = GATES.filter((g) => g.kind !== 'port').sort(
-    (x, y) => rank(x) - rank(y) || GATES.indexOf(x) - GATES.indexOf(y),
+  const ordered = gates.filter((g) => g.kind !== 'port').sort(
+    (x, y) => rank(x) - rank(y) || gates.indexOf(x) - gates.indexOf(y),
   );
 
   for (const gate of ordered) {
@@ -379,7 +379,10 @@ export function buildGateWalls(): GateWallBuild {
  * 结构校验：门在山地 / 丘陵、墙 4 邻接接上屏障、lane 跨墙、墙不压城。
  * 返回空数组表示通过。
  */
-export function validateWalls(walls: Map<string, GateWall>): string[] {
+export function validateWalls(
+  walls: Map<string, GateWall>,
+  gates: GateFeature[] = GATES,
+): string[] {
   const issues: string[] = [];
   const blocks = cityBlocks();
   const protectedTiles = new Map<string, string>();
@@ -394,7 +397,7 @@ export function validateWalls(walls: Map<string, GateWall>): string[] {
   }
 
   for (const wall of walls.values()) {
-    const gate = GATES.find((g) => g.id === wall.gateId);
+    const gate = gates.find((g) => g.id === wall.gateId);
     const name = gate?.name ?? wall.gateId;
     const doorKind = kindAt(wall.door.col, wall.door.row);
     if (doorKind !== 'hill') issues.push(`${name}：门洞不是丘陵（${doorKind}）`);

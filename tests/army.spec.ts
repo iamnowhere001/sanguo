@@ -307,7 +307,7 @@ describe('L 档 · 逐格手动行军', () => {
     }
   });
 
-  it('走到敌城门外即围城，不会自动开战；下令攻城才进战棋', () => {
+  it('走到敌城门外即围城，不会自动开战；下令攻城才打', () => {
     const s = fresh();
     const from = myCity(s);
     const target = reachableTargets(s, s.playerFactionId, from)[0]!;
@@ -320,9 +320,29 @@ describe('L 档 · 逐格手动行军', () => {
     expect(siegeTargetOf(s, army)).toBe(target.cityId);
     expect(s.phase).toBe('map');
 
-    const { state: afterAssault, result } = reduce(s, { t: 'ASSAULT', armyId: army.id });
+    const city = s.cities[target.cityId]!;
+    const before = city.durability ?? 0;
+    const { state: struck, result } = reduce(s, {
+      t: 'ASSAULT',
+      armyId: army.id,
+      cityId: target.cityId,
+      target: 'gate',
+    });
     expect(result.ok).toBe(true);
-    expect(afterAssault.phase === 'battle' || afterAssault.gameOver).toBeTruthy();
+    // 合一之后攻城不再切屏，也不再产生战棋会话
+    expect(struck.phase).toBe('map');
+    expect(struck.battle).toBeUndefined();
+    expect(struck.cities[target.cityId]!.durability ?? 0).toBeLessThan(before);
+
+    // 一旬一个动作：同一个旬里再下一记要被挡回来
+    const again = reduce(struck, {
+      t: 'ASSAULT',
+      armyId: army.id,
+      cityId: target.cityId,
+      target: 'gate',
+    });
+    expect(again.result.ok).toBe(false);
+    expect(again.result.message).toContain('本旬');
   });
 
   it('过河靠摆渡：可达范围里没有水面，对岸滩头一次就到', () => {

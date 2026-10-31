@@ -8,24 +8,12 @@ import type {
   BattleUnit,
   UnitClass,
 } from '../../core/state';
-import { tileKindAt, wallTileAt, type TileKind } from '../../render/terrainGrid';
+import { wallTileAt } from '../../render/terrainGrid';
+import { mapBattleTerrainAt } from '../cityGrid';
 
 /** 旧版战术图尺寸：仅用于兼容旧存档与模板生成 */
 export const BATTLE_W = 12;
 export const BATTLE_H = 8;
-
-/** 大地图地形 → 战棋地形；丘陵按山地处理，荒漠与沼泽按平地 / 林地处理 */
-export const KIND_TO_TERRAIN: Record<TileKind, BattleTerrain> = {
-  sea: 'water',
-  lake: 'water',
-  river: 'water',
-  marsh: 'forest',
-  plain: 'plain',
-  forest: 'forest',
-  hill: 'mountain',
-  mountain: 'mountain',
-  desert: 'plain',
-};
 
 export interface BattleBounds {
   x0: number;
@@ -71,11 +59,7 @@ export function unitKey(x: number, y: number): string {
 
 export function battleTerrainAt(b: BattleState, x: number, y: number): BattleTerrain {
   if (b.mapBattle) {
-    if (x < 0 || y < 0 || x >= MAP.cols || y >= MAP.rows) return 'water';
-    const wall = wallTileAt(x, y);
-    // 野战借道城郊时，城墙只是障碍，不是本场要攻的目标城
-    if (b.kind !== 'field' && wall && wall.cityId === b.targetCityId) return 'city';
-    return KIND_TO_TERRAIN[tileKindAt(x, y)];
+    return mapBattleTerrainAt(x, y, b.kind !== 'field' ? b.targetCityId : null);
   }
   const row = b.grid?.[y];
   return row?.[x] ?? 'plain';

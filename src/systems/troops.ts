@@ -1,5 +1,5 @@
 import type { City, GameState, General } from '../core/state';
-import { effForce, effIntellect } from '../core/state';
+import { effForce, effIntellect, isCityDefender } from '../core/state';
 import { generalSkillOf, skillRecruitMult } from '../data/tables/generalTraits';
 import { recruitCap, troopCap } from './formulas';
 
@@ -116,7 +116,7 @@ export function assignTroops(
   const city = s.cities[cityId];
   const g = s.generals[generalId];
   if (!city || !g) return { moved: 0, reason: '城池或武将不存在' };
-  if (g.status !== 'active' || g.locationId !== cityId || g.armyId) {
+  if (!isCityDefender(g, cityId)) {
     return { moved: 0, reason: '该武将不在城中' };
   }
   const delta = Math.trunc(amount);
@@ -163,10 +163,7 @@ export function withdrawTroops(s: GameState, cityId: string, amount: number): nu
 
   if (need > 0) {
     const gens = Object.values(s.generals)
-      .filter(
-        (g) =>
-          g.status === 'active' && g.locationId === cityId && !g.armyId && g.troops > 0,
-      )
+      .filter((g) => isCityDefender(g, cityId) && g.troops > 0)
       .sort((a, b) => a.troops - b.troops || a.id.localeCompare(b.id));
     for (const g of gens) {
       if (need <= 0) break;
@@ -185,9 +182,7 @@ export function withdrawTroops(s: GameState, cityId: string, amount: number): nu
  * 分配顺序与 `topUpFromPool` 一致（武力从高到低），保证预览 = 实战。
  */
 export function projectedTroops(s: GameState, cityId: string): Map<string, number> {
-  const gens = Object.values(s.generals).filter(
-    (g) => g.status === 'active' && g.locationId === cityId && !g.armyId,
-  );
+  const gens = Object.values(s.generals).filter((g) => isCityDefender(g, cityId));
   let pool = poolOf(s.cities[cityId]);
   const out = new Map<string, number>();
   const ordered = [...gens].sort(

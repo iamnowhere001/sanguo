@@ -4,6 +4,7 @@ import type { City, GameState, General } from '../core/state';
 import {
   citiesOf,
   defendersOf,
+  isCityDefender,
   neighborsOf,
   syncFactionCities,
 } from '../core/state';
@@ -38,9 +39,7 @@ export interface AbandonPlan {
 }
 
 function activeGeneralsAt(state: GameState, cityId: string): General[] {
-  return Object.values(state.generals).filter(
-    (g) => g.status === 'active' && g.locationId === cityId && !g.armyId,
-  );
+  return Object.values(state.generals).filter((g) => isCityDefender(g, cityId));
 }
 
 function garrisonTroops(state: GameState, cityId: string): number {

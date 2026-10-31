@@ -12,7 +12,9 @@ import { MOVE_RANGE, TERRAIN_LABEL } from '../data/tables/unitClasses';
 import type { DomesticCmd, GameState, General } from '../core/state';
 import { effForce, effIntellect, neighborsOf } from '../core/state';
 import { reachableTargets } from '../systems/army';
-import { gatesOf, sortieBlocked, sortieBlockedReason } from '../systems/cityGrid';
+import { gatesOf, isSieged, sortieBlocked, sortieBlockedReason } from '../systems/cityGrid';
+import { gateHpOf, gateMaxHp, siegeTargetsOf } from '../systems/combat/siege';
+import { GATE_LABEL, cityAnchors } from '../render/terrainGrid';
 import {
   cityDamageMultiplier,
   foodOutput,
@@ -243,6 +245,32 @@ export function CityPanel({
   const durabilityMax = durabilityMaxOf(city);
   const durability = Math.min(durabilityMax, city.durability ?? Math.round(durabilityMax * 0.8));
   const durabilityPct = durabilityMax > 0 ? (durability / durabilityMax) * 100 : 0;
+  const sieged = isSieged(state, city.id);
+  const gateMax = gateMaxHp(city);
+  const gateBars = cityGates.map((g) => ({
+    side: g.side,
+    label: GATE_LABEL[g.side],
+    hp: gateHpOf(city, g.side),
+  }));
+  const showGates = sieged || gateBars.some((g) => g.hp < gateMax);
+  /** 城外敌军本旬最坏能磨掉多少耐久：每支围城部队取它打得最狠的一记 */
+  const incomingSiege = (() => {
+    const anchor = cityAnchors()[city.id];
+    if (!anchor) return 0;
+    let total = 0;
+    for (const army of state.armies ?? []) {
+      if (army.garrisonGateId || army.factionId === city.ownerId) continue;
+      const dist =
+        Math.abs(army.at.col - anchor.col) + Math.abs(army.at.row - anchor.row);
+      if (dist > 4) continue;
+      const best = siegeTargetsOf(state, army.id).reduce(
+        (m, o) => (o.cityId === city.id && o.durabilityEst > m ? o.durabilityEst : m),
+        0,
+      );
+      total += best;
+    }
+    return total;
+  })();
   const transportTarget = transportTargetId ? state.cities[transportTargetId] : undefined;
   const transportCheck = transportTarget
     ? canTransport(state, {
@@ -567,7 +595,7 @@ export function CityPanel({
           </div>
           <div
             className="cp-attr"
-            title={`城池耐久 ${durability}/${durabilityMax}：攻城战中攻方部队站上城池格会逐日磨损，归零即城破；月结自动修复 ${Math.round(
+            title={`城池耐久 ${durability}/${durabilityMax}：攻方每旬下一道攻城令磨损城墙，归零即城破；围城期间不修墙；月结自动修复 ${Math.round(
               BALANCE.DURABILITY.repairPerMonth * 100,
             )}%`}
           >
@@ -587,6 +615,34 @@ export function CityPanel({
             {durabilityPct.toFixed(0)}%
           </b>
         </div>
+
+        {sieged || incomingSiege > 0 ? (
+          <div className="cp-siege-note">
+            <b>{sieged ? '被围' : '受攻'}</b>
+            {sieged ? <span>城外有敌军，本月不修墙</span> : null}
+            {incomingSiege > 0 ? <span>本旬预计磨损 {fmt(incomingSiege)}</span> : null}
+          </div>
+        ) : null}
+
+        {showGates ? (
+          <div className="cp-gates">
+            {gateBars.map((g) => (
+              <div
+                key={g.side}
+                className="cp-gate"
+                title={`${g.label}门耐久 ${g.hp}/${gateMax}：只有冲车撞得开，归零即破门`}
+              >
+                <span>{g.label}门</span>
+                <Bar
+                  value={g.hp}
+                  max={Math.max(1, gateMax)}
+                  color={g.hp <= 0 ? 'var(--red)' : g.hp < gateMax * 0.35 ? 'var(--gold)' : 'var(--teal)'}
+                />
+                <b>{g.hp}</b>
+              </div>
+            ))}
+          </div>
+        ) : null}
 
         {isMine ? (
           <>

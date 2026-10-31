@@ -13,6 +13,7 @@ import {
   cityBlocks,
   invalidateCityLayout,
   refreshStats,
+  resetTerrainGrid,
   terrainGrid,
   type TileKind,
 } from './terrainGrid';
@@ -598,29 +599,37 @@ let centerCache: Map<string, GateSite> | null = null;
 let wallBuild: GateWallBuild | null = null;
 let ready = false;
 
+/** 关港落位结果：失败的关港单独列出，不再整批抛错 */
+export interface SiteBuild {
+  sites: Record<string, GateSite>;
+  failures: string[];
+}
+
 /** 落位计算本体：在关墙与最终城池落位都就绪后调用一次 */
-function computeSites(): Record<string, GateSite> {
+function computeSites(gates: GateFeature[], wallBuild: GateWallBuild | null): SiteBuild {
   const cols = MAP.cols;
   // 先占住城墙：关防通行线不得穿过任何城池的 3×3 城墙
   const taken = new Uint8Array(masks().wall);
   const out: Record<string, GateSite> = {};
+  const failures: string[] = [];
   // 关隘先占门洞，其次小路，最后港口。
   const rank = (kind: GateFeature['kind']): number =>
     kind === 'port' ? 2 : kind === 'trail' ? 1 : 0;
-  const ordered = [...GATES].sort(
-    (a, b) => rank(a.kind) - rank(b.kind) || GATES.indexOf(a) - GATES.indexOf(b),
+  const ordered = [...gates].sort(
+    (a, b) => rank(a.kind) - rank(b.kind) || gates.indexOf(a) - gates.indexOf(b),
   );
 
   for (const gate of ordered) {
     if (gate.kind !== 'port') {
       const wall = wallBuild?.walls.get(gate.id);
       if (!wall) {
-        throw new Error(`关墙缺失：${gate.name}（${gate.id}）`);
+        failures.push(`${gate.name}（${gate.id}）：缺少关墙`);
+        continue;
       }
-      for (const p of [...wall.lane, ...wall.approaches]) {
-        if (taken[p.row * cols + p.col]) {
-          throw new Error(`${gate.name} 的通行线压到城墙 / 其他关港（${p.col},${p.row}）`);
-        }
+      const clash = [...wall.lane, ...wall.approaches].find((p) => taken[p.row * cols + p.col]);
+      if (clash) {
+        failures.push(`${gate.name} 的通行线压到城墙 / 其他关港（${clash.col},${clash.row}）`);
+        continue;
       }
       const site: GateSite = {
         gate,
@@ -637,9 +646,15 @@ function computeSites(): Record<string, GateSite> {
     }
 
     const mid = midpointOf(gate);
-    if (!mid) throw new Error(`港口 ${gate.name}（${gate.id}）缺少道路中点`);
+    if (!mid) {
+      failures.push(`港口 ${gate.name}（${gate.id}）：缺少道路中点`);
+      continue;
+    }
     const site = buildPortSite(gate, mid, taken, out);
-    if (!site) throw new Error(`港口 ${gate.name}（${gate.id}）找不到可渡水面`);
+    if (!site) {
+      failures.push(`港口 ${gate.name}（${gate.id}）：找不到可渡水面`);
+      continue;
+    }
     for (const p of site.lane) taken[p.row * cols + p.col] = 1;
     out[gate.id] = site;
   }
@@ -651,7 +666,7 @@ function computeSites(): Record<string, GateSite> {
   // 判据不能用 `landDetour`：湖泊 / 江口两岸常常沿湖岸绕得通，
   // 绕 96 步以内不等于"同一岸"。改为几何判据 —— 本港两个滩头里，
   // 离对岸港图标更远的那个，才属于对岸。
-  for (const gate of GATES) {
+  for (const gate of gates) {
     if (!gate.pairId || gate.id > gate.pairId) continue;
     const a = out[gate.id];
     const b = out[gate.pairId];
@@ -663,7 +678,7 @@ function computeSites(): Record<string, GateSite> {
     }
   }
 
-  return out;
+  return { sites: out, failures };
 }
 
 /**
@@ -696,8 +711,66 @@ export function ensureMapReady(): void {
   laneCache = null;
   centerCache = null;
   hopCache = null;
-  cache = computeSites();
+  const built = computeSites(GATES, wallBuild);
+  if (built.failures.length > 0) {
+    throw new Error(`关港落位失败 ${built.failures.length} 处：\n${built.failures.map((f) => `  - ${f}`).join('\n')}`);
+  }
+  cache = built.sites;
   ready = true;
+}
+
+/**
+ * 丢掉全部落位缓存，让下一次 `gateSites()` 从头重算。
+ *
+ * 关墙会就地改写地形，所以「换一套关港」必须先回到原始地形再重跑；
+ * 只清缓存不重置地形，第二套关墙会叠在第一套上。
+ */
+export function resetMapRuntime(): void {
+  ready = false;
+  cache = null;
+  wallBuild = null;
+  laneCache = null;
+  centerCache = null;
+  hopCache = null;
+  maskCache = null;
+  cityDistanceCache = null;
+}
+
+export interface GateMapBuild {
+  sites: Record<string, GateSite>;
+  walls: Map<string, GateWall>;
+  /** 砌墙 / 落位失败 */
+  failures: string[];
+  /** 关墙结构问题（门洞不在丘陵、墙端可绕关等） */
+  wallIssues: string[];
+}
+
+/**
+ * 用一份**外部关港表**重建整张关防地图（配置台结构校验用）。
+ *
+ * 顺序与 `ensureMapReady` 一致：重置地形 → 砌墙 → 重算城池 → 落位。
+ * 不改模块里的运行时缓存（`gateSites()` 仍然指向配表的结果）。
+ */
+export function buildGateMap(gates: GateFeature[]): GateMapBuild {
+  resetTerrainGrid();
+  terrainGrid();
+
+  const wallBuildResult = buildGateWalls(gates);
+  invalidateCityLayout();
+  refreshStats();
+  cityBlocks();
+
+  maskCache = null;
+  cityDistanceCache = null;
+
+  const built = computeSites(gates, wallBuildResult);
+  const failures = [
+    ...wallBuildResult.failures.map((f) => `${f.name}（${f.gateId}）：${f.reason}`),
+    ...built.failures,
+  ];
+  const wallIssues = validateWalls(wallBuildResult.walls, gates);
+
+  return { sites: built.sites, walls: wallBuildResult.walls, failures, wallIssues };
 }
 
 /** 全部关隘 / 港口的落位（首次调用会先跑完整地图管线） */

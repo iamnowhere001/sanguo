@@ -1,5 +1,6 @@
 import { marchCostOfTile } from '../data/tables/marchCost';
-import type { Army, GameState, GridPoint } from '../core/state';
+import { inMap } from '../data/tables/geography';
+import type { Army, BattleTerrain, GameState, GridPoint } from '../core/state';
 import { isWaterKind } from '../render/terrainGrid';
 import {
   GATE_LABEL,
@@ -7,8 +8,10 @@ import {
   approachTileAt,
   cityBlocks,
   tileKindAt,
+  wallTileAt,
   type CityBlock,
   type GateSide,
+  type TileKind,
   type WallRole,
 } from '../render/terrainGrid';
 
@@ -99,6 +102,16 @@ export function sortieBlocked(s: GameState, cityId: string): boolean {
 }
 
 /**
+ * 这座城正处于被围状态：任一门外压着敌军（水门算海军，封死的门站不上人）。
+ *
+ * 被围的城本月不享受耐久月修（裁决 6）——否则「围城」永远耗不过「等它自己修好」。
+ * Phase 3 守军实体化后，围死判定改读部队占格，这里仍是唯一入口。
+ */
+export function isSieged(s: GameState, cityId: string): boolean {
+  return gatesOf(s, cityId).some((g) => g.blockedBy !== null);
+}
+
+/**
  * 城门被堵死时的原因文案：区分「水门 / 封死」与「被敌军堵住」，
  * 让玩家知道该打谁、还是该换方向。
  */
@@ -138,4 +151,34 @@ export function siegeTargetOf(s: GameState, army: Army): string | null {
   if (!city) return null;
   if (city.ownerId === army.factionId) return null;
   return city.id;
+}
+
+/** 大地图地形 → 战斗地形；丘陵按山地，荒漠按平地，沼泽按林地 */
+export const KIND_TO_TERRAIN: Record<TileKind, BattleTerrain> = {
+  sea: 'water',
+  lake: 'water',
+  river: 'water',
+  marsh: 'forest',
+  plain: 'plain',
+  forest: 'forest',
+  hill: 'mountain',
+  mountain: 'mountain',
+  desert: 'plain',
+};
+
+/**
+ * 大地图某一格的战斗地形——伤害公式读的就是这个值。
+ *
+ * 只有 `targetCityId` 那座城的城墙算作 `'city'`（吃城防减伤、触发守城特技）；
+ * 借道别人的城墙只是路过障碍，按底下那块地的普通地形算。
+ */
+export function mapBattleTerrainAt(
+  col: number,
+  row: number,
+  targetCityId?: string | null,
+): BattleTerrain {
+  if (!inMap(col, row)) return 'water';
+  const wall = wallTileAt(col, row);
+  if (wall && targetCityId && wall.cityId === targetCityId) return 'city';
+  return KIND_TO_TERRAIN[tileKindAt(col, row)];
 }

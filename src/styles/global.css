@@ -2273,6 +2273,46 @@ input[type='number'] {
   font-weight: 500;
   color: var(--gold);
 }
+.cp-siege-note {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 var(--sp-2);
+  font-size: 10px;
+  color: var(--muted);
+}
+.cp-siege-note b {
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--red) 18%, transparent);
+  color: var(--red);
+  font-weight: 600;
+}
+.cp-gates {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0 0 var(--sp-2);
+  font-size: 10px;
+  color: var(--muted);
+}
+.cp-gate {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cp-gate .bar-track {
+  flex: 1;
+}
+.cp-gate b {
+  min-width: 34px;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--gold);
+}
 /* 待分配兵力：城池兵力池 */
 .pool-row {
   display: flex;
@@ -6968,4 +7008,5 @@ input[type='number'] {
 }
 .army-hud-weapon { color: #e8c46e; }
 .army-hud-skill { color: #8fb0d9; }
+.army-hud-auto { color: #9cc08a; }
 

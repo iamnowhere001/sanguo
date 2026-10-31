@@ -12,7 +12,7 @@
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { computeDamageValue } from '../src/systems/battle/damage';
+import { computeDamageValue } from '../src/systems/combat/damage';
 import { createRng, randRange, type RngState } from '../src/core/rng';
 import { BALANCE } from '../src/data/tables/balance';
 import type { BattleTerrain, UnitClass } from '../src/core/state';

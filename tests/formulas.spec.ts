@@ -16,7 +16,7 @@ import {
   trainingMultiplier,
   troopCap,
 } from '../src/systems/formulas';
-import { computeDamageValue } from '../src/systems/battle/damage';
+import { computeDamageValue } from '../src/systems/combat/damage';
 import {
   AFFINITY,
   TERRAIN_MODIFIER,

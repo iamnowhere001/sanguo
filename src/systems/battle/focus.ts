@@ -3,7 +3,7 @@ import { difficultyOf } from '../../data/tables/difficulty';
 import type { BattleSide, BattleState, BattleUnit, GameState } from '../../core/state';
 import { TERRAIN_MODIFIER } from '../../data/tables/unitClasses';
 import { computeDamage } from './combat';
-import { computeDamageValue } from './damage';
+import { computeDamageValue } from '../combat/damage';
 import {
   activeUnits,
   attackRangeOf,

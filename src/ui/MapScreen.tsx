@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { BALANCE } from '../data/tables/balance';
 import { difficultyOf } from '../data/tables/difficulty';
-import type { DomesticCmd, GameState, GridPoint, SiegeWeaponId } from '../core/state';
+import type { DomesticCmd, GateSide, GameState, GridPoint, SiegeTargetKind, SiegeWeaponId } from '../core/state';
 import { gameStore, useGameStore } from '../store/gameStore';
 import { MapCanvas } from '../render/MapCanvas';
 import { audio } from '../audio';
@@ -34,7 +34,10 @@ import {
   type DispatchPlan,
 } from '../systems/army';
 import { DispatchBar } from './DispatchBar';
-import { gatesOf, siegeTargetOf, sortieBlocked } from '../systems/cityGrid';
+import { gatesOf, sortieBlocked } from '../systems/cityGrid';
+import { SIEGE_TARGET_LABEL, siegeTargetsOf } from '../systems/combat/siege';
+import { canAct } from '../systems/combat/action';
+import { GATE_LABEL } from '../render/terrainGrid';
 import {
   gateAccessLabel,
   gateGarrisonOf,
@@ -235,11 +238,16 @@ export function MapScreen() {
     [state, selectedGateId],
   );
 
-  /** 选中部队脚下的围城目标 */
-  const armySiegeCityId = useMemo(
-    () => (selectedArmy ? siegeTargetOf(state, selectedArmy) : null),
+  /** 选中部队射程内的攻城目标：三11 把城池本身当作可攻击对象，门 / 墙 / 城内三选一 */
+  const siegeOptions = useMemo(
+    () =>
+      selectedArmy && !selectedArmy.garrisonGateId
+        ? siegeTargetsOf(state, selectedArmy.id)
+        : [],
     [state, selectedArmy],
   );
+  /** 一旬一个动作：动作过完菜单收起，下一旬自动解禁 */
+  const armyActed = selectedArmy ? !canAct(state, selectedArmy) : false;
 
   /** 与选中部队相邻、可即时开战的敌军 */
   const armyFoes = useMemo(
@@ -263,13 +271,15 @@ export function MapScreen() {
     else if (res.message) gameStore.notify(res.message, 'info');
   };
 
-  const handleAssault = (armyId: string) => {
-    const res = store.dispatch({ t: 'ASSAULT', armyId });
+  const handleAssault = (
+    armyId: string,
+    cityId: string,
+    target: SiegeTargetKind,
+    gateSide?: GateSide
+  ) => {
+    const res = store.dispatch({ t: 'ASSAULT', armyId, cityId, target, gateSide });
     if (!res.ok) gameStore.notify(res.message, 'warn');
-    else {
-      gameStore.notify(res.message, 'good');
-      setSelectedArmyId(null);
-    }
+    else gameStore.notify(res.message, 'good');
   };
 
   /** 点城 / 点部队时收起关防面板，保证右栏只有一个焦点 */
@@ -295,10 +305,7 @@ export function MapScreen() {
   const handleAttackArmy = (attackerArmyId: string, defenderArmyId: string) => {
     const res = store.dispatch({ t: 'ATTACK_ARMY', attackerArmyId, defenderArmyId });
     if (!res.ok) gameStore.notify(res.message, 'warn');
-    else {
-      gameStore.notify(res.message, 'good');
-      setSelectedArmyId(null);
-    }
+    else if (res.message) gameStore.notify(res.message, 'good');
   };
 
   const handleGarrisonGate = (armyId: string, gateId: string) => {
@@ -308,6 +315,11 @@ export function MapScreen() {
 
   const handleWithdrawGate = (armyId: string) => {
     const res = store.dispatch({ t: 'WITHDRAW_GATE', armyId });
+    gameStore.notify(res.message, res.ok ? 'good' : 'warn');
+  };
+
+  const handleToggleAuto = (armyId: string) => {
+    const res = store.dispatch({ t: 'TOGGLE_ARMY_AUTO', armyId });
     gameStore.notify(res.message, res.ok ? 'good' : 'warn');
   };
 
@@ -916,14 +928,27 @@ export function MapScreen() {
                   特技 {skillNameOf(selectedArmy.skill)}
                 </span>
               ) : null}
-              {armySiegeCityId && !selectedArmy.garrisonGateId ? (
-                <button
-                  type="button"
-                  className="btn accent sm"
-                  onClick={() => handleAssault(selectedArmy.id)}
-                >
-                  攻城 {state.cities[armySiegeCityId]?.name}
-                </button>
+              {selectedArmy.autoOrder ? (
+                <span className="army-hud-meta army-hud-auto">托管中 · 旬结自动行军</span>
+              ) : null}
+              {siegeOptions.length > 0 && !armyActed
+                ? siegeOptions.slice(0, 4).map((o) => (
+                    <button
+                      key={`${o.cityId}-${o.target}-${o.side ?? ''}`}
+                      type="button"
+                      className="btn accent sm"
+                      title={`距 ${o.distance} 格 · 预计${
+                        o.durabilityEst > 0 ? `磨损城墙 ${o.durabilityEst}` : `歼灭守军 ${o.garrisonEst}`
+                      }${o.counterEst > 0 ? ` · 城头反击约 ${o.counterEst}` : ' · 不受反击'}`}
+                      onClick={() => handleAssault(selectedArmy.id, o.cityId, o.target, o.side ?? undefined)}
+                    >
+                      攻 {o.cityName}
+                      {o.target === 'gate' && o.side ? GATE_LABEL[o.side] : SIEGE_TARGET_LABEL[o.target]}
+                    </button>
+                  ))
+                : null}
+              {armyActed && !selectedArmy.garrisonGateId ? (
+                <span className="army-hud-meta army-hud-acted">本旬已行动，下一旬再下令</span>
               ) : null}
               {selectedArmy.garrisonGateId ? (
                 <button
@@ -940,7 +965,7 @@ export function MapScreen() {
                       key={foe.id}
                       type="button"
                       className="btn accent sm"
-                      title={`在相邻格直接接战：${foe.generalIds
+                      title={`在地图上即时交锋，不切战棋；击溃后退往最近己方城：${foe.generalIds
                         .map((id) => state.generals[id]?.name)
                         .filter(Boolean)
                         .join('、')}`}
@@ -954,6 +979,21 @@ export function MapScreen() {
                     </button>
                   ))
                 : null}
+              {!selectedArmy.garrisonGateId &&
+              selectedArmy.factionId === state.playerFactionId ? (
+                <button
+                  type="button"
+                  className={selectedArmy.autoOrder ? 'btn sm' : 'btn ghost sm'}
+                  title={
+                    selectedArmy.autoOrder
+                      ? '收回指挥权，恢复逐旬手动下令'
+                      : '交给军师：旬结时自动找最近敌城行军、接战与攻城'
+                  }
+                  onClick={() => handleToggleAuto(selectedArmy.id)}
+                >
+                  {selectedArmy.autoOrder ? '接管' : '托管'}
+                </button>
+              ) : null}
               <button type="button" className="btn ghost sm" onClick={() => setSelectedArmyId(null)}>
                 取消
               </button>

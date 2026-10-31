@@ -34,8 +34,8 @@ function mk(id: string, name: string, rulerId: string, color: string): Faction {
   return { id, name, rulerId, color, isPlayer: false, cityIds: [] };
 }
 
-/** 四剧本共用一张 59 城节点图 */
-const MAP_EDGES: MapEdge[] = [
+/** 四剧本共用一张 59 城节点图；配置台也读这份边表作为路网基线 */
+export const MAP_EDGES: MapEdge[] = [
   // 凉州 / 关中
   { a: 'tianshui', b: 'wuwei', cost: 3 },
   { a: 'tianshui', b: 'anding', cost: 2 },

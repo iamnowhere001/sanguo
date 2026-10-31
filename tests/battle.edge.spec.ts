@@ -3,7 +3,6 @@ import { createGame } from '../src/data/tables/scenarios';
 import type { BattleState, GameState } from '../src/core/state';
 import {
   activeUnits,
-  computeDamageValue,
   createBattle,
   markRouted,
   moveUnit,
@@ -12,7 +11,7 @@ import {
   undoMove,
   waitUnit,
 } from '../src/systems/battle';
-import { forestStealth } from '../src/systems/battle/damage';
+import { computeDamageValue, forestStealth } from '../src/systems/combat/damage';
 import { BALANCE } from '../src/data/tables/balance';
 
 function fresh(): GameState {

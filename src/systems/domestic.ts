@@ -2,7 +2,7 @@ import { BALANCE } from '../data/tables/balance';
 import { chance, draw, pickWeighted, randInt } from '../core/rng';
 import { done, fail, type OpResult } from '../core/result';
 import type { City, DomesticCmd, GameState, General, SearchEntry } from '../core/state';
-import { effForce, effIntellect, garrisonTroopsOf, neighborsOf } from '../core/state';
+import { effForce, effIntellect, garrisonTroopsOf, isCityDefender, neighborsOf } from '../core/state';
 import { log } from './economy';
 import { garrisonCapOf, statGain, tradeLimit } from './formulas';
 import {
@@ -32,7 +32,7 @@ function cityTroopTotal(s: GameState, cityId: string): number {
  */
 export function edictCapOf(s: GameState, cityId: string): number {
   const generals = Object.values(s.generals).filter(
-    (g) => g.status === 'active' && g.locationId === cityId && !g.armyId,
+    (g) => isCityDefender(g, cityId),
   ).length;
   const { base, perGenerals, max } = BALANCE.MODERN.EDICT;
   return Math.min(max, base + Math.floor(generals / perGenerals));
@@ -187,13 +187,7 @@ export function doBatchDomestic(
       continue;
     }
     const general = Object.values(s.generals)
-      .filter(
-        (g) =>
-          g.status === 'active' &&
-          g.locationId === cityId &&
-          !g.armyId &&
-          g.stamina >= cfg.stamina,
-      )
+      .filter((g) => isCityDefender(g, cityId) && g.stamina >= cfg.stamina)
       .sort((a, b) => batchKeyOf(b, cmd) - batchKeyOf(a, cmd))[0];
     if (!general) {
       skipped += 1;
@@ -277,7 +271,7 @@ export function doRecruitAll(s: GameState, cityId: string): OpResult {
 
   const city = s.cities[cityId]!;
   const gens = Object.values(s.generals)
-    .filter((g) => g.status === 'active' && g.locationId === cityId && !g.armyId)
+    .filter((g) => isCityDefender(g, cityId))
     .sort((a, b) => troopCapOf(s, b) - b.troops - (troopCapOf(s, a) - a.troops));
 
   const skill = city.skill;
@@ -399,7 +393,7 @@ export function doBanquetAll(s: GameState, cityId: string): OpResult {
   if (bad) return bad;
   const city = s.cities[cityId]!;
   const gens = Object.values(s.generals).filter(
-    (g) => g.status === 'active' && g.locationId === cityId && !g.armyId,
+    (g) => isCityDefender(g, cityId),
   );
   if (gens.length === 0) return fail('此城没有武将');
 

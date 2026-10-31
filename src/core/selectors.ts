@@ -1,3 +1,4 @@
+import { garrisonTroopsOf, isCityDefender } from './state';
 import type { GameState, General } from './state';
 
 export const fmt = (n: number): string => n.toLocaleString('zh-CN');
@@ -14,20 +15,12 @@ export function factionName(state: GameState, factionId: string | null): string 
 
 /** 城内驻军总数：未分配兵力池 + 各将统领兵力（在途部队不计） */
 export function cityTroops(state: GameState, cityId: string): number {
-  const pool = state.cities[cityId]?.troops ?? 0;
-  return (
-    pool +
-    Object.values(state.generals)
-      .filter((g) => g.status === 'active' && g.locationId === cityId && !g.armyId)
-      .reduce((sum, g) => sum + g.troops, 0)
-  );
+  return garrisonTroopsOf(state, cityId);
 }
 
 /** 城中驻守武将（在途部队不计） */
 export function cityGenerals(state: GameState, cityId: string): General[] {
-  return Object.values(state.generals).filter(
-    (g) => g.status === 'active' && g.locationId === cityId && !g.armyId,
-  );
+  return Object.values(state.generals).filter((g) => isCityDefender(g, cityId));
 }
 
 export function formatTime(ts: number): string {

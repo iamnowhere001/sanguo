@@ -3,7 +3,7 @@ import { EVENTS, EVENT_IDS, type EventId } from '../data/tables/events';
 import { chance, draw, randInt } from '../core/rng';
 import { done, fail, type OpResult } from '../core/result';
 import type { City, GameState } from '../core/state';
-import { citiesOf, effIntellect } from '../core/state';
+import { citiesOf, effIntellect, isCityDefender } from '../core/state';
 import { cityTroops } from '../core/selectors';
 import { garrisonCapOf } from './formulas';
 import { log } from './economy';
@@ -11,7 +11,7 @@ import { log } from './economy';
 function addTroops(state: GameState, city: City, rate: number): number {
   const room = Math.max(0, garrisonCapOf(city.size) - cityTroops(state, city.id));
   const candidates = Object.values(state.generals).filter(
-    (g) => g.status === 'active' && g.locationId === city.id && !g.armyId && !g.isRuler,
+    (g) => isCityDefender(g, city.id) && !g.isRuler,
   );
   if (candidates.length === 0 || room <= 0) return 0;
   let remaining = Math.min(room, Math.floor(cityTroops(state, city.id) * rate));

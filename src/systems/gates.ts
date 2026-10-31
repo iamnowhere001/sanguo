@@ -1,3 +1,4 @@
+import { BALANCE } from '../data/tables/balance';
 import { GATES, GATE_KIND_LABEL, gateById, isTrail, type GateFeature } from '../data/tables/gates';
 import type { Army, GameState, General, GridPoint } from '../core/state';
 import { fail, type OpResult } from '../core/result';
@@ -6,6 +7,7 @@ import { gateSiteById, type GateSite } from '../render/gateGrid';
 import { cityAnchors } from '../render/terrainGrid';
 import { canAttackFactions } from './factionDiplomacy';
 import { log } from './economy';
+import { applyGeneralLoss } from './combat/unit';
 
 /**
  * 关防系统（L2 档）。
@@ -212,27 +214,6 @@ function activeGenerals(s: GameState, ids: string[]): General[] {
     .filter((g): g is General => Boolean(g) && g!.status === 'active');
 }
 
-/** 按比例把伤亡摊到各将头上，返回实际损失 */
-function applyGeneralLoss(gens: General[], loss: number): number {
-  const total = gens.reduce((sum, g) => sum + g.troops, 0);
-  if (total <= 0 || loss <= 0) return 0;
-
-  let left = Math.min(loss, total);
-  let actual = 0;
-  for (let i = 0; i < gens.length && left > 0; i++) {
-    const g = gens[i]!;
-    const share =
-      i === gens.length - 1
-        ? left
-        : Math.min(g.troops, Math.floor((loss * g.troops) / total));
-    const take = Math.min(share, left, g.troops);
-    g.troops -= take;
-    left -= take;
-    actual += take;
-  }
-  return actual;
-}
-
 /** 部队溃散：回最近己方城，清掉行军状态 */
 function disbandArmy(s: GameState, army: Army): void {
   for (const id of army.generalIds) {
@@ -378,7 +359,7 @@ function clearGateGarrison(s: GameState, gateId: string, keepFactionId?: string)
       if (best) {
         g.status = 'active';
         g.locationId = best.id;
-        g.troops = Math.floor(g.troops * 0.7);
+        g.troops = Math.floor(g.troops * BALANCE.RETREAT_KEEP_RATE);
       } else {
         g.status = 'inactive';
         g.troops = 0;

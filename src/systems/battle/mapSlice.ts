@@ -1,6 +1,7 @@
 import type { BattleTerrain, BattlefieldFeature } from '../../core/state';
 import { cityAnchors, tileKindAt } from '../../render/terrainGrid';
-import { BATTLE_H, BATTLE_W, KIND_TO_TERRAIN } from './grid';
+import { KIND_TO_TERRAIN } from '../cityGrid';
+import { BATTLE_H, BATTLE_W } from './grid';
 
 /**
  * 地图裁切战场（L 档 · 战斗合一的第一层）。

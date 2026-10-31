@@ -16,7 +16,7 @@
 export * from './grid';
 export * from './battlefield';
 export * from './mapSlice';
-export * from './damage';
+
 export * from './combat';
 export * from './tactics';
 export * from './ai';

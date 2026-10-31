@@ -145,39 +145,46 @@ describe('大地图野战 · 开战', () => {
     expect(createFieldBattle(s, near.id, garrison.id).result.message).toContain('驻守');
   });
 
-  it('ATTACK_ARMY 只能由玩家发起，成功后进入野战', () => {
+  it('ATTACK_ARMY 在地图上即时交锋，不生成战棋会话', () => {
     const s = fresh();
-    const { attacker, defender } = encounter(s);
-    // 已有一场战斗时不能重复开战
-    expect(
-      reduce(s, {
-        t: 'ATTACK_ARMY',
-        attackerArmyId: attacker.id,
-        defenderArmyId: defender.id,
-      }).result.ok,
-    ).toBe(false);
-
-    const map = fresh();
-    const a = putArmy(map, {
+    const a = putArmy(s, {
       id: 'a',
       factionId: 'liubei',
       generalId: 'liubei',
       at: LAND[0],
     });
-    const b = putArmy(map, {
+    const b = putArmy(s, {
       id: 'b',
       factionId: 'caocao',
       generalId: 'caocao',
       at: LAND[1],
     });
-    const r = reduce(map, {
+    const r = reduce(s, {
       t: 'ATTACK_ARMY',
       attackerArmyId: a.id,
       defenderArmyId: b.id,
     });
+
     expect(r.result.ok).toBe(true);
-    expect(r.state.phase).toBe('battle');
-    expect(r.state.battle?.kind).toBe('field');
+    expect(r.state.phase).toBe('map');
+    expect(r.state.battle).toBeUndefined();
+    expect(r.state.armies?.map((x) => x.id).sort()).toEqual([a.id, b.id].sort());
+
+    // 双方各打一记，互有伤亡；攻势记入本旬行动权
+    const attacker = r.state.armies!.find((x) => x.id === a.id)!;
+    const defender = r.state.armies!.find((x) => x.id === b.id)!;
+    expect(attacker.troops).toBeLessThan(2000);
+    expect(defender.troops).toBeLessThan(2000);
+    expect(attacker.actedXun).toBe(r.state.xunTurn);
+
+    // 同一旬再下令被行动权挡住
+    const again = reduce(r.state, {
+      t: 'ATTACK_ARMY',
+      attackerArmyId: a.id,
+      defenderArmyId: b.id,
+    });
+    expect(again.result.ok).toBe(false);
+    expect(again.result.message).toContain('本旬');
   });
 });
 
@@ -252,7 +259,7 @@ describe('大地图野战 · 结算', () => {
     expect(reserve.troops).toBe(0);
   });
 
-  it('AI 相邻玩家时自动进入野战并暂停大地图', () => {
+  it('AI 相邻玩家时在地图上即时开打，不暂停大地图', () => {
     const s = fresh(9);
     const player = putArmy(s, {
       id: 'player-column',
@@ -269,18 +276,17 @@ describe('大地图野战 · 结算', () => {
 
     const r = playArmyTurn(s);
 
-    expect(r.battleStarted).toBe(true);
-    expect(s.phase).toBe('battle');
-    expect(s.battle?.kind).toBe('field');
-    expect(s.battle?.playerSide).toBe('defender');
-    expect(s.battle?.attackerFactionId).toBe('caocao');
-    expect(s.battle?.field?.attackerArmyId).toBe(ai.id);
-    expect(s.battle?.field?.defenderArmyId).toBe(player.id);
+    expect(r.battleStarted).toBe(false);
+    expect(s.phase).toBe('map');
+    expect(s.battle).toBeUndefined();
     expect(s.armies?.some((a) => a.id === player.id)).toBe(true);
     expect(s.armies?.some((a) => a.id === ai.id)).toBe(true);
+    // 双方各打一记，谁都没溃散时对峙到下一条旬令
+    expect(s.generals.liubei!.troops).toBeLessThan(2000);
+    expect(s.generals.caocao!.troops).toBeLessThan(2000);
   });
 
-  it('AI 互殴不弹战棋：战力高的一方留在图上，败方被移除', () => {
+  it('AI 互殴不弹战棋：兵少的一方被打崩并移出地图', () => {
     const s = fresh(11);
     const strong = putArmy(s, {
       id: 'ai-strong',
@@ -294,7 +300,7 @@ describe('大地图野战 · 结算', () => {
       factionId: 'sunquan',
       generalId: 'sunquan',
       at: LAND[1],
-      troops: 600,
+      troops: 300,
     });
 
     const r = playArmyTurn(s);
@@ -304,11 +310,13 @@ describe('大地图野战 · 结算', () => {
     expect(s.battle).toBeUndefined();
     expect(s.armies?.some((a) => a.id === strong.id)).toBe(true);
     expect(s.armies?.some((a) => a.id === weak.id)).toBe(false);
-    expect(s.generals.sunquan!.status).toBe('active');
-    expect(s.cities[s.generals.sunquan!.locationId!]?.ownerId).toBe('sunquan');
+    const general = s.generals.sunquan!;
+    expect(general.armyId).toBeUndefined();
+    // 残部归零即主将被俘；不入城、不复活
+    expect(general.status).toBe('captured');
   });
 
-  it('玩家作为守方在野战中撤退：按战败结算，但不改城池归属', () => {
+  it('玩家作为守方遇袭：即时结算，不切屏且城池归属不变', () => {
     const s = fresh(12);
     const owners = Object.fromEntries(
       Object.values(s.cities).map((city) => [city.id, city.ownerId]),
@@ -327,20 +335,18 @@ describe('大地图野战 · 结算', () => {
       at: LAND[1],
       troops: 2200,
     });
-    expect(playArmyTurn(s).battleStarted).toBe(true);
-    expect(s.battle?.playerSide).toBe('defender');
+    const r = playArmyTurn(s);
 
-    const r = reduce(s, { t: 'BATTLE_RETREAT' });
-
-    expect(r.result.ok).toBe(true);
-    expect(r.result.message).toContain('脱离战场');
-    expect(r.state.phase).toBe('map');
-    expect(r.state.armies?.some((a) => a.id === player.id)).toBe(false);
-    expect(r.state.armies?.some((a) => a.id === ai.id)).toBe(true);
-    for (const city of Object.values(r.state.cities)) {
+    expect(r.battleStarted).toBe(false);
+    expect(s.phase).toBe('map');
+    expect(s.battle).toBeUndefined();
+    expect(s.armies?.some((a) => a.id === player.id)).toBe(true);
+    expect(s.armies?.some((a) => a.id === ai.id)).toBe(true);
+    expect(s.generals.liubei!.troops).toBeLessThan(1800);
+    expect(s.generals.caocao!.troops).toBeLessThan(2200);
+    for (const city of Object.values(s.cities)) {
       expect(city.ownerId).toBe(owners[city.id]);
     }
-    expect(r.state.report?.title).toBe('遭遇战失利');
   });
 });
 

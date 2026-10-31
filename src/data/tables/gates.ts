@@ -314,6 +314,7 @@ export const GATES: GateFeature[] = [
     garrison: 1200,
     waterBattle: true,
     pairId: 'yanjin',
+    anchor: [115.15, 35.1998],
     note: '黄河渡口，陈留—濮阳；关羽斩颜良解白马之围',
   },
   {
@@ -330,6 +331,7 @@ export const GATES: GateFeature[] = [
     garrison: 1200,
     waterBattle: true,
     pairId: 'baimajin',
+    anchor: [114.95, 35.76],
     note: '黄河渡口，邺城—陈留；文丑殒命之处',
   },
   {
@@ -404,6 +406,7 @@ export const GATES: GateFeature[] = [
     garrison: 1800,
     waterBattle: true,
     pairId: 'wulin',
+    anchor: [113.2452, 30.4497],
     note: '长江中游南岸，江陵—江夏；周瑜火攻破曹之处',
   },
   {
@@ -521,6 +524,7 @@ export const GATES: GateFeature[] = [
     garrison: 1300,
     waterBattle: true,
     pairId: 'jingkou',
+    anchor: [119.1001, 32.2249],
     note: '广陵—建业之间的长江渡口，北岸要津',
   },
   {
@@ -553,6 +557,7 @@ export const GATES: GateFeature[] = [
     food: 60,
     garrison: 900,
     waterBattle: true,
+    anchor: [110.8151, 30.8698],
     note: '三峡出口，白帝城下；刘备托孤之地',
   },
   {

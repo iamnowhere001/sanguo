@@ -4,7 +4,7 @@ import { reduce } from '../src/core/reducer';
 import { GENERAL_TABLE } from '../src/data/tables/generals';
 import { GENERAL_SKILLS, generalSkillOf, skillDomesticMult, skillSiegeMult } from '../src/data/tables/generalTraits';
 import { SIEGE_WEAPONS } from '../src/data/tables/siegeWeapons';
-import { computeDamageValue } from '../src/systems/battle/damage';
+import { computeDamageValue } from '../src/systems/combat/damage';
 import { reachableTargets, sortieArmy } from '../src/systems/army';
 import { domesticGain } from '../src/systems/domestic';
 import type { City, GameState, General } from '../src/core/state';

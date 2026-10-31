@@ -17,6 +17,8 @@ export type ProjectKind = 'farm' | 'market' | 'wall' | 'barracks';
 export type GamePhase = 'map' | 'battle' | 'gameover';
 export type Difficulty = 'easy' | 'normal' | 'hard';
 export type BattleSide = 'attacker' | 'defender';
+/** 城池的四个门向（城墙 3×3 的四边中点） */
+export type GateSide = 'n' | 'e' | 's' | 'w';
 /** 战斗类型：攻城战 / 野外遭遇战（含江面水战） */
 export type BattleKind = 'city' | 'field';
 export type BattleStatus = 'ongoing' | 'victory' | 'defeat' | 'retreat';
@@ -71,6 +73,14 @@ export type GeneralSkillId =
 
 /** 随军攻城器械（三11 兵器） */
 export type SiegeWeaponId = 'ram' | 'tower' | 'catapult' | 'beast';
+
+/**
+ * 攻城动作打击的三类目标（三11 把「城」本身当作可攻击对象）。
+ * - `gate`：某座城门——对耐久倍率最高，冲车还会消耗该门的独立耐久；
+ * - `wall`：非门格的城墙——投石这类远射程器械在安全距离放血；
+ * - `garrison`：城内守军——井阑 / 投石 / 木兽才碰得到，打兵力与气力。
+ */
+export type SiegeTargetKind = 'gate' | 'wall' | 'garrison';
 
 export interface General {
   id: string;
@@ -226,6 +236,11 @@ export interface City {
    * 旧档缺失时按 `cityMaxDurability` 补齐。
    */
   durability?: number;
+  /**
+   * 城门耐久（三11：门是门、墙是墙）。
+   * 只有冲车消耗它，某门归零 = 破门，该门对攻方开放；缺省 = 满耐久，城破 / 月结修复。
+   */
+  gateHp?: Partial<Record<GateSide, number>>;
   /**
    * 未分配的驻军兵力池。
    * 兵力不再必须挂在将领身上：征兵先补将、溢出进池，池兵可跨城运输、
@@ -388,8 +403,27 @@ export interface Army {
    * 攻关时作为真实守军参战。撤回时清除。
    */
   garrisonGateId?: string;
-  /** 建队时的兵力快照，供地图标记展示 */
+  /**
+   * 本旬已下令的旬号（`xunTurn`）。合一后没有 `phase === 'battle'` 这道全局锁了，
+   * 「一旬一支部队只能做一个动作」全靠它挡：`actedXun === s.xunTurn` 即拒绝再动。
+   */
+  actedXun?: number;
+  /**
+   * 城守军标记。只有 `garrisonArmyOf` 派生的镜像部队会带 `role:'garrison'`，
+   * 它与 `garrisonCityId` 一起表示「这支实体守军驻在哪座城」，不入 `s.armies`。
+   */
+  role?: 'field' | 'garrison';
+  /** 城守军驻守的城；`role === 'garrison'` 时必填 */
+  garrisonCityId?: string;
+  /** 本旬自动下令：玩家可把一支部队托管给 AI，旬结时自己行军 / 攻击 / 攻城 */
+  autoOrder?: boolean;
+  /** 当前兵力：面板展示与寻路权重读这里，战后由 `syncArmyTroops` 回写 */
   troops: number;
+  /**
+   * 出征时的满编兵力：野战溃散阈值（15%）的分母。
+   * 旧部队缺省，由 `strikeArmy` 在首次接战时按当时兵力补记。
+   */
+  maxTroops?: number;
   /**
    * 出征编队：主将 id → 副将 id 列表（最多 `BALANCE.SQUAD_DEPUTIES_MAX` 名）。
    * 缺省时每位武将各自成队（旧行为）；见 `systems/squads.ts`。
@@ -976,14 +1010,26 @@ export function citiesOf(state: GameState, factionId: string): City[] {
   return Object.values(state.cities).filter((c) => c.ownerId === factionId);
 }
 
+/**
+ * 守军谓词——全项目唯一口径。
+ *
+ * 「驻守该城的武将」= 在册 + 人在此城 + 没有随野战部队在途。
+ * 兵数、是否君主、体力等附加条件由调用方自己叠，但**这三条不许再手抄**：
+ * 历史上漏掉 `!g.armyId` 的地方会把在途部队算进城内驻军，出征与配兵因此打架。
+ */
+export function isCityDefender(g: General, cityId: string): boolean {
+  return g.status === 'active' && g.locationId === cityId && !g.armyId;
+}
+
+/** 部队兵种：主将兵种即部队兵种（三11 同制）；旧档缺省按步兵 */
+export function armyClassOf(army: Army): UnitClass {
+  return army.unitClass ?? 'infantry';
+}
+
 /** 城内可出战武将：active、驻守该城且仍有兵力。 */
 export function defendersOf(state: GameState, cityId: string): General[] {
   return Object.values(state.generals).filter(
-    (g) =>
-      g.status === 'active' &&
-      g.locationId === cityId &&
-      !g.armyId &&
-      g.troops > 0,
+    (g) => isCityDefender(g, cityId) && g.troops > 0,
   );
 }
 
@@ -997,7 +1043,7 @@ export function garrisonTroopsOf(state: GameState, cityId: string): number {
   if (!city) return 0;
   let total = city.troops ?? 0;
   for (const g of Object.values(state.generals)) {
-    if (g.status === 'active' && g.locationId === cityId && !g.armyId) total += g.troops;
+    if (isCityDefender(g, cityId)) total += g.troops;
   }
   return total;
 }

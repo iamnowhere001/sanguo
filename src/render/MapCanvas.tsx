@@ -8,7 +8,7 @@ import type {
   GridPoint,
   UnitClass,
 } from '../core/state';
-import { cityTroops } from '../core/selectors';
+import { cityGenerals, cityTroops } from '../core/selectors';
 import { CITY_SIZE_LABEL, fortificationLabel } from '../data/tables/cities';
 import { MAP } from '../data/tables/geography';
 import { GATE_KIND_LABEL } from '../data/tables/gates';
@@ -2166,6 +2166,22 @@ export function MapCanvas({
         ctx.textBaseline = 'middle';
         ctx.fillText(label, cur.x + r * 0.7 + 6.5, cur.y - r * 1.9 + 7);
       }
+
+      // 托管：旬结会自动行军 / 接战，玩家随时可以点选收回指挥权
+      if (army.autoOrder && army.factionId === state.playerFactionId) {
+        ctx.font = '700 9px "PingFang SC", "Noto Sans SC", sans-serif';
+        ctx.beginPath();
+        ctx.roundRect(cur.x - r * 0.7 - 13, cur.y - r * 1.9, 13, 13, 2);
+        ctx.fillStyle = 'rgba(70,110,72,0.94)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(232,246,220,0.8)';
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+        ctx.fillStyle = '#f6ecd4';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('托', cur.x - r * 0.7 - 6.5, cur.y - r * 1.9 + 7);
+      }
     }
     }
     armyHitsRef.current = armyHits;
@@ -2282,9 +2298,7 @@ export function MapCanvas({
     const hoverPoint = hover && !selectedArmyId && !battle ? pts.find((p) => p.city.id === hover) : null;
     if (hoverPoint) {
       const c = hoverPoint.city;
-      const gens = Object.values(state.generals)
-        .filter((g) => g.status === 'active' && g.locationId === c.id && !g.armyId)
-        .sort((a, b) => b.troops - a.troops);
+      const gens = cityGenerals(state, c.id).sort((a, b) => b.troops - a.troops);
       const governor = gens[0];
       const hasSkill = Boolean(c.skill);
       const gateInfos = gatesOf(state, c.id);

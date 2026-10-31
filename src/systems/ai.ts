@@ -6,12 +6,13 @@ import {
   factionFood,
   factionTroops,
   generalsOf,
+  isCityDefender,
   neighborsOf,
 } from '../core/state';
 import { cityTroops } from '../core/selectors';
 import { garrisonCapOf, monthlyFoodUpkeep, recruitCap } from './formulas';
 import { doDomestic, doRecruit, troopCapOf } from './domestic';
-import { autoResolveBattle, createBattle } from './battle';
+import { autoResolveBattle } from './battle';
 import {
   planAttackCandidates,
   planMassingMove,
@@ -75,9 +76,7 @@ function aiRecruitCity(
   city: City,
   difficulty: DifficultyConfig,
 ): void {
-  const gens = Object.values(state.generals).filter(
-    (g) => g.status === 'active' && g.locationId === city.id && !g.armyId,
-  );
+  const gens = Object.values(state.generals).filter((g) => isCityDefender(g, city.id));
   if (gens.length === 0) return;
 
   const targets = gens
@@ -183,14 +182,9 @@ export function runAiFaction(state: GameState, factionId: string): 'battle' | 'd
   // ② 内政：每城一次，留出 reserve
   for (const city of cities) {
     const agent = Object.values(state.generals).find(
-      (g) =>
-        g.status === 'active' &&
-        g.locationId === city.id &&
-        !g.armyId &&
-        g.stamina >= 20 &&
-        !g.isRuler,
+      (g) => isCityDefender(g, city.id) && g.stamina >= 20 && !g.isRuler,
     ) ?? Object.values(state.generals).find(
-      (g) => g.status === 'active' && g.locationId === city.id && !g.armyId && g.stamina >= 20,
+      (g) => isCityDefender(g, city.id) && g.stamina >= 20,
     );
     if (!agent) continue;
     if (city.gold < BALANCE.AI.developGoldReserve + BALANCE.DOMESTIC.reclaim.gold) continue;
@@ -293,16 +287,15 @@ export function runAiFaction(state: GameState, factionId: string): 'battle' | 'd
         tagAiLogs(state, startLog);
         continue;
       }
-      // 兜底：出不了城（四门被堵）或没有路线时，仍按旧流程直接开战
-      log(state, 'warn', `${attackerName} 自 ${from.name} 出兵 ${target.name}`, 'ai');
-      const { result } = createBattle(
+      // 兜底：出不了城（四门被堵）或没有路线时，本月放弃这路攻势——
+      // 全地图模式不再凭空生成战棋会话，玩家必须看得见威胁才谈得上截击
+      log(
         state,
-        plan.fromId,
-        plan.targetId,
-        plan.generalIds,
-        factionId,
+        'warn',
+        `${attackerName} 自 ${from.name} 出兵 ${target.name} 受阻：${march.message}`,
+        'ai',
       );
-      if (result.ok && state.battle) return 'battle';
+      tagAiLogs(state, startLog);
       break;
     }
 

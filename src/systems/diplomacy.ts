@@ -1,6 +1,6 @@
 import { BALANCE } from '../data/tables/balance';
 import type { City, GameState, General } from '../core/state';
-import { defendersOf, effIntellect, neighborsOf, syncFactionCities } from '../core/state';
+import { defendersOf, effIntellect, isCityDefender, neighborsOf, syncFactionCities } from '../core/state';
 import { chance, draw } from '../core/rng';
 import { fail, type OpResult } from '../core/result';
 import { clamp } from './formulas';
@@ -53,9 +53,7 @@ export function poachRate(state: GameState, agent: General, target: General): nu
 }
 
 export function governorOf(state: GameState, cityId: string): General | null {
-  const gens = Object.values(state.generals).filter(
-    (g) => g.status === 'active' && g.locationId === cityId && !g.armyId,
-  );
+  const gens = Object.values(state.generals).filter((g) => isCityDefender(g, cityId));
   if (gens.length === 0) return null;
   return (
     gens.find((g) => g.isRuler) ??
@@ -196,9 +194,7 @@ export function diplomacyTargets(state: GameState, cityId: string): General[] {
     .filter((c): c is NonNullable<typeof c> => Boolean(c))
     .filter((c) => c.ownerId !== state.playerFactionId && c.ownerId !== null)
     .flatMap((c) =>
-      Object.values(state.generals).filter(
-        (g) => g.status === 'active' && g.locationId === c.id,
-      ),
+      Object.values(state.generals).filter((g) => isCityDefender(g, c.id)),
     );
 }
 
@@ -249,13 +245,8 @@ export function persuadePlan(state: GameState, cityId: string): PersuadePlan | n
     if (!fromCity || fromCity.ownerId !== state.playerFactionId) continue;
     if (fromCity.gold < BALANCE.DIPLOMACY.gold) continue;
     for (const agent of Object.values(state.generals)) {
-      if (
-        agent.status !== 'active' ||
-        agent.locationId !== neighborId ||
-        agent.stamina < BALANCE.DIPLOMACY.stamina
-      ) {
-        continue;
-      }
+      if (!isCityDefender(agent, neighborId)) continue;
+      if (agent.stamina < BALANCE.DIPLOMACY.stamina) continue;
       plans.push({ agent, fromCity, rate: persuadeRate(state, city, agent) });
     }
   }

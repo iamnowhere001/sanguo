@@ -1,0 +1,4349 @@
+{
+  "meta": {
+    "schema": "sanguo.map-config",
+    "version": 1,
+    "title": "三国霸业 · 大地图配置",
+    "cols": 576,
+    "rows": 360,
+    "tile": 12,
+    "lonRange": [
+      99,
+      124.5
+    ],
+    "latRange": [
+      24.1667,
+      42.5
+    ],
+    "updatedAt": "2026-10-31T14:15:35.560Z"
+  },
+  "coastline": [
+    {
+      "x": 6884.9,
+      "y": 565.5
+    },
+    {
+      "x": 6668,
+      "y": 636.2
+    },
+    {
+      "x": 6288.6,
+      "y": 683.3
+    },
+    {
+      "x": 6125.9,
+      "y": 824.7
+    },
+    {
+      "x": 5990.4,
+      "y": 871.9
+    },
+    {
+      "x": 6207.2,
+      "y": 589.1
+    },
+    {
+      "x": 5963.3,
+      "y": 400.6
+    },
+    {
+      "x": 5692.2,
+      "y": 518.4
+    },
+    {
+      "x": 5556.7,
+      "y": 612.7
+    },
+    {
+      "x": 5285.6,
+      "y": 777.6
+    },
+    {
+      "x": 5095.9,
+      "y": 824.7
+    },
+    {
+      "x": 5041.7,
+      "y": 942.5
+    },
+    {
+      "x": 5204.3,
+      "y": 1013.2
+    },
+    {
+      "x": 5394.1,
+      "y": 1083.9
+    },
+    {
+      "x": 5583.8,
+      "y": 1201.7
+    },
+    {
+      "x": 5773.6,
+      "y": 1154.6
+    },
+    {
+      "x": 5963.3,
+      "y": 1107.5
+    },
+    {
+      "x": 6125.9,
+      "y": 1178.2
+    },
+    {
+      "x": 6261.5,
+      "y": 1178.2
+    },
+    {
+      "x": 6342.8,
+      "y": 1248.9
+    },
+    {
+      "x": 6180.1,
+      "y": 1319.6
+    },
+    {
+      "x": 5936.2,
+      "y": 1390.3
+    },
+    {
+      "x": 5800.7,
+      "y": 1508.1
+    },
+    {
+      "x": 5665.1,
+      "y": 1625.9
+    },
+    {
+      "x": 5475.4,
+      "y": 1814.4
+    },
+    {
+      "x": 5746.4,
+      "y": 2002.9
+    },
+    {
+      "x": 5936.2,
+      "y": 2191.4
+    },
+    {
+      "x": 6071.7,
+      "y": 2379.9
+    },
+    {
+      "x": 6180.1,
+      "y": 2544.9
+    },
+    {
+      "x": 6098.8,
+      "y": 2662.7
+    },
+    {
+      "x": 5936.2,
+      "y": 2804.1
+    },
+    {
+      "x": 6125.9,
+      "y": 2874.8
+    },
+    {
+      "x": 6207.2,
+      "y": 3039.7
+    },
+    {
+      "x": 6125.9,
+      "y": 3228.2
+    },
+    {
+      "x": 5936.2,
+      "y": 3440.3
+    },
+    {
+      "x": 5692.2,
+      "y": 3723.1
+    },
+    {
+      "x": 5583.8,
+      "y": 3888
+    },
+    {
+      "x": 5394.1,
+      "y": 4029.4
+    },
+    {
+      "x": 5177.2,
+      "y": 4241.5
+    },
+    {
+      "x": 5061.1,
+      "y": 4320
+    },
+    {
+      "x": 0,
+      "y": 4320
+    },
+    {
+      "x": 0,
+      "y": 0
+    },
+    {
+      "x": 6912,
+      "y": 0
+    }
+  ],
+  "cities": [
+    {
+      "id": "jiangxia",
+      "name": "江夏",
+      "x": 4147.2,
+      "y": 2815.9,
+      "size": "medium",
+      "terrain": "plain",
+      "ownerId": "liubei",
+      "isWaterCity": true,
+      "fortification": 58,
+      "note": ""
+    },
+    {
+      "id": "xinye",
+      "name": "新野",
+      "x": 3578,
+      "y": 2250.3,
+      "size": "small",
+      "terrain": "plain",
+      "ownerId": "liubei",
+      "isWaterCity": false,
+      "fortification": 42,
+      "note": ""
+    },
+    {
+      "id": "xuchang",
+      "name": "许昌",
+      "x": 4025.2,
+      "y": 1995.8,
+      "size": "capital",
+      "terrain": "plain",
+      "ownerId": "caocao",
+      "isWaterCity": false,
+      "fortification": 80,
+      "note": ""
+    },
+    {
+      "id": "luoyang",
+      "name": "洛阳",
+      "x": 3645.7,
+      "y": 1856.8,
+      "size": "capital",
+      "terrain": "plain",
+      "ownerId": "caocao",
+      "isWaterCity": false,
+      "fortification": 90,
+      "note": ""
+    },
+    {
+      "id": "changan",
+      "name": "长安",
+      "x": 2694.3,
+      "y": 1922.8,
+      "size": "capital",
+      "terrain": "plain",
+      "ownerId": "caocao",
+      "isWaterCity": false,
+      "fortification": 92,
+      "note": ""
+    },
+    {
+      "id": "chenliu",
+      "name": "陈留",
+      "x": 4323.4,
+      "y": 1790.8,
+      "size": "medium",
+      "terrain": "plain",
+      "ownerId": "caocao",
+      "isWaterCity": false,
+      "fortification": 55,
+      "note": ""
+    },
+    {
+      "id": "puyang",
+      "name": "濮阳",
+      "x": 4431.8,
+      "y": 1649.5,
+      "size": "medium",
+      "terrain": "plain",
+      "ownerId": "caocao",
+      "isWaterCity": false,
+      "fortification": 50,
+      "note": ""
+    },
+    {
+      "id": "ye",
+      "name": "邺",
+      "x": 4323.4,
+      "y": 1385.5,
+      "size": "large",
+      "terrain": "plain",
+      "ownerId": "caocao",
+      "isWaterCity": false,
+      "fortification": 76,
+      "note": ""
+    },
+    {
+      "id": "runan",
+      "name": "汝南",
+      "x": 4166.2,
+      "y": 2238.5,
+      "size": "medium",
+      "terrain": "plain",
+      "ownerId": "caocao",
+      "isWaterCity": false,
+      "fortification": 52,
+      "note": ""
+    },
+    {
+      "id": "wan",
+      "name": "宛",
+      "x": 3821.9,
+      "y": 2226.8,
+      "size": "large",
+      "terrain": "plain",
+      "ownerId": "caocao",
+      "isWaterCity": false,
+      "fortification": 70,
+      "note": ""
+    },
+    {
+      "id": "xiaopei",
+      "name": "小沛",
+      "x": 4675.8,
+      "y": 1755.5,
+      "size": "small",
+      "terrain": "plain",
+      "ownerId": "caocao",
+      "isWaterCity": false,
+      "fortification": 44,
+      "note": ""
+    },
+    {
+      "id": "xiapi",
+      "name": "下邳",
+      "x": 5258.5,
+      "y": 1873.3,
+      "size": "large",
+      "terrain": "plain",
+      "ownerId": "caocao",
+      "isWaterCity": false,
+      "fortification": 62,
+      "note": ""
+    },
+    {
+      "id": "pengcheng",
+      "name": "彭城",
+      "x": 4927.8,
+      "y": 1941.6,
+      "size": "medium",
+      "terrain": "plain",
+      "ownerId": "caocao",
+      "isWaterCity": false,
+      "fortification": 52,
+      "note": ""
+    },
+    {
+      "id": "beihai",
+      "name": "北海",
+      "x": 5448.3,
+      "y": 1366.7,
+      "size": "medium",
+      "terrain": "plain",
+      "ownerId": "caocao",
+      "isWaterCity": true,
+      "fortification": 50,
+      "note": ""
+    },
+    {
+      "id": "jinyang",
+      "name": "晋阳",
+      "x": 3672.8,
+      "y": 1091,
+      "size": "medium",
+      "terrain": "mountain",
+      "ownerId": "caocao",
+      "isWaterCity": false,
+      "fortification": 80,
+      "note": ""
+    },
+    {
+      "id": "zhuo",
+      "name": "涿郡",
+      "x": 4599.9,
+      "y": 709.3,
+      "size": "small",
+      "terrain": "plain",
+      "ownerId": "caocao",
+      "isWaterCity": false,
+      "fortification": 45,
+      "note": ""
+    },
+    {
+      "id": "ji",
+      "name": "蓟",
+      "x": 4852,
+      "y": 560.8,
+      "size": "medium",
+      "terrain": "plain",
+      "ownerId": "caocao",
+      "isWaterCity": false,
+      "fortification": 65,
+      "note": ""
+    },
+    {
+      "id": "beiping",
+      "name": "北平",
+      "x": 5407.6,
+      "y": 600.9,
+      "size": "medium",
+      "terrain": "plain",
+      "ownerId": "caocao",
+      "isWaterCity": false,
+      "fortification": 62,
+      "note": ""
+    },
+    {
+      "id": "nanpi",
+      "name": "南皮",
+      "x": 4797.7,
+      "y": 1053.3,
+      "size": "medium",
+      "terrain": "plain",
+      "ownerId": "caocao",
+      "isWaterCity": false,
+      "fortification": 55,
+      "note": ""
+    },
+    {
+      "id": "pingyuan",
+      "name": "平原",
+      "x": 4724.6,
+      "y": 1255.9,
+      "size": "small",
+      "terrain": "plain",
+      "ownerId": "caocao",
+      "isWaterCity": false,
+      "fortification": 48,
+      "note": ""
+    },
+    {
+      "id": "shangdang",
+      "name": "上党",
+      "x": 3821.9,
+      "y": 1484.5,
+      "size": "small",
+      "terrain": "mountain",
+      "ownerId": "caocao",
+      "isWaterCity": false,
+      "fortification": 76,
+      "note": ""
+    },
+    {
+      "id": "linzi",
+      "name": "临淄",
+      "x": 5231.4,
+      "y": 1336.1,
+      "size": "large",
+      "terrain": "plain",
+      "ownerId": "caocao",
+      "isWaterCity": false,
+      "fortification": 60,
+      "note": ""
+    },
+    {
+      "id": "langya",
+      "name": "琅琊",
+      "x": 5245,
+      "y": 1755.5,
+      "size": "medium",
+      "terrain": "plain",
+      "ownerId": "caocao",
+      "isWaterCity": false,
+      "fortification": 52,
+      "note": ""
+    },
+    {
+      "id": "guangling",
+      "name": "广陵",
+      "x": 5535,
+      "y": 2382.3,
+      "size": "medium",
+      "terrain": "plain",
+      "ownerId": "caocao",
+      "isWaterCity": true,
+      "fortification": 55,
+      "note": ""
+    },
+    {
+      "id": "shouchun",
+      "name": "寿春",
+      "x": 4819.4,
+      "y": 2337.5,
+      "size": "large",
+      "terrain": "plain",
+      "ownerId": "caocao",
+      "isWaterCity": true,
+      "fortification": 74,
+      "note": ""
+    },
+    {
+      "id": "hefei",
+      "name": "合肥",
+      "x": 4955,
+      "y": 2507.2,
+      "size": "medium",
+      "terrain": "plain",
+      "ownerId": "caocao",
+      "isWaterCity": false,
+      "fortification": 78,
+      "note": ""
+    },
+    {
+      "id": "hongnong",
+      "name": "弘农",
+      "x": 3222.9,
+      "y": 1880.4,
+      "size": "small",
+      "terrain": "mountain",
+      "ownerId": "caocao",
+      "isWaterCity": false,
+      "fortification": 86,
+      "note": ""
+    },
+    {
+      "id": "jianye",
+      "name": "建业",
+      "x": 5361.5,
+      "y": 2460,
+      "size": "capital",
+      "terrain": "plain",
+      "ownerId": "sunquan",
+      "isWaterCity": true,
+      "fortification": 72,
+      "note": ""
+    },
+    {
+      "id": "wu",
+      "name": "吴",
+      "x": 5860.3,
+      "y": 2639.1,
+      "size": "large",
+      "terrain": "plain",
+      "ownerId": "sunquan",
+      "isWaterCity": true,
+      "fortification": 58,
+      "note": ""
+    },
+    {
+      "id": "kuaiji",
+      "name": "会稽",
+      "x": 5849.4,
+      "y": 2945.5,
+      "size": "large",
+      "terrain": "plain",
+      "ownerId": "sunquan",
+      "isWaterCity": true,
+      "fortification": 55,
+      "note": ""
+    },
+    {
+      "id": "chaisang",
+      "name": "柴桑",
+      "x": 4605.3,
+      "y": 3013.8,
+      "size": "medium",
+      "terrain": "plain",
+      "ownerId": "sunquan",
+      "isWaterCity": true,
+      "fortification": 60,
+      "note": ""
+    },
+    {
+      "id": "lujiang",
+      "name": "庐江",
+      "x": 4892.6,
+      "y": 2686.3,
+      "size": "small",
+      "terrain": "plain",
+      "ownerId": "sunquan",
+      "isWaterCity": true,
+      "fortification": 55,
+      "note": ""
+    },
+    {
+      "id": "danyang",
+      "name": "丹阳",
+      "x": 5356.1,
+      "y": 2724,
+      "size": "medium",
+      "terrain": "plain",
+      "ownerId": "sunquan",
+      "isWaterCity": false,
+      "fortification": 58,
+      "note": ""
+    },
+    {
+      "id": "yuzhang",
+      "name": "豫章",
+      "x": 4578.2,
+      "y": 3256.5,
+      "size": "medium",
+      "terrain": "plain",
+      "ownerId": "sunquan",
+      "isWaterCity": true,
+      "fortification": 55,
+      "note": ""
+    },
+    {
+      "id": "poyang",
+      "name": "鄱阳",
+      "x": 4797.7,
+      "y": 3181.1,
+      "size": "small",
+      "terrain": "plain",
+      "ownerId": "sunquan",
+      "isWaterCity": true,
+      "fortification": 52,
+      "note": ""
+    },
+    {
+      "id": "xiangyang",
+      "name": "襄阳",
+      "x": 3561.7,
+      "y": 2464.8,
+      "size": "large",
+      "terrain": "plain",
+      "ownerId": "liubiao",
+      "isWaterCity": true,
+      "fortification": 84,
+      "note": ""
+    },
+    {
+      "id": "jiangling",
+      "name": "江陵",
+      "x": 3575.3,
+      "y": 2863,
+      "size": "large",
+      "terrain": "plain",
+      "ownerId": "liubiao",
+      "isWaterCity": true,
+      "fortification": 72,
+      "note": ""
+    },
+    {
+      "id": "changsha",
+      "name": "长沙",
+      "x": 3789.4,
+      "y": 3372,
+      "size": "large",
+      "terrain": "plain",
+      "ownerId": "liubiao",
+      "isWaterCity": false,
+      "fortification": 60,
+      "note": ""
+    },
+    {
+      "id": "wuling",
+      "name": "武陵",
+      "x": 3442.4,
+      "y": 3174,
+      "size": "small",
+      "terrain": "mountain",
+      "ownerId": "liubiao",
+      "isWaterCity": false,
+      "fortification": 62,
+      "note": ""
+    },
+    {
+      "id": "yiling",
+      "name": "夷陵",
+      "x": 3331.3,
+      "y": 2780.5,
+      "size": "small",
+      "terrain": "mountain",
+      "ownerId": "liubiao",
+      "isWaterCity": false,
+      "fortification": 84,
+      "note": ""
+    },
+    {
+      "id": "gongan",
+      "name": "公安",
+      "x": 3767.7,
+      "y": 2980.8,
+      "size": "small",
+      "terrain": "plain",
+      "ownerId": "liubiao",
+      "isWaterCity": true,
+      "fortification": 58,
+      "note": ""
+    },
+    {
+      "id": "chengdu",
+      "name": "成都",
+      "x": 1374.3,
+      "y": 2789.9,
+      "size": "capital",
+      "terrain": "plain",
+      "ownerId": "liuzhang",
+      "isWaterCity": false,
+      "fortification": 74,
+      "note": ""
+    },
+    {
+      "id": "mianzhu",
+      "name": "绵竹",
+      "x": 1450.2,
+      "y": 2580.2,
+      "size": "small",
+      "terrain": "mountain",
+      "ownerId": "liuzhang",
+      "isWaterCity": false,
+      "fortification": 72,
+      "note": ""
+    },
+    {
+      "id": "zhangtong",
+      "name": "梓潼",
+      "x": 1672.4,
+      "y": 2561.4,
+      "size": "small",
+      "terrain": "mountain",
+      "ownerId": "liuzhang",
+      "isWaterCity": false,
+      "fortification": 78,
+      "note": ""
+    },
+    {
+      "id": "jiangzhou",
+      "name": "江州",
+      "x": 2046.5,
+      "y": 3049.1,
+      "size": "medium",
+      "terrain": "plain",
+      "ownerId": "liuzhang",
+      "isWaterCity": false,
+      "fortification": 55,
+      "note": ""
+    },
+    {
+      "id": "langzhong",
+      "name": "阆中",
+      "x": 1889.3,
+      "y": 2573.2,
+      "size": "medium",
+      "terrain": "mountain",
+      "ownerId": "liuzhang",
+      "isWaterCity": false,
+      "fortification": 70,
+      "note": ""
+    },
+    {
+      "id": "badong",
+      "name": "巴东",
+      "x": 3073.8,
+      "y": 2700.4,
+      "size": "small",
+      "terrain": "mountain",
+      "ownerId": "liuzhang",
+      "isWaterCity": false,
+      "fortification": 66,
+      "note": ""
+    },
+    {
+      "id": "jianning",
+      "name": "建宁",
+      "x": 1301.1,
+      "y": 4008.2,
+      "size": "small",
+      "terrain": "mountain",
+      "ownerId": "liuzhang",
+      "isWaterCity": false,
+      "fortification": 60,
+      "note": ""
+    },
+    {
+      "id": "yunnan",
+      "name": "云南",
+      "x": 422.9,
+      "y": 4012.9,
+      "size": "small",
+      "terrain": "mountain",
+      "ownerId": "liuzhang",
+      "isWaterCity": false,
+      "fortification": 58,
+      "note": ""
+    },
+    {
+      "id": "tianshui",
+      "name": "天水",
+      "x": 1821.5,
+      "y": 1866.2,
+      "size": "medium",
+      "terrain": "mountain",
+      "ownerId": "mateng",
+      "isWaterCity": false,
+      "fortification": 72,
+      "note": ""
+    },
+    {
+      "id": "wuwei",
+      "name": "武威",
+      "x": 983.9,
+      "y": 1076.9,
+      "size": "medium",
+      "terrain": "plain",
+      "ownerId": "mateng",
+      "isWaterCity": false,
+      "fortification": 50,
+      "note": ""
+    },
+    {
+      "id": "anding",
+      "name": "安定",
+      "x": 2268.8,
+      "y": 1689.5,
+      "size": "small",
+      "terrain": "mountain",
+      "ownerId": "mateng",
+      "isWaterCity": false,
+      "fortification": 58,
+      "note": ""
+    },
+    {
+      "id": "jincheng",
+      "name": "金城",
+      "x": 1309.2,
+      "y": 1517.5,
+      "size": "small",
+      "terrain": "mountain",
+      "ownerId": "mateng",
+      "isWaterCity": false,
+      "fortification": 64,
+      "note": ""
+    },
+    {
+      "id": "wudu",
+      "name": "武都",
+      "x": 1824.2,
+      "y": 2064.2,
+      "size": "small",
+      "terrain": "mountain",
+      "ownerId": "mateng",
+      "isWaterCity": false,
+      "fortification": 80,
+      "note": ""
+    },
+    {
+      "id": "hanzhong",
+      "name": "汉中",
+      "x": 2173.9,
+      "y": 2222.1,
+      "size": "large",
+      "terrain": "mountain",
+      "ownerId": "zhanglu",
+      "isWaterCity": false,
+      "fortification": 80,
+      "note": ""
+    },
+    {
+      "id": "shangyong",
+      "name": "上庸",
+      "x": 3044,
+      "y": 2420,
+      "size": "small",
+      "terrain": "mountain",
+      "ownerId": "zhanglu",
+      "isWaterCity": false,
+      "fortification": 78,
+      "note": ""
+    },
+    {
+      "id": "guiyang",
+      "name": "桂阳",
+      "x": 3800.2,
+      "y": 3939.8,
+      "size": "small",
+      "terrain": "plain",
+      "ownerId": "hanxuan",
+      "isWaterCity": false,
+      "fortification": 45,
+      "note": ""
+    },
+    {
+      "id": "lingling",
+      "name": "零陵",
+      "x": 3418.1,
+      "y": 3789,
+      "size": "small",
+      "terrain": "plain",
+      "ownerId": "hanxuan",
+      "isWaterCity": false,
+      "fortification": 42,
+      "note": ""
+    },
+    {
+      "id": "xiangping",
+      "name": "襄平",
+      "x": 6551.5,
+      "y": 289.8,
+      "size": "medium",
+      "terrain": "plain",
+      "ownerId": "gongsundu",
+      "isWaterCity": false,
+      "fortification": 55,
+      "note": ""
+    }
+  ],
+  "passes": [
+    {
+      "id": "tongguan",
+      "name": "潼关",
+      "x": 3049.4,
+      "y": 1861.5,
+      "kind": "pass",
+      "tier": 1,
+      "edges": [
+        [
+          "changan",
+          "hongnong"
+        ],
+        [
+          "changan",
+          "luoyang"
+        ]
+      ],
+      "guardCityId": "changan",
+      "extraDays": 3,
+      "fortification": 18,
+      "garrison": 3000,
+      "gold": 44,
+      "food": 120,
+      "note": "关中东大门，扼守长安—洛阳大道；曹操破马超后设防重镇"
+    },
+    {
+      "id": "hangu",
+      "name": "函谷关",
+      "x": 3401.8,
+      "y": 1856.8,
+      "kind": "pass",
+      "tier": 2,
+      "edges": [
+        [
+          "hongnong",
+          "luoyang"
+        ]
+      ],
+      "guardCityId": "hongnong",
+      "extraDays": 2,
+      "fortification": 12,
+      "garrison": 2200,
+      "gold": 32,
+      "food": 80,
+      "note": "崤函之险，弘农东侧；六国合纵叩关处"
+    },
+    {
+      "id": "hulao",
+      "name": "虎牢关",
+      "x": 3835.5,
+      "y": 1856.8,
+      "kind": "pass",
+      "tier": 2,
+      "edges": [
+        [
+          "luoyang",
+          "chenliu"
+        ],
+        [
+          "luoyang",
+          "xuchang"
+        ]
+      ],
+      "guardCityId": "luoyang",
+      "extraDays": 3,
+      "fortification": 16,
+      "garrison": 2800,
+      "gold": 40,
+      "food": 110,
+      "note": "洛阳东门户，中原咽喉；三英战吕布之地"
+    },
+    {
+      "id": "wuguan",
+      "name": "武关",
+      "x": 3252.7,
+      "y": 2068.9,
+      "kind": "pass",
+      "tier": 3,
+      "edges": [
+        [
+          "changan",
+          "wan"
+        ]
+      ],
+      "guardCityId": "changan",
+      "extraDays": 2,
+      "fortification": 8,
+      "garrison": 1500,
+      "gold": 18,
+      "food": 50,
+      "note": "秦岭东南通道，长安—宛城；刘邦入关即由此道"
+    },
+    {
+      "id": "sanguan",
+      "name": "散关",
+      "x": 2168.5,
+      "y": 2002.9,
+      "kind": "pass",
+      "tier": 2,
+      "edges": [
+        [
+          "changan",
+          "hanzhong"
+        ]
+      ],
+      "guardCityId": "changan",
+      "extraDays": 2,
+      "fortification": 11,
+      "garrison": 2100,
+      "gold": 28,
+      "food": 75,
+      "note": "陈仓道南口，“明修栈道、暗度陈仓”的陈仓道门户"
+    },
+    {
+      "id": "huguan",
+      "name": "壶关",
+      "x": 3943.9,
+      "y": 1496.3,
+      "kind": "pass",
+      "tier": 2,
+      "edges": [
+        [
+          "shangdang",
+          "ye"
+        ]
+      ],
+      "guardCityId": "shangdang",
+      "extraDays": 2,
+      "fortification": 10,
+      "garrison": 1900,
+      "gold": 26,
+      "food": 65,
+      "note": "太行山口，上党东出"
+    },
+    {
+      "id": "jingxing",
+      "name": "井陉关",
+      "x": 4065.9,
+      "y": 1083.9,
+      "kind": "pass",
+      "tier": 3,
+      "edges": [
+        [
+          "jinyang",
+          "ye"
+        ]
+      ],
+      "guardCityId": "jinyang",
+      "extraDays": 2,
+      "fortification": 8,
+      "garrison": 1500,
+      "gold": 20,
+      "food": 55,
+      "note": "太行八陉之一，晋阳—邺城；韩信背水一战之地"
+    },
+    {
+      "id": "xiaoguan",
+      "name": "萧关",
+      "x": 2480.2,
+      "y": 1786.1,
+      "kind": "pass",
+      "tier": 2,
+      "edges": [
+        [
+          "anding",
+          "changan"
+        ]
+      ],
+      "guardCityId": "anding",
+      "extraDays": 2,
+      "fortification": 10,
+      "garrison": 2000,
+      "gold": 27,
+      "food": 70,
+      "note": "关中北大门，安定—长安道上的萧关；匈奴南下必争之地"
+    },
+    {
+      "id": "yangping",
+      "name": "阳平关",
+      "x": 1951.6,
+      "y": 2132.5,
+      "kind": "pass",
+      "tier": 2,
+      "edges": [
+        [
+          "wudu",
+          "hanzhong"
+        ]
+      ],
+      "guardCityId": "hanzhong",
+      "extraDays": 2,
+      "fortification": 12,
+      "garrison": 2200,
+      "gold": 30,
+      "food": 80,
+      "note": "汉中西门户，蜀道北口；刘备取汉中、赵云空营退曹兵于此"
+    },
+    {
+      "id": "jiange",
+      "name": "剑阁",
+      "x": 1775.4,
+      "y": 2403.5,
+      "kind": "pass",
+      "tier": 1,
+      "edges": [
+        [
+          "hanzhong",
+          "zhangtong"
+        ]
+      ],
+      "guardCityId": "zhangtong",
+      "extraDays": 3,
+      "fortification": 18,
+      "garrison": 3000,
+      "gold": 42,
+      "food": 115,
+      "note": "剑门天险，一夫当关；姜维拒钟会于此，邓艾遂走阴平"
+    },
+    {
+      "id": "jiameng",
+      "name": "葭萌关",
+      "x": 1870.3,
+      "y": 2497.7,
+      "kind": "pass",
+      "tier": 2,
+      "edges": [
+        [
+          "langzhong",
+          "zhangtong"
+        ]
+      ],
+      "guardCityId": "langzhong",
+      "extraDays": 2,
+      "fortification": 10,
+      "garrison": 1900,
+      "gold": 26,
+      "food": 70,
+      "note": "嘉陵江上游要冲；马超战张飞于葭萌"
+    },
+    {
+      "id": "qishan",
+      "name": "祁山堡",
+      "x": 1761.9,
+      "y": 2014.7,
+      "kind": "pass",
+      "tier": 3,
+      "edges": [
+        [
+          "tianshui",
+          "hanzhong"
+        ]
+      ],
+      "guardCityId": "tianshui",
+      "extraDays": 2,
+      "fortification": 8,
+      "garrison": 1600,
+      "gold": 22,
+      "food": 60,
+      "note": "陇右南口；诸葛亮六出祁山，皆以此为进退之门"
+    },
+    {
+      "id": "wakou",
+      "name": "瓦口关",
+      "x": 2060,
+      "y": 2639.1,
+      "kind": "pass",
+      "tier": 3,
+      "edges": [
+        [
+          "langzhong",
+          "jiangzhou"
+        ]
+      ],
+      "guardCityId": "langzhong",
+      "extraDays": 2,
+      "fortification": 7,
+      "garrison": 1400,
+      "gold": 18,
+      "food": 50,
+      "note": "宕渠山道；张飞智取瓦口隘，大破张郃"
+    },
+    {
+      "id": "ziwugu",
+      "name": "子午谷",
+      "x": 2751.2,
+      "y": 2038.3,
+      "kind": "trail",
+      "tier": 3,
+      "edges": [
+        [
+          "changan",
+          "hanzhong"
+        ]
+      ],
+      "guardCityId": null,
+      "extraDays": 15,
+      "fortification": 0,
+      "garrison": 0,
+      "gold": 0,
+      "food": 0,
+      "note": "魏延子午谷奇谋：七百余里无人烟，可绕散关直趋长安，然险远难行"
+    },
+    {
+      "id": "huanyuan",
+      "name": "轘辕道",
+      "x": 3838.2,
+      "y": 2097.2,
+      "kind": "trail",
+      "tier": 3,
+      "edges": [
+        [
+          "luoyang",
+          "xuchang"
+        ]
+      ],
+      "guardCityId": null,
+      "extraDays": 12,
+      "fortification": 0,
+      "garrison": 0,
+      "gold": 0,
+      "food": 0,
+      "note": "轘辕关小路：嵩山间道，可绕虎牢关东南而下许昌"
+    },
+    {
+      "id": "yinping",
+      "name": "阴平道",
+      "x": 1599.2,
+      "y": 2344.6,
+      "kind": "trail",
+      "tier": 3,
+      "edges": [
+        [
+          "wudu",
+          "mianzhu"
+        ]
+      ],
+      "guardCityId": null,
+      "extraDays": 6,
+      "fortification": 0,
+      "garrison": 0,
+      "gold": 0,
+      "food": 0,
+      "note": "邓艾偷渡阴平：行无人之地七百余里，绕开剑阁直取江油、绵竹"
+    },
+    {
+      "id": "fangling",
+      "name": "房陵道",
+      "x": 3095.5,
+      "y": 2587.3,
+      "kind": "trail",
+      "tier": 3,
+      "edges": [
+        [
+          "shangyong",
+          "badong"
+        ]
+      ],
+      "guardCityId": null,
+      "extraDays": 6,
+      "fortification": 0,
+      "garrison": 0,
+      "gold": 0,
+      "food": 0,
+      "note": "房陵间道：穿大巴山与巫山之间，绕开长江三峡的陆上险路"
+    }
+  ],
+  "ferries": [
+    {
+      "id": "mengjin",
+      "name": "孟津渡",
+      "x": 3618.6,
+      "y": 1802.6,
+      "tier": 1,
+      "edges": [
+        [
+          "jinyang",
+          "luoyang"
+        ]
+      ],
+      "riverId": "huanghe",
+      "pairId": "heyang",
+      "guardCityId": null,
+      "waterBattle": true,
+      "extraDays": 2,
+      "fortification": 8,
+      "garrison": 1800,
+      "gold": 28,
+      "food": 110,
+      "note": "黄河渡口，洛阳北岸；八百诸侯会孟津"
+    },
+    {
+      "id": "heyang",
+      "name": "河阳渡",
+      "x": 3708.1,
+      "y": 1779.1,
+      "tier": 2,
+      "edges": [
+        [
+          "jinyang",
+          "luoyang"
+        ]
+      ],
+      "riverId": "huanghe",
+      "pairId": "mengjin",
+      "guardCityId": null,
+      "waterBattle": true,
+      "extraDays": 2,
+      "fortification": 6,
+      "garrison": 1400,
+      "gold": 20,
+      "food": 90,
+      "note": "黄河渡口，河内北岸；与孟津斜对，是并州南下的另一处渡头"
+    },
+    {
+      "id": "baimajin",
+      "name": "白马津",
+      "x": 4377.6,
+      "y": 1720.2,
+      "tier": 2,
+      "edges": [
+        [
+          "chenliu",
+          "puyang"
+        ]
+      ],
+      "riverId": "huanghe",
+      "pairId": "yanjin",
+      "guardCityId": null,
+      "waterBattle": true,
+      "extraDays": 2,
+      "fortification": 5,
+      "garrison": 1200,
+      "gold": 18,
+      "food": 80,
+      "note": "黄河渡口，陈留—濮阳；关羽斩颜良解白马之围"
+    },
+    {
+      "id": "yanjin",
+      "name": "延津",
+      "x": 4323.4,
+      "y": 1588.2,
+      "tier": 2,
+      "edges": [
+        [
+          "ye",
+          "chenliu"
+        ]
+      ],
+      "riverId": "huanghe",
+      "pairId": "baimajin",
+      "guardCityId": null,
+      "waterBattle": true,
+      "extraDays": 2,
+      "fortification": 5,
+      "garrison": 1200,
+      "gold": 18,
+      "food": 80,
+      "note": "黄河渡口，邺城—陈留；文丑殒命之处"
+    },
+    {
+      "id": "xianyang",
+      "name": "咸阳渡",
+      "x": 2607.6,
+      "y": 1896.9,
+      "tier": 2,
+      "edges": [
+        [
+          "anding",
+          "changan"
+        ]
+      ],
+      "riverId": "wei",
+      "pairId": null,
+      "guardCityId": "changan",
+      "waterBattle": true,
+      "extraDays": 2,
+      "fortification": 6,
+      "garrison": 1500,
+      "gold": 22,
+      "food": 95,
+      "note": "渭水渡口，咸阳以东；安定—长安道过渭处，萧关的南口"
+    },
+    {
+      "id": "xiakou",
+      "name": "夏口渡",
+      "x": 4141.8,
+      "y": 2804.1,
+      "tier": 1,
+      "edges": [
+        [
+          "jiangxia",
+          "yiling"
+        ],
+        [
+          "jiangxia",
+          "jiangling"
+        ]
+      ],
+      "riverId": "changjiang",
+      "pairId": "hanyang",
+      "guardCityId": null,
+      "waterBattle": true,
+      "extraDays": 2,
+      "fortification": 10,
+      "garrison": 1900,
+      "gold": 30,
+      "food": 120,
+      "note": "汉水入江处，江夏南岸；孙权筑夏口城"
+    },
+    {
+      "id": "hanyang",
+      "name": "汉阳渡",
+      "x": 4087.6,
+      "y": 2761.7,
+      "tier": 2,
+      "edges": [
+        [
+          "jiangxia",
+          "yiling"
+        ],
+        [
+          "jiangxia",
+          "jiangling"
+        ]
+      ],
+      "riverId": "han",
+      "pairId": "xiakou",
+      "guardCityId": null,
+      "waterBattle": true,
+      "extraDays": 2,
+      "fortification": 6,
+      "garrison": 1400,
+      "gold": 22,
+      "food": 95,
+      "note": "汉水北岸渡头，与夏口斜对；黄祖水军旧屯"
+    },
+    {
+      "id": "chibi",
+      "name": "赤壁渡",
+      "x": 3861.3,
+      "y": 2839.5,
+      "tier": 1,
+      "edges": [
+        [
+          "jiangling",
+          "jiangxia"
+        ]
+      ],
+      "riverId": "changjiang",
+      "pairId": "wulin",
+      "guardCityId": null,
+      "waterBattle": true,
+      "extraDays": 2,
+      "fortification": 9,
+      "garrison": 1800,
+      "gold": 30,
+      "food": 120,
+      "note": "长江中游南岸，江陵—江夏；周瑜火攻破曹之处"
+    },
+    {
+      "id": "wulin",
+      "name": "乌林渡",
+      "x": 3943.9,
+      "y": 2940.7,
+      "tier": 2,
+      "edges": [
+        [
+          "jiangling",
+          "jiangxia"
+        ]
+      ],
+      "riverId": "changjiang",
+      "pairId": "chibi",
+      "guardCityId": null,
+      "waterBattle": true,
+      "extraDays": 2,
+      "fortification": 6,
+      "garrison": 1400,
+      "gold": 22,
+      "food": 95,
+      "note": "长江北岸渡头，与赤壁斜对；曹军连船屯于乌林"
+    },
+    {
+      "id": "xunyang",
+      "name": "寻阳渡",
+      "x": 4608,
+      "y": 2997.3,
+      "tier": 2,
+      "edges": [
+        [
+          "chaisang",
+          "lujiang"
+        ]
+      ],
+      "riverId": "changjiang",
+      "pairId": "wanhe",
+      "guardCityId": null,
+      "waterBattle": true,
+      "extraDays": 2,
+      "fortification": 6,
+      "garrison": 1400,
+      "gold": 20,
+      "food": 90,
+      "note": "长江下游渡口，柴桑—庐江"
+    },
+    {
+      "id": "wanhe",
+      "name": "皖口渡",
+      "x": 4838.4,
+      "y": 2879.5,
+      "tier": 3,
+      "edges": [
+        [
+          "chaisang",
+          "lujiang"
+        ]
+      ],
+      "riverId": "changjiang",
+      "pairId": "xunyang",
+      "guardCityId": null,
+      "waterBattle": true,
+      "extraDays": 2,
+      "fortification": 5,
+      "garrison": 1100,
+      "gold": 16,
+      "food": 70,
+      "note": "皖水入江口，与寻阳斜对；孙权破皖城即由此上陆"
+    },
+    {
+      "id": "ruxukou",
+      "name": "濡须口",
+      "x": 5047.1,
+      "y": 2592,
+      "tier": 1,
+      "edges": [
+        [
+          "lujiang",
+          "jianye"
+        ]
+      ],
+      "riverId": "changjiang",
+      "pairId": null,
+      "guardCityId": "lujiang",
+      "waterBattle": true,
+      "extraDays": 2,
+      "fortification": 12,
+      "garrison": 2100,
+      "gold": 34,
+      "food": 140,
+      "note": "巢湖入江口，淮南水战要地；孙权筑濡须坞拒曹操"
+    },
+    {
+      "id": "caishi",
+      "name": "采石渡",
+      "x": 5299.2,
+      "y": 2540.2,
+      "tier": 2,
+      "edges": [
+        [
+          "jianye",
+          "lujiang"
+        ]
+      ],
+      "riverId": "changjiang",
+      "pairId": "hengjiang",
+      "guardCityId": null,
+      "waterBattle": true,
+      "extraDays": 2,
+      "fortification": 7,
+      "garrison": 1500,
+      "gold": 22,
+      "food": 100,
+      "note": "长江下游，建业对岸；虞允文采石大捷之地"
+    },
+    {
+      "id": "hengjiang",
+      "name": "横江渡",
+      "x": 5155.5,
+      "y": 2559,
+      "tier": 3,
+      "edges": [
+        [
+          "jianye",
+          "lujiang"
+        ]
+      ],
+      "riverId": "changjiang",
+      "pairId": "caishi",
+      "guardCityId": null,
+      "waterBattle": true,
+      "extraDays": 2,
+      "fortification": 5,
+      "garrison": 1200,
+      "gold": 16,
+      "food": 75,
+      "note": "历阳横江浦，与采石斜对；孙策渡江起兵处"
+    },
+    {
+      "id": "guazhou",
+      "name": "瓜洲渡",
+      "x": 5448.3,
+      "y": 2421.2,
+      "tier": 2,
+      "edges": [
+        [
+          "guangling",
+          "jianye"
+        ]
+      ],
+      "riverId": "changjiang",
+      "pairId": "jingkou",
+      "guardCityId": null,
+      "waterBattle": true,
+      "extraDays": 2,
+      "fortification": 6,
+      "garrison": 1300,
+      "gold": 20,
+      "food": 90,
+      "note": "广陵—建业之间的长江渡口，北岸要津"
+    },
+    {
+      "id": "jingkou",
+      "name": "京口渡",
+      "x": 5543.2,
+      "y": 2429.4,
+      "tier": 2,
+      "edges": [
+        [
+          "guangling",
+          "jianye"
+        ]
+      ],
+      "riverId": "changjiang",
+      "pairId": "guazhou",
+      "guardCityId": null,
+      "waterBattle": true,
+      "extraDays": 2,
+      "fortification": 6,
+      "garrison": 1300,
+      "gold": 20,
+      "food": 90,
+      "note": "长江南岸渡头，与瓜洲斜对；孙权徙治京口"
+    },
+    {
+      "id": "baidi",
+      "name": "白帝渡",
+      "x": 3202.6,
+      "y": 2740.5,
+      "tier": 3,
+      "edges": [
+        [
+          "badong",
+          "yiling"
+        ]
+      ],
+      "riverId": "changjiang",
+      "pairId": null,
+      "guardCityId": null,
+      "waterBattle": true,
+      "extraDays": 2,
+      "fortification": 5,
+      "garrison": 900,
+      "gold": 15,
+      "food": 60,
+      "note": "三峡出口，白帝城下；刘备托孤之地"
+    },
+    {
+      "id": "nanzhengdu",
+      "name": "南郑渡",
+      "x": 2182,
+      "y": 2163.1,
+      "tier": 2,
+      "edges": [
+        [
+          "changan",
+          "hanzhong"
+        ]
+      ],
+      "riverId": "han",
+      "pairId": null,
+      "guardCityId": null,
+      "waterBattle": true,
+      "extraDays": 2,
+      "fortification": 5,
+      "garrison": 1200,
+      "gold": 18,
+      "food": 80,
+      "note": "汉水北岸褒城渡头，陈仓道 / 褒斜道南下汉中的必经渡口"
+    },
+    {
+      "id": "shouchundu",
+      "name": "寿春渡",
+      "x": 4865.5,
+      "y": 2273.9,
+      "tier": 2,
+      "edges": [
+        [
+          "shouchun",
+          "pengcheng"
+        ]
+      ],
+      "riverId": "huai",
+      "pairId": "xiashidu",
+      "guardCityId": null,
+      "waterBattle": true,
+      "extraDays": 2,
+      "fortification": 5,
+      "garrison": 1200,
+      "gold": 18,
+      "food": 80,
+      "note": "淮河中游渡口，寿春北岸；袁术称帝后江淮粮道所系"
+    },
+    {
+      "id": "xiashidu",
+      "name": "硖石渡",
+      "x": 4933.3,
+      "y": 2215,
+      "tier": 3,
+      "edges": [
+        [
+          "shouchun",
+          "pengcheng"
+        ]
+      ],
+      "riverId": "huai",
+      "pairId": "shouchundu",
+      "guardCityId": null,
+      "waterBattle": true,
+      "extraDays": 2,
+      "fortification": 4,
+      "garrison": 900,
+      "gold": 14,
+      "food": 55,
+      "note": "淮河硖石口，与寿春渡斜对；两岸滩头皆可登岸"
+    },
+    {
+      "id": "huaiyindu",
+      "name": "淮阴渡",
+      "x": 5353.4,
+      "y": 2156.1,
+      "tier": 2,
+      "edges": [
+        [
+          "guangling",
+          "xiapi"
+        ],
+        [
+          "langya",
+          "guangling"
+        ]
+      ],
+      "riverId": "huai",
+      "pairId": "sikoudu",
+      "guardCityId": null,
+      "waterBattle": true,
+      "extraDays": 2,
+      "fortification": 5,
+      "garrison": 1200,
+      "gold": 18,
+      "food": 80,
+      "note": "淮水下游渡口，洪泽东岸；广陵北上必经"
+    },
+    {
+      "id": "sikoudu",
+      "name": "泗口渡",
+      "x": 5421.2,
+      "y": 2108.9,
+      "tier": 3,
+      "edges": [
+        [
+          "guangling",
+          "xiapi"
+        ],
+        [
+          "langya",
+          "guangling"
+        ]
+      ],
+      "riverId": "huai",
+      "pairId": "huaiyindu",
+      "guardCityId": null,
+      "waterBattle": true,
+      "extraDays": 2,
+      "fortification": 4,
+      "garrison": 900,
+      "gold": 14,
+      "food": 55,
+      "note": "泗水入淮口，与淮阴渡斜对；下邳—广陵之间的另一处渡头"
+    },
+    {
+      "id": "pingyuanjin",
+      "name": "平原津",
+      "x": 5150.1,
+      "y": 1213.5,
+      "tier": 2,
+      "edges": [
+        [
+          "pingyuan",
+          "beihai"
+        ]
+      ],
+      "riverId": "huanghe",
+      "pairId": "gaotangdu",
+      "guardCityId": null,
+      "waterBattle": true,
+      "extraDays": 2,
+      "fortification": 5,
+      "garrison": 1200,
+      "gold": 18,
+      "food": 80,
+      "note": "黄河下游渡口，平原郡北岸；刘备曾在此被袁谭追击"
+    },
+    {
+      "id": "gaotangdu",
+      "name": "高唐渡",
+      "x": 5204.3,
+      "y": 1272.4,
+      "tier": 3,
+      "edges": [
+        [
+          "linzi",
+          "pingyuan"
+        ]
+      ],
+      "riverId": "huanghe",
+      "pairId": "pingyuanjin",
+      "guardCityId": null,
+      "waterBattle": true,
+      "extraDays": 2,
+      "fortification": 4,
+      "garrison": 900,
+      "gold": 14,
+      "food": 55,
+      "note": "高唐津，与平原津斜对；青州北上平原的渡头"
+    },
+    {
+      "id": "xiangyangdu",
+      "name": "襄阳渡",
+      "x": 3605.1,
+      "y": 2568.4,
+      "tier": 2,
+      "edges": [
+        [
+          "xiangyang",
+          "jiangling"
+        ]
+      ],
+      "riverId": "han",
+      "pairId": "fanchengdu",
+      "guardCityId": null,
+      "waterBattle": true,
+      "extraDays": 2,
+      "fortification": 5,
+      "garrison": 1200,
+      "gold": 18,
+      "food": 80,
+      "note": "汉水南岸渡口，襄阳城下；关羽水淹七军即在此段"
+    },
+    {
+      "id": "fanchengdu",
+      "name": "樊城渡",
+      "x": 3564.4,
+      "y": 2627.4,
+      "tier": 2,
+      "edges": [
+        [
+          "xiangyang",
+          "jiangling"
+        ]
+      ],
+      "riverId": "han",
+      "pairId": "xiangyangdu",
+      "guardCityId": null,
+      "waterBattle": true,
+      "extraDays": 2,
+      "fortification": 5,
+      "garrison": 1200,
+      "gold": 18,
+      "food": 80,
+      "note": "汉水北岸樊城渡头，与襄阳渡斜对；曹仁困守之城"
+    },
+    {
+      "id": "dongtingdu",
+      "name": "洞庭渡",
+      "x": 3781.3,
+      "y": 3086.8,
+      "tier": 2,
+      "edges": [
+        [
+          "jiangling",
+          "changsha"
+        ],
+        [
+          "wuling",
+          "changsha"
+        ]
+      ],
+      "riverId": "xiang",
+      "pairId": "balingdu",
+      "guardCityId": null,
+      "waterBattle": true,
+      "extraDays": 2,
+      "fortification": 5,
+      "garrison": 1200,
+      "gold": 18,
+      "food": 80,
+      "note": "洞庭湖西岸渡口，江陵—长沙水道"
+    },
+    {
+      "id": "balingdu",
+      "name": "巴陵渡",
+      "x": 3849,
+      "y": 3039.7,
+      "tier": 3,
+      "edges": [
+        [
+          "jiangling",
+          "changsha"
+        ],
+        [
+          "wuling",
+          "changsha"
+        ]
+      ],
+      "riverId": "xiang",
+      "pairId": "dongtingdu",
+      "guardCityId": null,
+      "waterBattle": true,
+      "extraDays": 2,
+      "fortification": 4,
+      "garrison": 900,
+      "gold": 14,
+      "food": 55,
+      "note": "巴陵（岳阳）渡头，与洞庭渡斜对；鲁肃屯兵处"
+    },
+    {
+      "id": "poyangdu",
+      "name": "鄱阳渡",
+      "x": 4662.2,
+      "y": 3157.5,
+      "tier": 2,
+      "edges": [
+        [
+          "yuzhang",
+          "poyang"
+        ],
+        [
+          "poyang",
+          "chaisang"
+        ]
+      ],
+      "riverId": "gan",
+      "pairId": "chaisangdu",
+      "guardCityId": null,
+      "waterBattle": true,
+      "extraDays": 2,
+      "fortification": 5,
+      "garrison": 1200,
+      "gold": 18,
+      "food": 80,
+      "note": "鄱阳湖西岸渡口，豫章—鄱阳水道"
+    },
+    {
+      "id": "chaisangdu",
+      "name": "柴桑渡",
+      "x": 4730,
+      "y": 3110.4,
+      "tier": 3,
+      "edges": [
+        [
+          "yuzhang",
+          "poyang"
+        ],
+        [
+          "poyang",
+          "chaisang"
+        ]
+      ],
+      "riverId": "gan",
+      "pairId": "poyangdu",
+      "guardCityId": null,
+      "waterBattle": true,
+      "extraDays": 2,
+      "fortification": 4,
+      "garrison": 900,
+      "gold": 14,
+      "food": 55,
+      "note": "鄱阳湖东岸渡头，与鄱阳渡斜对；周瑜练水军处"
+    }
+  ],
+  "rivers": [
+    {
+      "id": "wei",
+      "name": "渭水",
+      "width": 72,
+      "points": [
+        {
+          "x": 1911,
+          "y": 1802.6
+        },
+        {
+          "x": 1816.1,
+          "y": 1861.5
+        },
+        {
+          "x": 2114.3,
+          "y": 1871
+        },
+        {
+          "x": 2412.4,
+          "y": 1861.5
+        },
+        {
+          "x": 2683.5,
+          "y": 1866.2
+        },
+        {
+          "x": 2981.6,
+          "y": 1873.3
+        },
+        {
+          "x": 3063,
+          "y": 1861.5
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "huai",
+      "name": "淮水",
+      "width": 76,
+      "points": [
+        {
+          "x": 3862.6,
+          "y": 2368.1
+        },
+        {
+          "x": 3957.5,
+          "y": 2379.9
+        },
+        {
+          "x": 4093,
+          "y": 2427.1
+        },
+        {
+          "x": 4336.9,
+          "y": 2379.9
+        },
+        {
+          "x": 4608,
+          "y": 2356.4
+        },
+        {
+          "x": 4879.1,
+          "y": 2262.1
+        },
+        {
+          "x": 5258.5,
+          "y": 2215
+        },
+        {
+          "x": 5448.3,
+          "y": 2120.7
+        },
+        {
+          "x": 5692.2,
+          "y": 2002.9
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "han",
+      "name": "汉水",
+      "width": 76,
+      "points": [
+        {
+          "x": 2046.5,
+          "y": 2061.8
+        },
+        {
+          "x": 2141.4,
+          "y": 2215
+        },
+        {
+          "x": 2331.1,
+          "y": 2262.1
+        },
+        {
+          "x": 2710.6,
+          "y": 2309.2
+        },
+        {
+          "x": 3117.2,
+          "y": 2332.8
+        },
+        {
+          "x": 3388.2,
+          "y": 2379.9
+        },
+        {
+          "x": 3550.9,
+          "y": 2474.2
+        },
+        {
+          "x": 3686.4,
+          "y": 2615.6
+        },
+        {
+          "x": 3903.2,
+          "y": 2733.4
+        },
+        {
+          "x": 4120.1,
+          "y": 2804.1
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "xiang",
+      "name": "湘水",
+      "width": 70,
+      "points": [
+        {
+          "x": 3347.6,
+          "y": 4005.8
+        },
+        {
+          "x": 3415.3,
+          "y": 3793.8
+        },
+        {
+          "x": 3686.4,
+          "y": 3463.9
+        },
+        {
+          "x": 3767.7,
+          "y": 3369.6
+        },
+        {
+          "x": 3767.7,
+          "y": 3086.8
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "gan",
+      "name": "赣水",
+      "width": 70,
+      "points": [
+        {
+          "x": 4215,
+          "y": 3817.3
+        },
+        {
+          "x": 4336.9,
+          "y": 3770.2
+        },
+        {
+          "x": 4499.6,
+          "y": 3463.9
+        },
+        {
+          "x": 4580.9,
+          "y": 3251.8
+        },
+        {
+          "x": 4662.2,
+          "y": 3134
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "huanghe",
+      "name": "黄河",
+      "width": 90,
+      "points": [
+        {
+          "x": 1002.9,
+          "y": 1225.3
+        },
+        {
+          "x": 1301.1,
+          "y": 1508.1
+        },
+        {
+          "x": 1517.9,
+          "y": 1413.8
+        },
+        {
+          "x": 1870.3,
+          "y": 1178.2
+        },
+        {
+          "x": 2032.9,
+          "y": 942.5
+        },
+        {
+          "x": 2168.5,
+          "y": 706.9
+        },
+        {
+          "x": 2575.1,
+          "y": 518.4
+        },
+        {
+          "x": 2981.6,
+          "y": 471.3
+        },
+        {
+          "x": 3306.9,
+          "y": 542
+        },
+        {
+          "x": 3388.2,
+          "y": 824.7
+        },
+        {
+          "x": 3225.6,
+          "y": 1178.2
+        },
+        {
+          "x": 3090.1,
+          "y": 1625.9
+        },
+        {
+          "x": 3063,
+          "y": 1861.5
+        },
+        {
+          "x": 3334,
+          "y": 1772
+        },
+        {
+          "x": 3632.2,
+          "y": 1767.3
+        },
+        {
+          "x": 3957.5,
+          "y": 1779.1
+        },
+        {
+          "x": 4147.2,
+          "y": 1790.8
+        },
+        {
+          "x": 4418.3,
+          "y": 1673
+        },
+        {
+          "x": 4689.3,
+          "y": 1531.6
+        },
+        {
+          "x": 5014.6,
+          "y": 1319.6
+        },
+        {
+          "x": 5258.5,
+          "y": 1154.6
+        },
+        {
+          "x": 5421.2,
+          "y": 1107.5
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "changjiang",
+      "name": "长江",
+      "width": 90,
+      "points": [
+        {
+          "x": 1030,
+          "y": 3381.4
+        },
+        {
+          "x": 1517.9,
+          "y": 3228.2
+        },
+        {
+          "x": 1734.8,
+          "y": 3204.7
+        },
+        {
+          "x": 2032.9,
+          "y": 3039.7
+        },
+        {
+          "x": 2276.9,
+          "y": 2992.6
+        },
+        {
+          "x": 2548,
+          "y": 2851.2
+        },
+        {
+          "x": 2846.1,
+          "y": 2709.8
+        },
+        {
+          "x": 3090.1,
+          "y": 2709.8
+        },
+        {
+          "x": 3334,
+          "y": 2780.5
+        },
+        {
+          "x": 3578,
+          "y": 2851.2
+        },
+        {
+          "x": 3903.2,
+          "y": 2874.8
+        },
+        {
+          "x": 4147.2,
+          "y": 2804.1
+        },
+        {
+          "x": 4336.9,
+          "y": 2898.3
+        },
+        {
+          "x": 4608,
+          "y": 3016.2
+        },
+        {
+          "x": 4879.1,
+          "y": 2827.6
+        },
+        {
+          "x": 5123,
+          "y": 2733.4
+        },
+        {
+          "x": 5258.5,
+          "y": 2615.6
+        },
+        {
+          "x": 5367,
+          "y": 2450.6
+        },
+        {
+          "x": 5556.7,
+          "y": 2427.1
+        },
+        {
+          "x": 5773.6,
+          "y": 2474.2
+        },
+        {
+          "x": 5963.3,
+          "y": 2521.3
+        },
+        {
+          "x": 6180.1,
+          "y": 2615.6
+        }
+      ],
+      "note": ""
+    }
+  ],
+  "ranges": [
+    {
+      "id": "range-1",
+      "name": "秦岭",
+      "width": 336,
+      "height": 1,
+      "points": [
+        {
+          "x": 1436.6,
+          "y": 1944
+        },
+        {
+          "x": 2032.9,
+          "y": 2002.9
+        },
+        {
+          "x": 2209.1,
+          "y": 2014.7
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-2",
+      "name": "秦岭东段",
+      "width": 260,
+      "height": 1,
+      "points": [
+        {
+          "x": 2209.1,
+          "y": 2014.7
+        },
+        {
+          "x": 2656.4,
+          "y": 2038.3
+        },
+        {
+          "x": 3252.7,
+          "y": 2108.9
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-3",
+      "name": "华山",
+      "width": 108,
+      "height": 0.9,
+      "points": [
+        {
+          "x": 3035.9,
+          "y": 1903.9
+        },
+        {
+          "x": 3008.8,
+          "y": 1998.2
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-4",
+      "name": "大巴山",
+      "width": 304,
+      "height": 0.85,
+      "points": [
+        {
+          "x": 1897.4,
+          "y": 2332.8
+        },
+        {
+          "x": 2439.5,
+          "y": 2427.1
+        },
+        {
+          "x": 2981.6,
+          "y": 2568.4
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-5",
+      "name": "太行山",
+      "width": 282,
+      "height": 0.9,
+      "points": [
+        {
+          "x": 3849,
+          "y": 1743.7
+        },
+        {
+          "x": 3984.6,
+          "y": 1413.8
+        },
+        {
+          "x": 4120.1,
+          "y": 1107.5
+        },
+        {
+          "x": 4309.8,
+          "y": 801.2
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-6",
+      "name": "太行西麓",
+      "width": 298,
+      "height": 0.42,
+      "points": [
+        {
+          "x": 3821.9,
+          "y": 1230
+        },
+        {
+          "x": 3840.9,
+          "y": 1331.3
+        },
+        {
+          "x": 3854.5,
+          "y": 1508.1
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-7",
+      "name": "燕山",
+      "width": 271,
+      "height": 0.75,
+      "points": [
+        {
+          "x": 4418.3,
+          "y": 494.8
+        },
+        {
+          "x": 5014.6,
+          "y": 447.7
+        },
+        {
+          "x": 5610.9,
+          "y": 494.8
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-8",
+      "name": "阴山",
+      "width": 352,
+      "height": 0.65,
+      "points": [
+        {
+          "x": 2032.9,
+          "y": 306.3
+        },
+        {
+          "x": 2981.6,
+          "y": 282.8
+        },
+        {
+          "x": 3930.4,
+          "y": 329.9
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-9",
+      "name": "吕梁山",
+      "width": 217,
+      "height": 0.8,
+      "points": [
+        {
+          "x": 3279.8,
+          "y": 1602.3
+        },
+        {
+          "x": 3388.2,
+          "y": 1178.2
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-10",
+      "name": "王屋",
+      "width": 195,
+      "height": 0.7,
+      "points": [
+        {
+          "x": 3225.6,
+          "y": 1779.1
+        },
+        {
+          "x": 3659.3,
+          "y": 1696.6
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-11",
+      "name": "桐柏大别",
+      "width": 249,
+      "height": 0.65,
+      "points": [
+        {
+          "x": 3821.9,
+          "y": 2403.5
+        },
+        {
+          "x": 4282.7,
+          "y": 2568.4
+        },
+        {
+          "x": 4716.4,
+          "y": 2686.3
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-12",
+      "name": "巫山",
+      "width": 239,
+      "height": 0.8,
+      "points": [
+        {
+          "x": 2791.9,
+          "y": 2615.6
+        },
+        {
+          "x": 3171.4,
+          "y": 2780.5
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-13",
+      "name": "武陵山",
+      "width": 249,
+      "height": 0.7,
+      "points": [
+        {
+          "x": 2791.9,
+          "y": 3016.2
+        },
+        {
+          "x": 3198.5,
+          "y": 3298.9
+        },
+        {
+          "x": 3361.1,
+          "y": 3558.1
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-14",
+      "name": "南岭",
+      "width": 271,
+      "height": 0.65,
+      "points": [
+        {
+          "x": 3063,
+          "y": 4029.4
+        },
+        {
+          "x": 3930.4,
+          "y": 4029.4
+        },
+        {
+          "x": 4553.8,
+          "y": 4076.5
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-15",
+      "name": "武夷山",
+      "width": 249,
+      "height": 0.7,
+      "points": [
+        {
+          "x": 4852,
+          "y": 3369.6
+        },
+        {
+          "x": 5150.1,
+          "y": 3699.5
+        },
+        {
+          "x": 5475.4,
+          "y": 4053
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-16",
+      "name": "天目",
+      "width": 184,
+      "height": 0.6,
+      "points": [
+        {
+          "x": 5448.3,
+          "y": 2780.5
+        },
+        {
+          "x": 5773.6,
+          "y": 2898.3
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-17",
+      "name": "会稽山",
+      "width": 163,
+      "height": 0.5,
+      "points": [
+        {
+          "x": 5746.4,
+          "y": 3016.2
+        },
+        {
+          "x": 5963.3,
+          "y": 3110.4
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-18",
+      "name": "祁连山",
+      "width": 390,
+      "height": 1,
+      "points": [
+        {
+          "x": 0,
+          "y": 824.7
+        },
+        {
+          "x": 406.6,
+          "y": 1013.2
+        },
+        {
+          "x": 948.7,
+          "y": 1248.9
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-19",
+      "name": "陇山",
+      "width": 206,
+      "height": 0.8,
+      "points": [
+        {
+          "x": 1924.5,
+          "y": 1790.8
+        },
+        {
+          "x": 2060,
+          "y": 1531.6
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-20",
+      "name": "关山",
+      "width": 141,
+      "height": 0.85,
+      "points": [
+        {
+          "x": 1992.3,
+          "y": 1873.3
+        },
+        {
+          "x": 2032.9,
+          "y": 1960.5
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-21",
+      "name": "贺兰山",
+      "width": 173,
+      "height": 0.7,
+      "points": [
+        {
+          "x": 1870.3,
+          "y": 1083.9
+        },
+        {
+          "x": 1978.7,
+          "y": 754
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-22",
+      "name": "邛崃山",
+      "width": 314,
+      "height": 0.95,
+      "points": [
+        {
+          "x": 867.4,
+          "y": 2592
+        },
+        {
+          "x": 1030,
+          "y": 3063.3
+        },
+        {
+          "x": 1138.4,
+          "y": 3652.4
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-23",
+      "name": "大凉山",
+      "width": 239,
+      "height": 0.8,
+      "points": [
+        {
+          "x": 948.7,
+          "y": 3416.7
+        },
+        {
+          "x": 1138.4,
+          "y": 3770.2
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-24",
+      "name": "云贵高原",
+      "width": 325,
+      "height": 0.65,
+      "points": [
+        {
+          "x": 1219.8,
+          "y": 3770.2
+        },
+        {
+          "x": 1626.4,
+          "y": 4005.8
+        },
+        {
+          "x": 2114.3,
+          "y": 4123.6
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-25",
+      "name": "六盘山",
+      "width": 206,
+      "height": 0.9,
+      "points": [
+        {
+          "x": 1897.4,
+          "y": 1673
+        },
+        {
+          "x": 2005.8,
+          "y": 1413.8
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-26",
+      "name": "子午岭",
+      "width": 184,
+      "height": 0.85,
+      "points": [
+        {
+          "x": 2507.3,
+          "y": 1767.3
+        },
+        {
+          "x": 2615.7,
+          "y": 1460.9
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-27",
+      "name": "中条山",
+      "width": 184,
+      "height": 0.8,
+      "points": [
+        {
+          "x": 3306.9,
+          "y": 1826.2
+        },
+        {
+          "x": 3496.7,
+          "y": 1602.3
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-28",
+      "name": "嵩山",
+      "width": 228,
+      "height": 0.85,
+      "points": [
+        {
+          "x": 3713.5,
+          "y": 1885.1
+        },
+        {
+          "x": 3916.8,
+          "y": 1955.8
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-29",
+      "name": "具茨山",
+      "width": 184,
+      "height": 0.82,
+      "points": [
+        {
+          "x": 3916.8,
+          "y": 1960.5
+        },
+        {
+          "x": 3854.5,
+          "y": 2054.8
+        },
+        {
+          "x": 3816.5,
+          "y": 2149
+        },
+        {
+          "x": 3843.6,
+          "y": 2250.3
+        },
+        {
+          "x": 3854.5,
+          "y": 2328.1
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-30",
+      "name": "伏牛山",
+      "width": 228,
+      "height": 0.8,
+      "points": [
+        {
+          "x": 3212,
+          "y": 2054.8
+        },
+        {
+          "x": 3523.8,
+          "y": 2097.2
+        },
+        {
+          "x": 3794.8,
+          "y": 2156.1
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-31",
+      "name": "泰山",
+      "width": 163,
+      "height": 0.75,
+      "points": [
+        {
+          "x": 4879.1,
+          "y": 1484.5
+        },
+        {
+          "x": 5150.1,
+          "y": 1531.6
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-32",
+      "name": "沂蒙山",
+      "width": 173,
+      "height": 0.75,
+      "points": [
+        {
+          "x": 5177.2,
+          "y": 1625.9
+        },
+        {
+          "x": 5461.8,
+          "y": 1696.6
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-33",
+      "name": "五台山",
+      "width": 195,
+      "height": 0.9,
+      "points": [
+        {
+          "x": 3794.8,
+          "y": 895.4
+        },
+        {
+          "x": 4065.9,
+          "y": 730.5
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-34",
+      "name": "恒山",
+      "width": 173,
+      "height": 0.8,
+      "points": [
+        {
+          "x": 4038.8,
+          "y": 730.5
+        },
+        {
+          "x": 4282.7,
+          "y": 612.7
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-35",
+      "name": "大娄山",
+      "width": 195,
+      "height": 0.8,
+      "points": [
+        {
+          "x": 1978.7,
+          "y": 3157.5
+        },
+        {
+          "x": 2249.8,
+          "y": 3369.6
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-36",
+      "name": "米仓山",
+      "width": 173,
+      "height": 0.75,
+      "points": [
+        {
+          "x": 2060,
+          "y": 2368.1
+        },
+        {
+          "x": 2331.1,
+          "y": 2438.8
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-37",
+      "name": "罗霄山",
+      "width": 184,
+      "height": 0.8,
+      "points": [
+        {
+          "x": 3984.6,
+          "y": 3463.9
+        },
+        {
+          "x": 4174.3,
+          "y": 3840.9
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-38",
+      "name": "幕阜山",
+      "width": 152,
+      "height": 0.7,
+      "points": [
+        {
+          "x": 4038.8,
+          "y": 3157.5
+        },
+        {
+          "x": 4255.6,
+          "y": 3322.5
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-39",
+      "name": "九岭山",
+      "width": 141,
+      "height": 0.7,
+      "points": [
+        {
+          "x": 4201.4,
+          "y": 3204.7
+        },
+        {
+          "x": 4418.3,
+          "y": 3322.5
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-40",
+      "name": "武功山",
+      "width": 141,
+      "height": 0.75,
+      "points": [
+        {
+          "x": 4065.9,
+          "y": 3487.4
+        },
+        {
+          "x": 4255.6,
+          "y": 3652.4
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-41",
+      "name": "雪峰山",
+      "width": 184,
+      "height": 0.8,
+      "points": [
+        {
+          "x": 3035.9,
+          "y": 3440.3
+        },
+        {
+          "x": 3198.5,
+          "y": 3770.2
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-42",
+      "name": "神农架",
+      "width": 173,
+      "height": 0.8,
+      "points": [
+        {
+          "x": 3063,
+          "y": 2544.9
+        },
+        {
+          "x": 3306.9,
+          "y": 2639.1
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-43",
+      "name": "大洪山",
+      "width": 152,
+      "height": 0.7,
+      "points": [
+        {
+          "x": 3605.1,
+          "y": 2568.4
+        },
+        {
+          "x": 3849,
+          "y": 2639.1
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-44",
+      "name": "戴云山",
+      "width": 163,
+      "height": 0.75,
+      "points": [
+        {
+          "x": 5095.9,
+          "y": 3888
+        },
+        {
+          "x": 5367,
+          "y": 4053
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-45",
+      "name": "括苍山",
+      "width": 163,
+      "height": 0.7,
+      "points": [
+        {
+          "x": 5583.8,
+          "y": 3228.2
+        },
+        {
+          "x": 5800.7,
+          "y": 3416.7
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-46",
+      "name": "黄山",
+      "width": 141,
+      "height": 0.7,
+      "points": [
+        {
+          "x": 5150.1,
+          "y": 2898.3
+        },
+        {
+          "x": 5312.8,
+          "y": 2992.6
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-47",
+      "name": "大庾岭",
+      "width": 163,
+      "height": 0.7,
+      "points": [
+        {
+          "x": 4038.8,
+          "y": 3982.3
+        },
+        {
+          "x": 4309.8,
+          "y": 4053
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-48",
+      "name": "岷山",
+      "width": 228,
+      "height": 0.9,
+      "points": [
+        {
+          "x": 1192.7,
+          "y": 2238.5
+        },
+        {
+          "x": 1328.2,
+          "y": 2521.3
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-49",
+      "name": "龙门山",
+      "width": 152,
+      "height": 0.8,
+      "points": [
+        {
+          "x": 1436.6,
+          "y": 2309.2
+        },
+        {
+          "x": 1599.2,
+          "y": 2521.3
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-50",
+      "name": "大相岭",
+      "width": 184,
+      "height": 0.8,
+      "points": [
+        {
+          "x": 1030,
+          "y": 2945.5
+        },
+        {
+          "x": 1138.4,
+          "y": 3134
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-51",
+      "name": "崤山",
+      "width": 184,
+      "height": 0.8,
+      "points": [
+        {
+          "x": 3239.2,
+          "y": 1927.5
+        },
+        {
+          "x": 3415.3,
+          "y": 1885.1
+        },
+        {
+          "x": 3591.5,
+          "y": 1866.2
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-52",
+      "name": "熊耳山",
+      "width": 217,
+      "height": 0.85,
+      "points": [
+        {
+          "x": 3347.6,
+          "y": 1944
+        },
+        {
+          "x": 3496.7,
+          "y": 2014.7
+        },
+        {
+          "x": 3605.1,
+          "y": 2068.9
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-53",
+      "name": "华蓥山",
+      "width": 163,
+      "height": 0.75,
+      "points": [
+        {
+          "x": 2032.9,
+          "y": 2615.6
+        },
+        {
+          "x": 2195.6,
+          "y": 2827.6
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "range-54",
+      "name": "柞水岭",
+      "width": 98,
+      "height": 0.85,
+      "points": [
+        {
+          "x": 2859.7,
+          "y": 2097.2
+        },
+        {
+          "x": 2886.8,
+          "y": 2196.1
+        },
+        {
+          "x": 2878.6,
+          "y": 2281
+        }
+      ],
+      "note": ""
+    }
+  ],
+  "lakes": [
+    {
+      "id": "lake-1",
+      "name": "洞庭",
+      "cx": 3767.7,
+      "cy": 3110.4,
+      "rx": 179,
+      "ry": 120,
+      "note": ""
+    },
+    {
+      "id": "lake-2",
+      "name": "鄱阳",
+      "cx": 4689.3,
+      "cy": 3157.5,
+      "rx": 138,
+      "ry": 156,
+      "note": ""
+    },
+    {
+      "id": "lake-3",
+      "name": "太湖",
+      "cx": 5746.4,
+      "cy": 2662.7,
+      "rx": 125,
+      "ry": 75,
+      "note": ""
+    },
+    {
+      "id": "lake-4",
+      "name": "洪泽",
+      "cx": 5312.8,
+      "cy": 2167.9,
+      "rx": 100,
+      "ry": 64,
+      "note": ""
+    },
+    {
+      "id": "lake-5",
+      "name": "巢湖",
+      "cx": 5014.6,
+      "cy": 2568.4,
+      "rx": 68,
+      "ry": 47,
+      "note": ""
+    }
+  ],
+  "roads": [
+    {
+      "id": "road-tianshui-wuwei",
+      "from": "tianshui",
+      "to": "wuwei",
+      "cost": 3,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-tianshui-anding",
+      "from": "tianshui",
+      "to": "anding",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-tianshui-hanzhong",
+      "from": "tianshui",
+      "to": "hanzhong",
+      "cost": 3,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-wuwei-anding",
+      "from": "wuwei",
+      "to": "anding",
+      "cost": 3,
+      "wild": true,
+      "note": ""
+    },
+    {
+      "id": "road-anding-changan",
+      "from": "anding",
+      "to": "changan",
+      "cost": 3,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-changan-luoyang",
+      "from": "changan",
+      "to": "luoyang",
+      "cost": 3,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-changan-hanzhong",
+      "from": "changan",
+      "to": "hanzhong",
+      "cost": 4,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-changan-wan",
+      "from": "changan",
+      "to": "wan",
+      "cost": 4,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-jincheng-wuwei",
+      "from": "jincheng",
+      "to": "wuwei",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-jincheng-anding",
+      "from": "jincheng",
+      "to": "anding",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-jincheng-tianshui",
+      "from": "jincheng",
+      "to": "tianshui",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-wudu-tianshui",
+      "from": "wudu",
+      "to": "tianshui",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-wudu-hanzhong",
+      "from": "wudu",
+      "to": "hanzhong",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-hongnong-changan",
+      "from": "hongnong",
+      "to": "changan",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-hongnong-luoyang",
+      "from": "hongnong",
+      "to": "luoyang",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-hongnong-wan",
+      "from": "hongnong",
+      "to": "wan",
+      "cost": 3,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-jinyang-luoyang",
+      "from": "jinyang",
+      "to": "luoyang",
+      "cost": 3,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-jinyang-ye",
+      "from": "jinyang",
+      "to": "ye",
+      "cost": 3,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-ye-puyang",
+      "from": "ye",
+      "to": "puyang",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-ye-chenliu",
+      "from": "ye",
+      "to": "chenliu",
+      "cost": 3,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-xiangping-ji",
+      "from": "xiangping",
+      "to": "ji",
+      "cost": 4,
+      "wild": true,
+      "note": ""
+    },
+    {
+      "id": "road-xiangping-beiping",
+      "from": "xiangping",
+      "to": "beiping",
+      "cost": 3,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-ji-beiping",
+      "from": "ji",
+      "to": "beiping",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-ji-zhuo",
+      "from": "ji",
+      "to": "zhuo",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-zhuo-nanpi",
+      "from": "zhuo",
+      "to": "nanpi",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-zhuo-jinyang",
+      "from": "zhuo",
+      "to": "jinyang",
+      "cost": 3,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-nanpi-ye",
+      "from": "nanpi",
+      "to": "ye",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-nanpi-pingyuan",
+      "from": "nanpi",
+      "to": "pingyuan",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-pingyuan-puyang",
+      "from": "pingyuan",
+      "to": "puyang",
+      "cost": 3,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-pingyuan-beihai",
+      "from": "pingyuan",
+      "to": "beihai",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-shangdang-jinyang",
+      "from": "shangdang",
+      "to": "jinyang",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-shangdang-ye",
+      "from": "shangdang",
+      "to": "ye",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-shangdang-luoyang",
+      "from": "shangdang",
+      "to": "luoyang",
+      "cost": 3,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-linzi-beihai",
+      "from": "linzi",
+      "to": "beihai",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-linzi-pingyuan",
+      "from": "linzi",
+      "to": "pingyuan",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-linzi-langya",
+      "from": "linzi",
+      "to": "langya",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-langya-xiapi",
+      "from": "langya",
+      "to": "xiapi",
+      "cost": 3,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-langya-guangling",
+      "from": "langya",
+      "to": "guangling",
+      "cost": 3,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-guangling-xiapi",
+      "from": "guangling",
+      "to": "xiapi",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-guangling-jianye",
+      "from": "guangling",
+      "to": "jianye",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-guangling-danyang",
+      "from": "guangling",
+      "to": "danyang",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-shouchun-pengcheng",
+      "from": "shouchun",
+      "to": "pengcheng",
+      "cost": 3,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-shouchun-hefei",
+      "from": "shouchun",
+      "to": "hefei",
+      "cost": 1,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-hefei-lujiang",
+      "from": "hefei",
+      "to": "lujiang",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-luoyang-chenliu",
+      "from": "luoyang",
+      "to": "chenliu",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-luoyang-xuchang",
+      "from": "luoyang",
+      "to": "xuchang",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-luoyang-wan",
+      "from": "luoyang",
+      "to": "wan",
+      "cost": 3,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-chenliu-puyang",
+      "from": "chenliu",
+      "to": "puyang",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-chenliu-xuchang",
+      "from": "chenliu",
+      "to": "xuchang",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-chenliu-xiaopei",
+      "from": "chenliu",
+      "to": "xiaopei",
+      "cost": 3,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-puyang-beihai",
+      "from": "puyang",
+      "to": "beihai",
+      "cost": 4,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-xuchang-xiaopei",
+      "from": "xuchang",
+      "to": "xiaopei",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-xuchang-runan",
+      "from": "xuchang",
+      "to": "runan",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-xuchang-wan",
+      "from": "xuchang",
+      "to": "wan",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-xuchang-xinye",
+      "from": "xuchang",
+      "to": "xinye",
+      "cost": 3,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-xiaopei-xiapi",
+      "from": "xiaopei",
+      "to": "xiapi",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-xiaopei-pengcheng",
+      "from": "xiaopei",
+      "to": "pengcheng",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-xiaopei-beihai",
+      "from": "xiaopei",
+      "to": "beihai",
+      "cost": 3,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-xiapi-pengcheng",
+      "from": "xiapi",
+      "to": "pengcheng",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-xiapi-beihai",
+      "from": "xiapi",
+      "to": "beihai",
+      "cost": 3,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-pengcheng-runan",
+      "from": "pengcheng",
+      "to": "runan",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-runan-wan",
+      "from": "runan",
+      "to": "wan",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-runan-jiangxia",
+      "from": "runan",
+      "to": "jiangxia",
+      "cost": 3,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-wan-xiangyang",
+      "from": "wan",
+      "to": "xiangyang",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-xinye-xiangyang",
+      "from": "xinye",
+      "to": "xiangyang",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-xinye-jiangxia",
+      "from": "xinye",
+      "to": "jiangxia",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-xiangyang-jiangxia",
+      "from": "xiangyang",
+      "to": "jiangxia",
+      "cost": 3,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-xiangyang-jiangling",
+      "from": "xiangyang",
+      "to": "jiangling",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-jiangling-changsha",
+      "from": "jiangling",
+      "to": "changsha",
+      "cost": 3,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-jiangling-jiangxia",
+      "from": "jiangling",
+      "to": "jiangxia",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-jiangling-jiangzhou",
+      "from": "jiangling",
+      "to": "jiangzhou",
+      "cost": 4,
+      "wild": true,
+      "note": ""
+    },
+    {
+      "id": "road-changsha-guiyang",
+      "from": "changsha",
+      "to": "guiyang",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-changsha-lingling",
+      "from": "changsha",
+      "to": "lingling",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-guiyang-lingling",
+      "from": "guiyang",
+      "to": "lingling",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-guiyang-chaisang",
+      "from": "guiyang",
+      "to": "chaisang",
+      "cost": 4,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-wuling-changsha",
+      "from": "wuling",
+      "to": "changsha",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-wuling-lingling",
+      "from": "wuling",
+      "to": "lingling",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-wuling-guiyang",
+      "from": "wuling",
+      "to": "guiyang",
+      "cost": 3,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-yiling-jiangling",
+      "from": "yiling",
+      "to": "jiangling",
+      "cost": 1,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-yiling-jiangxia",
+      "from": "yiling",
+      "to": "jiangxia",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-yiling-gongan",
+      "from": "yiling",
+      "to": "gongan",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-yiling-badong",
+      "from": "yiling",
+      "to": "badong",
+      "cost": 3,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-gongan-jiangling",
+      "from": "gongan",
+      "to": "jiangling",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-gongan-jiangxia",
+      "from": "gongan",
+      "to": "jiangxia",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-jiangxia-chaisang",
+      "from": "jiangxia",
+      "to": "chaisang",
+      "cost": 3,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-jiangxia-lujiang",
+      "from": "jiangxia",
+      "to": "lujiang",
+      "cost": 3,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-jiangxia-jianye",
+      "from": "jiangxia",
+      "to": "jianye",
+      "cost": 4,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-chaisang-lujiang",
+      "from": "chaisang",
+      "to": "lujiang",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-chaisang-jianye",
+      "from": "chaisang",
+      "to": "jianye",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-lujiang-jianye",
+      "from": "lujiang",
+      "to": "jianye",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-jianye-wu",
+      "from": "jianye",
+      "to": "wu",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-wu-kuaiji",
+      "from": "wu",
+      "to": "kuaiji",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-kuaiji-lujiang",
+      "from": "kuaiji",
+      "to": "lujiang",
+      "cost": 3,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-danyang-jianye",
+      "from": "danyang",
+      "to": "jianye",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-danyang-wu",
+      "from": "danyang",
+      "to": "wu",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-yuzhang-chaisang",
+      "from": "yuzhang",
+      "to": "chaisang",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-yuzhang-poyang",
+      "from": "yuzhang",
+      "to": "poyang",
+      "cost": 1,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-poyang-chaisang",
+      "from": "poyang",
+      "to": "chaisang",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-poyang-kuaiji",
+      "from": "poyang",
+      "to": "kuaiji",
+      "cost": 3,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-hanzhong-zhangtong",
+      "from": "hanzhong",
+      "to": "zhangtong",
+      "cost": 3,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-zhangtong-mianzhu",
+      "from": "zhangtong",
+      "to": "mianzhu",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-mianzhu-chengdu",
+      "from": "mianzhu",
+      "to": "chengdu",
+      "cost": 1,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-chengdu-jiangzhou",
+      "from": "chengdu",
+      "to": "jiangzhou",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-shangyong-hanzhong",
+      "from": "shangyong",
+      "to": "hanzhong",
+      "cost": 3,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-shangyong-jiangzhou",
+      "from": "shangyong",
+      "to": "jiangzhou",
+      "cost": 4,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-shangyong-badong",
+      "from": "shangyong",
+      "to": "badong",
+      "cost": 3,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-wudu-mianzhu",
+      "from": "wudu",
+      "to": "mianzhu",
+      "cost": 7,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-langzhong-zhangtong",
+      "from": "langzhong",
+      "to": "zhangtong",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-langzhong-mianzhu",
+      "from": "langzhong",
+      "to": "mianzhu",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-langzhong-jiangzhou",
+      "from": "langzhong",
+      "to": "jiangzhou",
+      "cost": 3,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-badong-jiangzhou",
+      "from": "badong",
+      "to": "jiangzhou",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-jianning-yunnan",
+      "from": "jianning",
+      "to": "yunnan",
+      "cost": 2,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-jianning-jiangzhou",
+      "from": "jianning",
+      "to": "jiangzhou",
+      "cost": 4,
+      "wild": false,
+      "note": ""
+    },
+    {
+      "id": "road-jianning-lingling",
+      "from": "jianning",
+      "to": "lingling",
+      "cost": 5,
+      "wild": true,
+      "note": ""
+    },
+    {
+      "id": "road-yunnan-chengdu",
+      "from": "yunnan",
+      "to": "chengdu",
+      "cost": 5,
+      "wild": true,
+      "note": ""
+    }
+  ]
+}

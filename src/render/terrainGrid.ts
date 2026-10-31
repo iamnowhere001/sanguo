@@ -17,6 +17,7 @@ import {
   riverHalfWidth,
   type Pt,
 } from '../data/tables/geography';
+import type { GateSide } from '../core/state';
 
 /**
  * 地形栅格（S 档 · 地形化）
@@ -383,7 +384,7 @@ export function nearestLandTile(col: number, row: number, maxRadius = 6): { col:
  * 城墙占 3×3 = 9 格，四门位于城墙四边中点；
  * 每座门外面还有一格「门外」，是出城列阵 / 敌军围城的落位。
  */
-export type GateSide = 'n' | 'e' | 's' | 'w';
+export type { GateSide } from '../core/state';
 export const GATE_SIDES: GateSide[] = ['n', 'e', 's', 'w'];
 export const GATE_LABEL: Record<GateSide, string> = {
   n: '北门',
@@ -443,6 +444,17 @@ export function invalidateCityLayout(): void {
   anchorCache = null;
   cityTileCache = null;
   centerIndexCache = null;
+}
+
+/**
+ * 丢弃地形栅格本身，回到「未砌关墙」的基础地形。
+ *
+ * 关墙 / 凿谷是就地改写 `cells` 的；要换一套关港重跑，必须先丢掉整张栅格，
+ * 否则第二遍砌墙会叠在第一遍的结果上，山口越打越多。
+ */
+export function resetTerrainGrid(): void {
+  cached = null;
+  invalidateCityLayout();
 }
 
 
