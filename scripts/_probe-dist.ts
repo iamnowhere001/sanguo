@@ -1,32 +1,24 @@
-import { GATES } from '../src/data/tables/gates';
-import { gateSiteById } from '../src/render/gateGrid';
-import { tileKindAt, isWaterKind, wallTileAt } from '../src/render/terrainGrid';
+/** 临时探针：打印某城（或某格）到若干格的最短路代价（用完即删） */
+import { cityAnchors, tileKindAt } from '../src/render/terrainGrid';
+import { routeField } from '../src/render/mapRoute';
+import { MAP } from '../src/data/tables/geography';
+import type { GridPoint } from '../src/core/state';
 
-function landDist(a: { col: number; row: number }, b: { col: number; row: number }, cap = 400): number {
-  const key = (p: { col: number; row: number }) => `${p.col},${p.row}`;
-  const seen = new Set<string>([key(a)]);
-  let frontier = [a];
-  for (let d = 1; d <= cap; d++) {
-    const next: Array<{ col: number; row: number }> = [];
-    for (const p of frontier) {
-      for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]] as const) {
-        const n = { col: p.col + dx, row: p.row + dy };
-        const k = key(n);
-        if (seen.has(k)) continue;
-        if (wallTileAt(n.col, n.row)) continue;
-        const kind = tileKindAt(n.col, n.row);
-        if (isWaterKind(kind) || kind === 'mountain') continue;
-        if (n.col === b.col && n.row === b.row) return d;
-        seen.add(k); next.push(n);
-      }
-    }
-    frontier = next;
-  }
-  return -1;
+const [head, ...pts] = process.argv.slice(2);
+let start: GridPoint;
+let label: string;
+if (head!.includes(',')) {
+  const [c, r] = head!.split(',').map(Number);
+  start = { col: c!, row: r! };
+  label = `tile ${head}`;
+} else {
+  start = cityAnchors()[head!]!;
+  label = `${head} (${start.col},${start.row})`;
 }
-
-for (const p of GATES as any[]) {
-  if (!p.pairId || p.id > p.pairId) continue;
-  const a = gateSiteById(p.id)!; const b = gateSiteById(p.pairId)!;
-  console.log(p.name.padEnd(4), '→', b.gate.name.padEnd(4), '陆路距离', landDist(a.icon, b.icon));
+const field = routeField(start);
+console.log(`from ${label}`);
+for (const p of pts) {
+  const [c, r] = p!.split(',').map(Number);
+  const d = field.dist[r! * MAP.cols + c!]!;
+  console.log(`  ${c},${r} [${tileKindAt(c!, r!)}] = ${Number.isFinite(d) ? d + ' MP' : '∞'}`);
 }

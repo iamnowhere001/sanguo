@@ -57,7 +57,7 @@ const ASSERTIONS: DocAssertion[] = [
   {
     file: 'docs/迭代计划-v2.md',
     why: '排期基线（关防数 / 地图尺寸 / 测试规模）',
-    mustContain: ['576×360', '47 关防', '559 项'],
+    mustContain: ['576×360', '47 关防', '579 项'],
     mustNotContain: ['576×432 地图'],
   },
 ];

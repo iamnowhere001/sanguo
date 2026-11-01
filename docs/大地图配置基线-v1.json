@@ -14,7 +14,7 @@
       24.1667,
       42.5
     ],
-    "updatedAt": "2026-10-31T14:15:35.560Z"
+    "updatedAt": "2026-10-31T15:50:49.390Z"
   },
   "coastline": [
     {
@@ -965,11 +965,11 @@
         ]
       ],
       "guardCityId": "luoyang",
-      "extraDays": 3,
-      "fortification": 16,
-      "garrison": 2800,
-      "gold": 40,
-      "food": 110,
+      "extraDays": 2,
+      "fortification": 13,
+      "garrison": 2300,
+      "gold": 32,
+      "food": 90,
       "note": "洛阳东门户，中原咽喉；三英战吕布之地"
     },
     {
@@ -1555,7 +1555,7 @@
     {
       "id": "caishi",
       "name": "采石渡",
-      "x": 5299.2,
+      "x": 5318.2,
       "y": 2540.2,
       "tier": 2,
       "edges": [
