@@ -29,7 +29,7 @@ const GEO_PATH = resolve(ROOT, 'src/data/tables/geography.ts');
 const argv = process.argv.slice(2);
 const write = argv.includes('--write');
 const docIndex = argv.indexOf('--doc');
-const docPath = resolve(ROOT, docIndex >= 0 ? argv[docIndex + 1]! : 'docs/大地图配置基线-v1.json');
+const docPath = resolve(ROOT, docIndex >= 0 ? argv[docIndex + 1]! : 'docs/03-数据/地图配置基线.json');
 
 const round4 = (v: number): number => Math.round(v * 1e4) / 1e4;
 /**

@@ -23,8 +23,8 @@ import {
 } from '../src/studio/types';
 
 const ROOT = resolve(import.meta.dirname, '..');
-const DOC_PATH = resolve(ROOT, 'docs/大地图配置-数据清单-v1.md');
-const JSON_PATH = resolve(ROOT, 'docs/大地图配置基线-v1.json');
+const DOC_PATH = resolve(ROOT, 'docs/03-数据/地图数据清单.md');
+const JSON_PATH = resolve(ROOT, 'docs/03-数据/地图配置基线.json');
 
 const num = (value: number): string => (Number.isInteger(value) ? String(value) : value.toFixed(1));
 
@@ -64,7 +64,7 @@ function buildMarkdown(doc: MapDocument, strictIssues: StrictIssue[]): string {
   lines.push('# 大地图配置 · 数据清单 v1');
   lines.push('');
   lines.push(`> 由 \`npm run map:doc\` 于 ${date} 从内置基线生成，**不要手改**。`);
-  lines.push('> 数据结构与字段口径见 [大地图数值配置 v1](大地图数值配置-v1.md)；机器可读副本见 [大地图配置基线-v1.json](大地图配置基线-v1.json)。');
+  lines.push('> 数据结构与字段口径见 [地图配置台](地图配置台.md)；机器可读副本见 [地图配置基线.json](地图配置基线.json)。');
   lines.push('> 「地形」列按配置台的编辑期规则计算（关隘贴山、渡口贴岸）；⚠ 只提示，不阻塞保存。');
   lines.push('> 「严格」列用运行时 576×360 地形栅格采样（山 / 水 / 岸 / 对岸）；不重建关墙与通行线。');
   lines.push('> 「道路」列是关防覆盖的城际道路，结构重建（关墙 / 通行线 / A→P→B）按它计算；⚠ 未绑定的关港会被跳过。');

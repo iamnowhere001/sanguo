@@ -1,5 +1,5 @@
 /**
- * 生成项目基线台账：`docs/项目基线-v1.json` 与 `docs/项目基线-v1.md` 的「数据基线」块。
+ * 生成项目基线台账：`docs/00-基线/项目基线.json` 与 `docs/00-基线/项目基线.md` 的「数据基线」块。
  *
  * 用法：npm run baseline:doc
  *
@@ -15,8 +15,8 @@ import { collectFacts } from '../src/data/baseline';
 import { patchMarkdown, renderFacts } from './baseline-format';
 
 const ROOT = resolve(import.meta.dirname, '..');
-const MD_PATH = resolve(ROOT, 'docs/项目基线-v1.md');
-const JSON_PATH = resolve(ROOT, 'docs/项目基线-v1.json');
+const MD_PATH = resolve(ROOT, 'docs/00-基线/项目基线.md');
+const JSON_PATH = resolve(ROOT, 'docs/00-基线/项目基线.json');
 
 const facts = collectFacts();
 const md = readFileSync(MD_PATH, 'utf8');

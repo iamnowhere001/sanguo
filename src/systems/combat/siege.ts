@@ -35,7 +35,7 @@ import { fallCity, occupyCity } from './capture';
  * 城门取门格、城墙取最近的墙格、守军取最近的城格——所以投石必须退到 2–3 格，
  * 而 `counter.catapult = 0` 正是它换来的东西。器械分工靠这个拉开，不靠倍率。
  *
- * 数值与推导见 docs/大地图攻城-v1.md §1.2 与 §5。
+ * 数值与推导见 docs/02-系统/战斗.md 篇一 §1.2 与 §5。
  */
 
 type WeaponKey = SiegeWeaponId | 'bare';

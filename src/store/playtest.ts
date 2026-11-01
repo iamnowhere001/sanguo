@@ -1,7 +1,7 @@
 /**
  * playtest 观测：把“一局怎么玩的”记成可导出的逐局记录。
  *
- * 口径见 `docs/playtest-观测协议-v1.md`。只在开发模式挂 `window.__playtest`，
+ * 口径见 `docs/04-计划/playtest-观测协议.md`。只在开发模式挂 `window.__playtest`，
  * 正常运行不写任何网络请求，也不进入存档文件。
  */
 

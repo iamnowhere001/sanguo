@@ -7,7 +7,7 @@
  * `npm run baseline:check` 在 `verify` 里挡住漂移。
  *
  * 【口径】只采「代码里能直接读到的事实」，不采测量值（帧率 / 耗时 / 测试项数）。
- * 测量值随时间与机器变化，写进 `docs/项目基线-v1.md` 的「测量基线」小节并标注日期。
+ * 测量值随时间与机器变化，写进 `docs/00-基线/项目基线.md` 的「测量基线」小节并标注日期。
  */
 import { GATES } from './tables/gates';
 import {

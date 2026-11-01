@@ -18,7 +18,7 @@ import { reachableTargets, sortieArmy } from '../src/systems/army';
 import { BALANCE } from '../src/data/tables/balance';
 
 /**
- * 大地图攻城（docs/大地图攻城-v1.md Phase 1）。
+ * 大地图攻城（docs/02-系统/战斗.md 篇一 Phase 1）。
  *
  * 钉死四件事：
  * 1. 城池本身是可攻击目标，三类目标（门 / 墙 / 城内）各打各的；

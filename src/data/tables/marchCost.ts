@@ -6,7 +6,7 @@ import { tileKindAt, type TileKind } from '../../render/terrainGrid';
 /**
  * 大地图行军代价表（MP/格）。
  *
- * 单位口径见 docs/核心数值口径审核与修改方案-v2.md §2.1：
+ * 单位口径见 docs/03-数据/数值口径.md §2.1：
  * - 「移动力（MP）」是每旬预算，由 `MARCH_MP_PER_XUN` 决定；
  * - 本表是**进入一格要扣多少 MP**，既不是距离，也不是天数；
  * - 禁止把本表的数字读成「天」或「格」。
