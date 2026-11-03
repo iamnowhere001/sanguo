@@ -235,7 +235,7 @@ describe('存档版本矩阵 v1 → v5', () => {
     return s;
   }
 
-  it('v1 档一路补齐到 v5', () => {
+  it('v1 档一路补齐到当前 SAVE_VERSION', () => {
     const file = migrateSaveFile({
       slot: '1',
       version: 1,

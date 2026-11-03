@@ -28,3 +28,8 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      # 完整门禁：typecheck + test + baseline:check + map:check + map:gates
+      # + map:edges + map:audit + contrast:check + build
+      - name: Verify (full gates)
+        run: npm run verify
