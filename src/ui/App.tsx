@@ -21,6 +21,7 @@ function GameScreen({ state }: { state: GameState }) {
     !state.chapter?.pendingCouncil;
   return (
     <div className="app-shell">
+      {/* DEPLOY 入口已删；此分支只兜底 AI 瞬发战斗 / 旧存档残留的 battle 状态，玩家可见战斗不走这里 */}
       {state.phase === 'battle' && state.battle ? <BattleScreen /> : <MapScreen />}
       {state.report && !state.gameOver ? <ReportModal report={state.report} /> : null}
       {decisionReady ? <PolicyModal state={state} /> : null}

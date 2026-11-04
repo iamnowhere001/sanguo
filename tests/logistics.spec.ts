@@ -5,6 +5,7 @@ import { garrisonTroopsOf } from '../src/core/state';
 import { cityMaxDurability } from '../src/systems/formulas';
 import { durabilityMaxOf } from '../src/systems/logistics';
 import { troopCapOf } from '../src/systems/troops';
+import { createBattle } from '../src/systems/battle';
 
 function fresh() {
   return createGame({ scenarioId: 'chibi', playerFactionId: 'liubei', aiEnabled: false });
@@ -98,17 +99,12 @@ describe('兵力池', () => {
     s.cities.jiangxia!.troops = 3000;
     for (const g of activeAt(s, 'jiangxia')) g.troops = 0;
 
-    const r = reduce(s, {
-      t: 'DEPLOY',
-      fromCityId: 'jiangxia',
-      targetCityId: 'xiangyang',
-      generalIds: ['guanyu'],
-    });
-    expect(r.result.ok).toBe(true);
-    const unit = r.state.battle!.units['attacker:guanyu']!;
+    const { result } = createBattle(s, 'jiangxia', 'xiangyang', ['guanyu']);
+    expect(result.ok).toBe(true);
+    const unit = s.battle!.units['attacker:guanyu']!;
     expect(unit.troops).toBeGreaterThan(0);
     // 领出去的兵从池里扣掉
-    expect(r.state.cities.jiangxia!.troops).toBeLessThan(3000);
+    expect(s.cities.jiangxia!.troops).toBeLessThan(3000);
   });
 });
 
@@ -202,14 +198,9 @@ describe('每月行军次数', () => {
 
   it('出征同样计入行军：出征后本月不能再调走', () => {
     const s = fresh();
-    const r = reduce(s, {
-      t: 'DEPLOY',
-      fromCityId: 'jiangxia',
-      targetCityId: 'xiangyang',
-      generalIds: ['guanyu'],
-    });
-    expect(r.result.ok).toBe(true);
-    expect(r.state.generals.guanyu!.marchTurn).toBe(s.turn);
+    const { result } = createBattle(s, 'jiangxia', 'xiangyang', ['guanyu']);
+    expect(result.ok).toBe(true);
+    expect(s.generals.guanyu!.marchTurn).toBe(s.turn);
   });
 });
 
@@ -229,14 +220,9 @@ describe('城池耐久', () => {
     expect(durabilityMaxOf(before)).toBeGreaterThan(0);
     expect(before.durability).toBeGreaterThan(0);
 
-    const dep = reduce(s, {
-      t: 'DEPLOY',
-      fromCityId: 'jiangxia',
-      targetCityId: 'xiangyang',
-      generalIds: ['liubei', 'guanyu'],
-    });
-    expect(dep.result.ok).toBe(true);
-    const battle = dep.state.battle!;
+    const { result } = createBattle(s, 'jiangxia', 'xiangyang', ['liubei', 'guanyu']);
+    expect(result.ok).toBe(true);
+    const battle = s.battle!;
     expect(battle.cityDurability).toBeGreaterThan(0);
 
     // 把守军清空、攻方推上城池格，并把耐久压到 1：结束回合后城破
@@ -251,7 +237,7 @@ describe('城池耐久', () => {
     attacker.y = 3;
     battle.cityDurability = 1;
 
-    const r = reduce(dep.state, { t: 'BATTLE_END_TURN' });
+    const r = reduce(s, { t: 'BATTLE_END_TURN' });
     expect(r.state.phase).toBe('map');
     expect(r.state.cities.xiangyang!.ownerId).toBe('liubei');
     expect(r.state.cities.xiangyang!.durability).toBeLessThan(

@@ -4,6 +4,7 @@ import { reduce } from '../src/core/reducer';
 import type { GameState } from '../src/core/state';
 import {
   attackTargets,
+  createBattle,
   reachableTiles,
 } from '../src/systems/battle';
 
@@ -78,12 +79,8 @@ describe('垂直切片可通', () => {
   it('江夏 2500 兵对襄阳 1150 兵：合理操作能在 30 天内取胜', () => {
     let s = createGame({ playerFactionId: 'liubei', seed: 20261021 });
     s = reduce(s, { t: 'MOVE_GENERAL', generalId: 'zhangfei', toCityId: 'jiangxia' }).state;
-    s = reduce(s, {
-      t: 'DEPLOY',
-      fromCityId: 'jiangxia',
-      targetCityId: 'xiangyang',
-      generalIds: ['liubei', 'guanyu', 'zhangfei'],
-    }).state;
+    // DEPLOY 已删除；直接调它原本包装的 createBattle 建立战斗
+    createBattle(s, 'jiangxia', 'xiangyang', ['liubei', 'guanyu', 'zhangfei']);
 
     const out = autoPlay(s);
     expect(out.phase).toBe('map');

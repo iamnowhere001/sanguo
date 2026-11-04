@@ -35,7 +35,6 @@ const COUNTED_ACTIONS = new Set([
   'DIPLOMACY',
   'PERSUADE_CITY',
   'PRISONER',
-  'DEPLOY',
 ]);
 
 interface MonthClickStats {

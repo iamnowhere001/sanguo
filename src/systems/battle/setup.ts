@@ -559,6 +559,10 @@ function fieldIdentity(
 /**
  * 行军途中接战：双方仍是大地图上的两支 `Army`，不占城、不切场景。
  * 单位坐标直接使用 576×360 绝对格坐标，战斗画面由 `MapCanvas` 复用同一张地图。
+ *
+ * @deprecated 2026-11-04：玩家野战已改走 `ATTACK_ARMY` → `strikeArmy`（全程 `phase === 'map'`）。
+ * 全库 src 无任何调用方，仅 `tests/fieldBattle.spec.ts` 仍在测这套旧野战战棋。
+ * 保留到第二阶段连同战棋引擎一起清理，**不要在新代码里再接它**。
  */
 export function createFieldBattle(
   state: GameState,

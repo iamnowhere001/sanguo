@@ -105,15 +105,16 @@ describe('声音导演', () => {
     expect(cueIds({ t: 'BATTLE_MOVE', unitId: 'd', x: 1, y: 1 }, { ok: false, message: '非法移动' })).toEqual([]);
   });
 
-  it('月结、出征、统一各有专属提示音', () => {
+  it('月结与统一各有专属提示音；新出征入口不复用旧的出征音', () => {
     expect(cueIds({ t: 'END_TURN' }, OK, { phaseBefore: 'map' })).toEqual(['stinger.turn']);
+    // DEPLOY 已于 2026-11-04 删除；玩家出征改走 SORTIE，不再触发 stinger.deploy
     expect(
       cueIds(
-        { t: 'DEPLOY', fromCityId: 'jiangxia', targetCityId: 'xiangyang', generalIds: ['liubei'] },
+        { t: 'SORTIE', fromCityId: 'jiangxia', dest: { col: 340, row: 226 }, generalIds: ['liubei'] },
         OK,
         { phaseBefore: 'map' },
       ),
-    ).toEqual(['stinger.deploy']);
+    ).toEqual([]);
     expect(cueIds({ t: 'UNIFY' }, OK, { phaseBefore: 'map' })).toEqual(['stinger.unify']);
   });
 });

@@ -118,9 +118,6 @@ export function cuesForAction(c: CueContext): AudioCue[] {
     case 'CLASS_CHANGE':
       return [{ id: 'stinger.levelUp' }];
 
-    case 'DEPLOY':
-      return [{ id: 'stinger.deploy' }];
-
     case 'END_TURN':
       return [{ id: 'stinger.turn' }];
 

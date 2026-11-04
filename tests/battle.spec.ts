@@ -80,17 +80,13 @@ describe('出征与战场生成', () => {
     for (const g of Object.values(s.generals)) {
       if (g.locationId === 'xiangyang') g.troops = 0;
     }
-    const r = reduce(s, {
-      t: 'DEPLOY',
-      fromCityId: 'jiangxia',
-      targetCityId: 'xiangyang',
-      generalIds: ['liubei'],
-    });
-    expect(r.result.ok).toBe(true);
-    expect(r.state.phase).toBe('map');
-    expect(r.state.battle).toBeUndefined();
-    expect(r.state.cities.xiangyang!.ownerId).toBe('liubei');
-    expect(r.state.report?.result).toBe('victory');
+    // DEPLOY 已于 2026-11-04 删除；这里直接调它原本包装的 createBattle
+    const { result } = createBattle(s, 'jiangxia', 'xiangyang', ['liubei']);
+    expect(result.ok).toBe(true);
+    expect(s.phase).toBe('map');
+    expect(s.battle).toBeUndefined();
+    expect(s.cities.xiangyang!.ownerId).toBe('liubei');
+    expect(s.report?.result).toBe('victory');
   });
 });
 

@@ -47,7 +47,6 @@ import {
   beginSideTurn,
   castTactic,
   checkGameOver,
-  createBattle,
   executeDelegatedAttack,
   moveUnit,
   performAttack,
@@ -122,7 +121,6 @@ export type Action =
   | { t: 'ABANDON_CITY'; cityId: string }
   | { t: 'PERSUADE_CITY'; cityId: string }
   | { t: 'PRISONER'; prisonerId: string; action: PrisonerAction; agentId?: string }
-  | { t: 'DEPLOY'; fromCityId: string; targetCityId: string; generalIds: string[] }
   | { t: 'SORTIE'; fromCityId: string; targetCityId?: string; dest?: GridPoint; generalIds?: string[]; siegeWeapon?: SiegeWeaponId }
   /** 一括指令：对全部（或指定）己方城池统一下达同一内政，按政令余额自动截断 */
   | { t: 'BATCH_DOMESTIC'; cmd: DomesticCmd; cityIds?: string[] }
@@ -454,11 +452,6 @@ export function reduce(
         checkActProgress(s);
       }
       return { state: r.ok ? s : state, result: r };
-    }
-    case 'DEPLOY': {
-      if (s.phase !== 'map') return { state, result: { ok: false, message: '当前不在大地图阶段' } };
-      const { result } = createBattle(s, action.fromCityId, action.targetCityId, action.generalIds);
-      return { state: result.ok ? s : state, result };
     }
     case 'SORTIE': {
       if (s.phase !== 'map') return { state, result: { ok: false, message: '当前不在大地图阶段' } };
